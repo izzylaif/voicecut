@@ -49,7 +49,7 @@ from ..planner_backends import (
 )
 from . import ambience, documents, peaks, plan, proxy, settings
 from .export import EXPORT_STAGES, ExportError, check_destination, export_timeline
-from .jobs import Job, JobRegistry, sse_stream
+from .jobs import STATUS_BY_EVENT, Job, JobRegistry, sse_stream
 from .projects import (
     DEFAULT_SETTINGS,
     PROJECT_ROOT,
@@ -550,8 +550,9 @@ class EditorService:
                 else spawn_worker(request_path)
             )
         except OSError as error:
-            job.append({"type": "error", "message": f"cannot start VoiceCut: {error}"})
-            self._finish_voicecut(job)
+            self._finish_voicecut(
+                job, {"type": "error", "message": f"cannot start VoiceCut: {error}"}
+            )
             raise HTTPException(500, f"cannot start VoiceCut: {error}") from error
         threading.Thread(
             target=self._supervise, args=(job,), daemon=True, name=job.id
@@ -596,28 +597,31 @@ class EditorService:
             reader.join()
         # The terminal event goes last so no log line arrives after it.
         if terminal:
-            job.append(terminal[0])
+            final = terminal[0]
         elif job.cancel_requested or code in (130, -signal.SIGTERM):
-            job.append({"type": "cancelled"})
+            final = {"type": "cancelled"}
         else:
             detail = next((line for line in reversed(stderr_tail) if line.strip()), "")
-            job.append(
-                {
-                    "type": "error",
-                    "message": f"VoiceCut stopped with exit status {code}"
-                    + (f": {detail}" if detail else ""),
-                }
-            )
-        self._finish_voicecut(job)
+            final = {
+                "type": "error",
+                "message": f"VoiceCut stopped with exit status {code}"
+                + (f": {detail}" if detail else ""),
+            }
+        self._finish_voicecut(job, final)
 
-    def _finish_voicecut(self, job: Job) -> None:
-        result = job.result or {}
+    def _finish_voicecut(self, job: Job, final: dict[str, Any]) -> None:
+        """Record the run's outcome in its project, then end the job with
+        ``final``: whoever sees the job finished finds the project updated."""
+
+        status = STATUS_BY_EVENT[final["type"]]
+        result = final.get("result")
+        result = result if isinstance(result, dict) else {}
 
         def apply(project: Project) -> None:
             if project.run.get("job_id") != job.id:
                 return
             run = {**project.run, "job_id": None, "finished_at": utc_now()}
-            if job.status == "complete":
+            if status == "complete":
                 run.update(
                     status="complete",
                     work_dir=result.get("work_dir"),
@@ -625,16 +629,21 @@ class EditorService:
                     warnings=list(result.get("pipeline_warnings") or []),
                     error=None,
                 )
-            elif job.status == "cancelled":
+            elif status == "cancelled":
                 run.update(status="cancelled", error=None)
             else:
-                run.update(status="failed", error=job.error)
+                run.update(
+                    status="failed", error=str(final.get("message") or "unknown error")
+                )
             project.run = run
 
-        with contextlib.suppress(ProjectNotFound):
-            project = self.store.update(job.project_id, apply)
-            if job.status == "complete":
-                self._adopt_canonical_audio(project)
+        try:
+            with contextlib.suppress(ProjectNotFound):
+                project = self.store.update(job.project_id, apply)
+                if status == "complete":
+                    self._adopt_canonical_audio(project)
+        finally:
+            job.append(final)
 
     def _adopt_canonical_audio(self, project: Project) -> None:
         """Make sure the editor's WAV is the one VoiceCut's plan indexes."""
