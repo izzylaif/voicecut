@@ -8,11 +8,11 @@
 VoiceCut turns retake-heavy narration into a clean audio or video edit. It
 finds false starts, repeated takes, corrections, and recording directions,
 keeps the best take of every sentence, removes breaths, and gives every pause a
-natural length. Then it opens the result in its editor, where you can fix
-anything by hand before exporting. VoiceCut never synthesizes replacement
-speech: every sound in the edit comes from your recording.
+natural length. In the VoiceCut Editor you can then fix anything by hand
+before exporting. VoiceCut never synthesizes replacement speech: every sound in
+the edit comes from your recording.
 
-![The VoiceCut Editor: the automatic edit as clips over the original recording, with pauses, word labels, a live caption and the full text](docs/assets/readme/voicecut-editor.png)
+![VoiceCut pipeline from fragmented source takes to a clean audio and video edit](docs/assets/readme/voicecut-pipeline-cover.svg)
 
 The project is in beta and currently targets narrated, single-speaker
 recordings on Apple Silicon Macs.
@@ -47,6 +47,8 @@ See the [installation guide](docs/installation.md) for first-run model
 downloads and manual setup.
 
 ### Edit in the browser
+
+![The VoiceCut Editor: the automatic edit as clips over the original recording, with pauses, word labels, a live caption and the full text](docs/assets/readme/voicecut-editor.png)
 
 ```bash
 voicecut-editor                 # opens http://127.0.0.1:8765 in your browser
