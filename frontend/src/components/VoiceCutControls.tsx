@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AudioLines, Check, ChevronDown, Download, FileText, KeyRound, Loader2, RefreshCw, X } from 'lucide-react';
+import {
+  AudioLines,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  Download,
+  FileText,
+  KeyRound,
+  Loader2,
+  RefreshCw,
+  X,
+} from 'lucide-react';
 import { api } from '../api';
 import { confirmAction } from '../desktop';
 import {
@@ -483,7 +494,11 @@ function LocalModelPicker({
               <ThinkControl model={current} />
             </div>
           )}
-          {list?.speed_note && <p className="speed-note">{list.speed_note}</p>}
+          {list?.speed_note && (
+            <p className="speed-note">
+              <CircleAlert size={13} aria-hidden="true" /> {list.speed_note}
+            </p>
+          )}
           <p className="model-footnote">
             These run on this computer through Ollama and never send the recording anywhere. {memoryText(list)}
           </p>

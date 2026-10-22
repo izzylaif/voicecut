@@ -1434,12 +1434,16 @@ select:focus {
 }
 
 .speed-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
-  padding: 6px 8px;
-  border-radius: 6px;
   font-size: 12px;
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
-  color: var(--warn);
+  color: var(--muted);
+}
+
+.speed-note svg {
+  flex: none;
 }
 
 .model-think {

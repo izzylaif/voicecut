@@ -24,11 +24,9 @@ MLX_MIN_MEMORY_GB = 32
 # What a model good enough for the take planner needs (about 30B parameters
 # at 4 bits, its context, and the rest of the computer).
 MEMORY_NEEDED_GB = 32
-# What planning on this computer costs in time, measured above.
-SPEED_NOTE = (
-    "Planning on the computer is slow: on an M1 Max it takes longer than the "
-    "recording (an hour of narration plans in about 1.5-2 hours)."
-)
+# What planning on this computer costs in time (measured below: on an M1 Max
+# longer than the recording); how long depends on the computer.
+SPEED_NOTE = "Running locally may take longer."
 THINK_LEVELS = ("low", "medium", "high")
 # False, True, or one of THINK_LEVELS.
 Think = bool | str
