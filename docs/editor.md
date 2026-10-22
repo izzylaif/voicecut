@@ -392,7 +392,7 @@ in Voice Cut's edit), so the converted edit sounds exactly as before.
   voicecut/<name>_edited.<ext>  VoiceCut's own result
   voicecut/.voicecut-cache/…    the pipeline's work directory (05_final/final_boundary_plan.json)
   timeline.json                 your edit (autosaved)
-  exports/<export_id>/          editor_boundary_plan.json, final_cut.wav, manifests
+  exports/<export_id>/          editor_boundary_plan.json, manifests (the render is deleted once published)
 ```
 
 ## Development

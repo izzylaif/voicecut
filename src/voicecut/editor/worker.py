@@ -9,8 +9,10 @@ and relays the pipeline's ``progress_callback`` stages to the editor UI.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -33,6 +35,7 @@ STAGE_LABELS: dict[str, str] = {
 }
 STAGE_STATUSES = frozenset({"started", "completed", "cached", "skipped", "failed"})
 CANCELLED_EXIT_STATUS = 130
+PARENT_POLL_SECONDS = 1.0
 
 
 class WorkerCancelled(BaseException):
@@ -258,6 +261,43 @@ def run_job(request: dict[str, Any], sink: EventSink) -> dict[str, Any]:
         raise
 
 
+def cancel_when_orphaned(parent_pid: int) -> threading.Thread:
+    """Cancel the run (as SIGTERM does) once the editor server is gone.
+
+    The worker runs in its own session, so nothing else stops it when the
+    server dies without cancelling it first.
+    """
+
+    def watch() -> None:
+        while os.getppid() == parent_pid:
+            time.sleep(PARENT_POLL_SECONDS)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    thread = threading.Thread(target=watch, daemon=True, name="watch-parent")
+    thread.start()
+    return thread
+
+
+def keep_awake() -> subprocess.Popen[bytes] | None:
+    """Keep the Mac from idle sleep until this run ends (macOS ``caffeinate``).
+
+    A long recording can take longer to edit than the display stays on;
+    ``caffeinate -w`` lets go when this process exits, however it exits.
+    """
+
+    tool = shutil.which("caffeinate")
+    if tool is None:
+        return None
+    with contextlib.suppress(OSError):
+        return subprocess.Popen(
+            [tool, "-i", "-w", str(os.getpid())],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point for ``python -m voicecut.editor.worker``."""
 
@@ -265,6 +305,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if len(arguments) != 1:
         print("usage: python -m voicecut.editor.worker REQUEST_JSON", file=sys.stderr)
         return 2
+    if argv is None:
+        cancel_when_orphaned(os.getppid())
+        keep_awake()
     events_fd = os.dup(1)
     os.dup2(2, 1)
     sys.stdout = sys.stderr

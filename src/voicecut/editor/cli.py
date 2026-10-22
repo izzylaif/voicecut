@@ -2,6 +2,10 @@
 
 The command starts the FastAPI server with uvicorn, optionally imports one
 media file first, and opens the browser once ``/api/health`` answers.
+
+The VoiceCut desktop app runs it as its engine with ``--desktop``: projects
+are ``.vc`` documents, API keys live in the macOS Keychain, and the server
+exits (stopping Voice Cut) when the app that started it is gone.
 """
 
 from __future__ import annotations
@@ -10,6 +14,7 @@ import argparse
 import contextlib
 import os
 import shutil
+import signal
 import sys
 import threading
 import time
@@ -23,11 +28,14 @@ from typing import Any
 from ..language_profiles import SUPPORTED_LANGUAGE_CODES
 from ..planner_backends import PLANNER_BACKENDS
 from .projects import DEFAULT_PROJECTS_DIR, PROJECT_ROOT, ProjectError
+from .settings import KEYCHAIN_SERVICE, EnvFileKeys, KeychainKeys
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HEALTH_TIMEOUT_SECONDS = 30.0
+PARENT_POLL_SECONDS = 1.0
+GRACEFUL_SHUTDOWN_SECONDS = 2
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -84,9 +92,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Environment file holding planner API keys.",
     )
     parser.add_argument(
+        "--keys",
+        choices=("env-file", "keychain"),
+        default="env-file",
+        help="Where API keys are kept: the --env-file (default) or the macOS "
+        f"Keychain ({KEYCHAIN_SERVICE!r} items).",
+    )
+    parser.add_argument(
         "--dev",
         action="store_true",
         help="Serve the API only; run the Vite dev server for the frontend.",
+    )
+    parser.add_argument(
+        "--desktop",
+        action="store_true",
+        help="Run as the engine of the VoiceCut desktop app (.vc documents).",
+    )
+    parser.add_argument(
+        "--parent-pid",
+        type=int,
+        default=None,
+        help="Stop when the process with this id exits.",
     )
     return parser
 
@@ -128,6 +154,24 @@ def open_browser_when_ready(base_url: str, page_url: str) -> threading.Thread:
     return thread
 
 
+def exit_with_parent(parent_pid: int) -> threading.Thread:
+    """Stop this server (and so Voice Cut) once ``parent_pid`` has exited.
+
+    The desktop app normally stops its engine itself; this covers the app
+    crashing or being force-quit.  SIGTERM runs uvicorn's graceful shutdown,
+    which cancels running Voice Cut jobs.
+    """
+
+    def watch() -> None:
+        while os.getppid() == parent_pid:
+            time.sleep(PARENT_POLL_SECONDS)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    thread = threading.Thread(target=watch, daemon=True, name="watch-parent")
+    thread.start()
+    return thread
+
+
 def ensure_media_tools() -> None:
     """Put VoiceCut's own FFmpeg on PATH when the system has none."""
 
@@ -153,11 +197,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         parser.error("FFmpeg is required; install it (brew install ffmpeg)")
     from .server import create_app
 
+    env_file = args.env_file.expanduser().absolute()
     app = create_app(
         projects_dir=args.projects_dir,
-        env_file=args.env_file.expanduser().absolute(),
+        env_file=env_file,
         defaults=defaults_from_args(args),
         static_dir=None if args.dev else STATIC_DIR,
+        keys=KeychainKeys() if args.keys == "keychain" else EnvFileKeys(env_file),
+        desktop=args.desktop,
     )
     base_url = f"http://{args.host}:{args.port}"
     page_url = f"{base_url}/"
@@ -178,9 +225,18 @@ def main(argv: Sequence[str] | None = None) -> None:
             file=sys.stderr,
         )
     print(f"VoiceCut editor: {page_url}", flush=True)
-    if not args.no_browser and not args.dev:
+    if not (args.no_browser or args.dev or args.desktop):
         open_browser_when_ready(base_url, page_url)
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    if args.parent_pid is not None:
+        exit_with_parent(args.parent_pid)
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.port,
+        log_level="warning",
+        # Open event streams must not hold up stopping Voice Cut.
+        timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS,
+    )
 
 
 if __name__ == "__main__":

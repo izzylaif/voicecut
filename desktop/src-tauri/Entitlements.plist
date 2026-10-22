@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hardened-runtime entitlements of VoiceCut.app.  None are needed: the app
+     is not sandboxed, loads no third-party libraries and runs its engine
+     (Python, MFA, FFmpeg in ~/Library/Application Support/VoiceCut) as
+     separate processes, which the app's own hardened runtime does not
+     restrict. -->
+<plist version="1.0">
+<dict/>
+</plist>

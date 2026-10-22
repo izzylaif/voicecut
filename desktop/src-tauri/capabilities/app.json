@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "app-pages",
+  "description": "VoiceCut's own pages: first-run setup, starting the engine, errors.",
+  "windows": ["*"],
+  "permissions": [
+    "core:default",
+    "allow-app-status",
+    "allow-start-setup",
+    "allow-cancel-setup",
+    "allow-restart-engine",
+    "allow-reveal-logs",
+    "allow-open-external"
+  ]
+}

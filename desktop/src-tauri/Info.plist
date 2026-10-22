@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged by the Tauri bundler into VoiceCut.app/Contents/Info.plist. -->
+<plist version="1.0">
+<dict>
+  <!-- macOS asks once before VoiceCut (its engine, really) reads recordings
+       or writes projects and exports in these places. -->
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>VoiceCut opens recordings and saves projects and exports where you choose.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>VoiceCut opens recordings and saves projects and exports where you choose.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>VoiceCut opens recordings and saves projects and exports where you choose.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>VoiceCut opens recordings and saves projects and exports where you choose.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>VoiceCut opens recordings and saves projects and exports where you choose.</string>
+  <!-- A VoiceCut project is a folder named *.vc that the Finder shows as one
+       file (a document package), opened by double-clicking. -->
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key>
+      <string>com.vectozavr.voicecut.project</string>
+      <key>UTTypeDescription</key>
+      <string>VoiceCut Project</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>com.apple.package</string>
+        <string>public.composite-content</string>
+      </array>
+      <key>UTTypeIconFile</key>
+      <string>VoiceCutDocument.icns</string>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>vc</string>
+        </array>
+      </dict>
+    </dict>
+  </array>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>VoiceCut Project</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>LSHandlerRank</key>
+      <string>Owner</string>
+      <key>LSTypeIsPackage</key>
+      <true/>
+      <key>CFBundleTypeIconFile</key>
+      <string>VoiceCutDocument.icns</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>com.vectozavr.voicecut.project</string>
+      </array>
+    </dict>
+    <!-- "Open With > VoiceCut" on a recording starts a new project from it. -->
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>Audio or Video Recording</string>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>LSHandlerRank</key>
+      <string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>public.audio</string>
+        <string>public.movie</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

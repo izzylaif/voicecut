@@ -170,6 +170,7 @@ def test_audio_export_matches_the_preview_render(
         export_id="e1",
         on_stage=lambda stage, status: stages.append((stage, status)),
         room_tone=_room_tone(project, proposal),
+        keep_render=True,
     )
     assert [stage for stage, status in stages if status == "completed"] == [
         "plan",
@@ -252,6 +253,10 @@ def test_video_export_cuts_the_picture_upright(
     )
     manifest = read_json(project.exports_dir / "v1" / "video_render_manifest.json")
     info = manifest["output_media_info"]
+    # The render the video was made from is gone; its manifest remains.
+    assert not (project.exports_dir / "v1" / "final_cut.wav").exists()
+    render = read_json(project.exports_dir / "v1" / "editor_render_manifest.json")
+    assert render["final_cut_wav_sha256"]
     assert abs(info["duration_seconds"] - record["duration_seconds"]) < 0.1
     exported = frame_at(destination, 0.3)
     original = frame_at(video, 0.3)

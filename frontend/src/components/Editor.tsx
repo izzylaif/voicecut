@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, CircleHelp, Download, FileAudio, FileVideo, Settings, Sparkles } from 'lucide-react';
 import { api, followJob } from '../api';
+import { confirmAction, desktop, documentOpened, editText, invoke, onMenu } from '../desktop';
 import { EditorStore, errorText } from '../store';
 import { Timeline } from '../timeline/Timeline';
 import type { ProjectState, RunSettings, SettingsState } from '../types';
@@ -46,6 +47,11 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
   const project = store.project;
 
   useEffect(() => () => store.dispose(), [store]);
+
+  // In the desktop app this window shows the project's document.
+  useEffect(() => {
+    if (initial.document) documentOpened(initial.id, initial.document.path, initial.document.name);
+  }, [initial]);
 
   useEffect(() => {
     api.settings().then(setSettingsState, (error: unknown) => store.notify(`Cannot load settings: ${errorText(error)}`, 'error'));
@@ -119,7 +125,10 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
       return;
     }
     if (store.proposal && store.isEdited) {
-      const ok = window.confirm('Running Voice Cut again replaces your manual edits with a new automatic edit. Continue?');
+      const ok = await confirmAction(
+        'Running Voice Cut again replaces your manual edits with a new automatic edit. Continue?',
+        { title: 'Voice Cut again?', ok: 'Voice Cut' },
+      );
       if (!ok) return;
     }
     try {
@@ -134,10 +143,104 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
     api.cancelVoiceCut(store.id).catch((error: unknown) => store.notify(errorText(error), 'error'));
   };
 
+  /** Save the edit now (it is also saved after every change). */
+  const saveNow = useCallback(async () => {
+    try {
+      await store.flushSave();
+      store.notify('Saved');
+    } catch (error) {
+      store.notify(`Not saved: ${errorText(error)}`, 'error');
+    }
+  }, [store]);
+
+  /** Desktop: copy the document elsewhere and keep editing the copy. */
+  const saveAs = useCallback(async () => {
+    const document = store.project.document;
+    if (!document) return;
+    try {
+      await store.flushSave().catch(() => undefined);
+      const folder = document.path.slice(0, document.path.lastIndexOf('/'));
+      const path = await invoke<string | null>('choose_document_location', {
+        name: `${document.name} copy`,
+        directory: folder,
+      });
+      if (!path) return;
+      const state = await api.saveDocumentAs(store.id, path);
+      store.updateProject(state);
+      if (state.document) {
+        documentOpened(state.id, state.document.path, state.document.name);
+        store.notify(`Saved as ${state.document.name}`);
+      }
+    } catch (error) {
+      store.notify(`Cannot save: ${errorText(error)}`, 'error');
+    }
+  }, [store]);
+
+  /** Point the project at its source recording after it was moved. */
+  const locateSource = async () => {
+    const name = project.source_path.slice(project.source_path.lastIndexOf('/') + 1);
+    try {
+      const path = await invoke<string | null>('choose_source', { name });
+      if (path) store.updateProject(await api.locateSource(store.id, path));
+    } catch (error) {
+      store.notify(errorText(error), 'error');
+    }
+  };
+
   // Keyboard shortcuts.
   const modal = exporting || settingsOpen;
   const modalRef = useRef(modal);
   modalRef.current = modal;
+
+  // The desktop app's menu commands.
+  useEffect(
+    () =>
+      onMenu((message) => {
+        const free = !modalRef.current;
+        switch (message.command) {
+          case 'flush':
+            void store
+              .flushSave()
+              .catch(() => undefined)
+              .finally(() => void invoke('flush_done', { token: message.token }));
+            break;
+          case 'save':
+            void saveNow();
+            break;
+          case 'save-as':
+            void saveAs();
+            break;
+          case 'export':
+            setExporting(true);
+            break;
+          case 'settings':
+            setSettingsOpen(true);
+            break;
+          case 'undo':
+            if (!editText('undo') && free) store.undo();
+            break;
+          case 'redo':
+            if (!editText('redo') && free) store.redo();
+            break;
+          case 'select-all':
+            if (!editText('select-all') && free) store.selectAll();
+            break;
+          case 'zoom-in':
+            store.zoom(1.6);
+            break;
+          case 'zoom-out':
+            store.zoom(1 / 1.6);
+            break;
+          case 'zoom-fit':
+            store.zoomToFit();
+            break;
+          case 'shortcuts':
+            setHelpOpen((open) => !open);
+            break;
+        }
+      }),
+    [store, saveNow, saveAs],
+  );
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (modalRef.current) return;
@@ -195,12 +298,20 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
     <div className="editor">
       <header className="topbar">
         <div className="topbar-left">
-          <button type="button" className="icon-button" title="All projects" onClick={onClose}>
-            <ArrowLeft size={16} />
-          </button>
+          {!desktop && (
+            <button type="button" className="icon-button" title="All projects" onClick={onClose}>
+              <ArrowLeft size={16} />
+            </button>
+          )}
           {project.media.kind === 'video' ? <FileVideo size={16} /> : <FileAudio size={16} />}
           <span className="project-name" title={project.source_path}>
-            {project.name}
+            {project.document ? (
+              <>
+                {project.document.name} <span className="muted">· {project.name}</span>
+              </>
+            ) : (
+              project.name
+            )}
           </span>
           <span className={`save-state save-${save.state}`} title={save.state === 'error' ? save.message : undefined}>
             {save.state === 'saved'
@@ -232,6 +343,20 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
           </button>
         </div>
       </header>
+
+      {project.source_missing && (
+        <div className="banner">
+          The original recording {project.source_path} was moved or deleted.{' '}
+          {project.media.kind === 'video'
+            ? 'Find it to run Voice Cut or to export video; the edit and audio export work without it.'
+            : 'Find it to run Voice Cut again; the edit and export work without it.'}
+          {desktop && (
+            <button type="button" className="button subtle banner-action" onClick={() => void locateSource()}>
+              Locate…
+            </button>
+          )}
+        </div>
+      )}
 
       {project.proposal_error && (
         <div className="banner">

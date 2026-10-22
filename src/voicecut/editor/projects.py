@@ -8,7 +8,7 @@
                           video proxy and filmstrip sheets
   voicecut/               the pipeline's own output and work directory
   timeline.json           the user's edit (autosaved)
-  exports/<export_id>/    editor plans and renders of finished exports
+  exports/<export_id>/    editor plans and manifests of finished exports
 ```
 
 ``project.json`` is rewritten atomically; the store serialises updates.
@@ -118,6 +118,8 @@ class Project:
     run: dict[str, Any] = field(default_factory=idle_run)
     preview: dict[str, Any] = field(default_factory=dict)
     exports: list[dict[str, Any]] = field(default_factory=list)
+    # Set for a ``.vc`` document of the desktop app (see :mod:`.documents`).
+    document: dict[str, Any] = field(default_factory=dict)
 
     # -- paths -------------------------------------------------------------
     @property
@@ -267,7 +269,7 @@ class Project:
 
     # -- persistence -----------------------------------------------------------
     def to_record(self) -> dict[str, Any]:
-        return {
+        record = {
             "schema_version": PROJECT_SCHEMA_VERSION,
             "id": self.id,
             "name": self.name,
@@ -281,6 +283,9 @@ class Project:
             "preview": dict(self.preview),
             "exports": list(self.exports),
         }
+        if self.document:
+            record["document"] = dict(self.document)
+        return record
 
     @classmethod
     def from_record(cls, root: Path, record: dict[str, Any]) -> Project:
@@ -295,6 +300,7 @@ class Project:
             run.update(record["run"])
         preview = record.get("preview")
         exports = record.get("exports")
+        document = record.get("document")
         return cls(
             id=str(record["id"]),
             root=root,
@@ -311,6 +317,7 @@ class Project:
             if isinstance(preview, dict) and "status" in preview
             else {},
             exports=list(exports) if isinstance(exports, list) else [],
+            document=dict(document) if isinstance(document, dict) else {},
         )
 
     def summary(self) -> dict[str, Any]:
@@ -444,6 +451,7 @@ class ProjectStore:
         source: Path,
         sha: str,
         uploaded: bool,
+        document: dict[str, Any] | None = None,
     ) -> Project:
         try:
             root.mkdir(parents=True, exist_ok=True)
@@ -457,6 +465,7 @@ class ProjectStore:
                 uploaded=uploaded,
                 created_at=utc_now(),
                 settings={key: self.defaults.get(key) for key in SETTINGS_KEYS},
+                document=dict(document or {}),
             )
             try:
                 manifest = media.extract_audio_to_wav(

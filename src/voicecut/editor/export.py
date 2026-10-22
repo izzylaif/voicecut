@@ -6,6 +6,11 @@ when the container matches.  Anything else is derived into an editor plan
 overlap-add renderer and published with VoiceCut's own publishers:
 ``media.publish_audio`` for audio and ``video_render.render_edited_video``
 (direct cuts from the original video) for video.
+
+The render (``final_cut.wav``, as long as the edit in 32-bit float) is only
+the publishers' input: it is deleted once the export is written, or fails, so
+a project does not grow by a recording's worth with every export.  The
+manifests beside it keep its SHA-256.
 """
 
 from __future__ import annotations
@@ -92,8 +97,12 @@ def export_timeline(
     export_id: str,
     on_stage: StageCallback | None = None,
     room_tone: RoomToneSource | None = None,
+    keep_render: bool = False,
 ) -> dict[str, Any]:
-    """Export a validated timeline; return the export record."""
+    """Export a validated timeline; return the export record.
+
+    ``keep_render`` keeps the intermediate render (for tests).
+    """
 
     def stage(name: str, status: str) -> None:
         if on_stage is not None:
@@ -160,8 +169,49 @@ def export_timeline(
     write_json(plan_path, plan)
     stage("plan", "completed")
 
-    stage("render", "started")
     final_cut = export_dir / "final_cut.wav"
+    try:
+        rendered = _render_and_publish(
+            project=project,
+            kind=kind,
+            plan=plan,
+            plan_path=plan_path,
+            canonical=canonical,
+            canonical_sha=canonical_sha,
+            final_cut=final_cut,
+            destination=destination,
+            stage=stage,
+        )
+    finally:
+        if not keep_render:
+            final_cut.unlink(missing_ok=True)
+    result.update(
+        duration_seconds=rendered["duration_seconds"],
+        manual_boundaries=plan["manual_boundary_count"],
+        kept_pauses=plan["carried_over"]["pauses"],
+        dropped_pauses=len(plan["dropped"]),
+        inserted_pauses=plan["carried_over"]["inserted_pauses"],
+    )
+    write_json(export_dir / "export_result.json", result)
+    return result
+
+
+def _render_and_publish(
+    *,
+    project: Project,
+    kind: str,
+    plan: dict[str, Any],
+    plan_path: Path,
+    canonical: Path,
+    canonical_sha: str,
+    final_cut: Path,
+    destination: Path,
+    stage: StageCallback,
+) -> dict[str, Any]:
+    """Render the editor plan to ``final_cut`` and publish it to ``destination``."""
+
+    export_dir = final_cut.parent
+    stage("render", "started")
     rendered = render_plan_to_wav(
         audio_path=canonical, plan=plan, output_path=final_cut
     )
@@ -199,12 +249,4 @@ def export_timeline(
             overwrite=True,
         )
     stage("publish", "completed")
-    result.update(
-        duration_seconds=rendered["duration_seconds"],
-        manual_boundaries=plan["manual_boundary_count"],
-        kept_pauses=plan["carried_over"]["pauses"],
-        dropped_pauses=len(plan["dropped"]),
-        inserted_pauses=plan["carried_over"]["inserted_pauses"],
-    )
-    write_json(export_dir / "export_result.json", result)
-    return result
+    return rendered

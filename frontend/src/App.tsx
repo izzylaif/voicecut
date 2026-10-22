@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
+import { DesktopWelcome } from './components/DesktopWelcome';
 import { Editor } from './components/Editor';
 import { Welcome } from './components/Welcome';
+import { desktop } from './desktop';
 import type { ProjectState } from './types';
 
 function projectInUrl(): string | null {
@@ -21,7 +23,15 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.config().catch(() => setError('Cannot reach the VoiceCut editor server. Is voicecut-editor running?'));
+    api
+      .config()
+      .catch(() =>
+        setError(
+          desktop
+            ? 'Cannot reach VoiceCut’s engine. Quit and reopen VoiceCut.'
+            : 'Cannot reach the VoiceCut editor server. Is voicecut-editor running?',
+        ),
+      );
     const id = projectInUrl();
     if (id) {
       api
@@ -47,12 +57,21 @@ export function App() {
   return (
     <>
       {error && <div className="banner">{error}</div>}
-      <Welcome
-        onOpen={(state) => {
-          setProjectInUrl(state.id);
-          setProject(state);
-        }}
-      />
+      {desktop ? (
+        <DesktopWelcome
+          onOpen={(state) => {
+            setProjectInUrl(state.id);
+            setProject(state);
+          }}
+        />
+      ) : (
+        <Welcome
+          onOpen={(state) => {
+            setProjectInUrl(state.id);
+            setProject(state);
+          }}
+        />
+      )}
     </>
   );
 }

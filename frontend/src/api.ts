@@ -51,6 +51,12 @@ export const api = {
   project: (id: string) => call<ProjectState>(project(id)),
   deleteProject: (id: string) => call<void>(project(id), { method: 'DELETE' }),
   importPath: (path: string) => call<ProjectState>('/api/projects/import', json('POST', { path })),
+  locateSource: (id: string, path: string) => call<ProjectState>(`${project(id)}/locate-source`, json('POST', { path })),
+
+  // `.vc` documents (desktop app only).
+  createDocument: (source: string, path: string) =>
+    call<ProjectState>('/api/documents/create', json('POST', { source, path })),
+  saveDocumentAs: (id: string, path: string) => call<ProjectState>(`${project(id)}/save-as`, json('POST', { path })),
 
   /** Upload a file with progress (fetch cannot report upload progress). */
   importFile(file: File, onProgress: (fraction: number) => void): Promise<ProjectState> {

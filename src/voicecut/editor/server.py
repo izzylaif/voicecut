@@ -4,11 +4,17 @@ The server owns project storage, runs VoiceCut in a worker subprocess and
 streams its stages over Server-Sent Events, prepares video previews, renders
 preview audio for any stretch of the edited timeline, and exports.  It is a
 single-user local tool, so long work runs in plain threads.
+
+With ``desktop=True`` it is the engine of the VoiceCut desktop app: projects
+are ``.vc`` documents opened from anywhere (:mod:`.documents`), API keys live
+in the macOS Keychain, only the app's own pages may call it, and stopping it
+stops every running Voice Cut.
 """
 
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import json
 import os
 import secrets
@@ -41,7 +47,7 @@ from ..planner_backends import (
     DEFAULT_MODEL_BY_BACKEND,
     PLANNER_BACKENDS,
 )
-from . import ambience, peaks, plan, proxy, settings
+from . import ambience, documents, peaks, plan, proxy, settings
 from .export import EXPORT_STAGES, ExportError, check_destination, export_timeline
 from .jobs import Job, JobRegistry, sse_stream
 from .projects import (
@@ -71,16 +77,23 @@ PREPARE_STAGES = {
     "proxy": "Building the video preview",
     "filmstrip": "Making thumbnails",
 }
+SHUTDOWN_GRACE_SECONDS = 5.0
 FRONTEND_MISSING = """<!doctype html><meta charset="utf-8"><title>VoiceCut editor</title>
 <body style="font:16px system-ui;max-width:40rem;margin:4rem auto">
 <h1>VoiceCut editor</h1><p>The API is running, but the frontend is not built.</p>
 <pre>cd frontend &amp;&amp; npm install &amp;&amp; npm run build</pre></body>"""
 
 
-def spawn_worker(request_path: Path) -> subprocess.Popen[str]:
-    """Start ``python -m voicecut.editor.worker`` in its own process group."""
+def spawn_worker(
+    request_path: Path, environment: dict[str, str] | None = None
+) -> subprocess.Popen[str]:
+    """Start ``python -m voicecut.editor.worker`` in its own process group.
 
-    environment = os.environ.copy()
+    ``environment`` adds variables (a planner key from the Keychain) to the
+    editor's own.
+    """
+
+    environment = {**os.environ, **(environment or {})}
     source = str(PROJECT_ROOT / "src")
     existing = environment.get("PYTHONPATH")
     environment["PYTHONPATH"] = source + (os.pathsep + existing if existing else "")
@@ -99,12 +112,18 @@ class EditorService:
     """Everything the HTTP routes do, independent of FastAPI."""
 
     def __init__(
-        self, store: ProjectStore, *, env_file: Path, defaults: dict[str, Any]
+        self,
+        store: ProjectStore,
+        *,
+        env_file: Path,
+        defaults: dict[str, Any],
+        keys: settings.KeyStore | None = None,
     ):
         self.store = store
         self.jobs = JobRegistry()
         self.env_file = env_file
-        self.models = settings.ModelCatalog(env_file)
+        self.keys = keys or settings.EnvFileKeys(env_file)
+        self.models = settings.ModelCatalog(env_file, keys=self.keys)
         self.preferences_path = store.root / "preferences.json"
         # The last Voice Cut settings chosen in the editor beat the CLI's.
         remembered = settings.load_preferences(self.preferences_path)
@@ -179,6 +198,12 @@ class EditorService:
         return {
             **project.summary(),
             "uploaded": project.uploaded,
+            "source_missing": not documents.source_available(project),
+            "document": (
+                {"path": str(project.root), "name": project.root.stem}
+                if project.document
+                else None
+            ),
             "media": project.media_state(),
             "settings": {key: project.settings.get(key) for key in SETTINGS_KEYS},
             "run": project.run,
@@ -205,6 +230,82 @@ class EditorService:
         if self.jobs.running(project.id, EXCLUSIVE_JOBS | {"prepare"}):
             raise HTTPException(409, "the project has a job running")
         self.store.delete(project.id)
+
+    # -- documents (desktop app) ------------------------------------------------------
+    @property
+    def documents(self) -> documents.DocumentStore:
+        if not isinstance(self.store, documents.DocumentStore):
+            raise HTTPException(404, "documents are a feature of the desktop app")
+        return self.store
+
+    def open_document(self, path: str | None) -> Project:
+        if not path:
+            raise HTTPException(400, "send the document's path")
+        return self.documents.open_document(Path(path))
+
+    def create_document(self, source: str | None, path: str | None) -> Project:
+        if not source or not path:
+            raise HTTPException(400, "send the recording and the document's path")
+        try:
+            return self.documents.create_document(Path(source), Path(path))
+        except FileNotFoundError as error:
+            raise HTTPException(404, f"no such file: {source}") from error
+
+    def save_document_as(self, project: Project, path: str | None) -> Project:
+        if not path:
+            raise HTTPException(400, "send the new document's path")
+        if self.jobs.running(project.id, EXCLUSIVE_JOBS | {"prepare"}):
+            raise HTTPException(
+                409, "wait until Voice Cut or the export finishes, then save"
+            )
+        return self.documents.save_document_as(project.id, Path(path))
+
+    def close_document(self, project: Project, *, cancel: bool) -> None:
+        running = self.jobs.running(project.id, EXCLUSIVE_JOBS | {"prepare"})
+        if running is not None and not cancel:
+            raise HTTPException(409, "the project has a job running")
+        self.stop_jobs(project.id)
+        self.documents.close_document(project.id)
+
+    def locate_source(self, project: Project, path: str | None) -> Project:
+        if not path:
+            raise HTTPException(400, "send the recording's path")
+        store = self.store
+        if not isinstance(store, documents.DocumentStore):
+            store = documents.DocumentStore(store.root, defaults=store.defaults)
+        try:
+            return store.locate_source(project.id, Path(path))
+        except FileNotFoundError as error:
+            raise HTTPException(404, f"no such file: {path}") from error
+
+    def stop_jobs(self, project_id: str | None = None) -> None:
+        """Cancel running Voice Cut runs and wait until their workers exit."""
+
+        jobs = [
+            job
+            for job in self.jobs.all()
+            if job.kind == "voicecut"
+            and not job.finished
+            and project_id in (None, job.project_id)
+        ]
+        for job in jobs:
+            job.cancel_requested = True
+            self._signal(job, signal.SIGTERM)
+        deadline = time.monotonic() + SHUTDOWN_GRACE_SECONDS
+        for job in jobs:
+            process = job.process
+            if process is None:
+                continue
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                process.wait(max(0.0, deadline - time.monotonic()))
+            if process.poll() is None:
+                self._signal(job, signal.SIGKILL)
+
+    @staticmethod
+    def _signal(job: Job, signum: int) -> None:
+        if job.process is not None and job.process.poll() is None:
+            with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+                os.killpg(os.getpgid(job.process.pid), signum)
 
     # -- video preview -------------------------------------------------------------
     def start_prepare(self, project: Project) -> Job | None:
@@ -319,7 +420,7 @@ class EditorService:
         backend = chosen["planner_backend"]
         key_env = API_KEY_ENV_BY_BACKEND.get(backend)
         if key_env:
-            value, _ = settings.key_value(self.env_file, key_env)
+            value, _ = settings.key_value(self.keys, key_env)
             if not value:
                 label = settings.PLANNER_LABELS.get(backend, backend)
                 raise HTTPException(
@@ -334,7 +435,8 @@ class EditorService:
     def settings_state(self) -> dict[str, Any]:
         return {
             "env_file": str(self.env_file),
-            "planners": settings.planners(self.env_file),
+            "key_store": {"kind": self.keys.kind, "location": self.keys.location},
+            "planners": settings.planners(self.keys),
             "default_models": dict(DEFAULT_MODEL_BY_BACKEND),
             "languages": list(SUPPORTED_LANGUAGE_CODES),
             "defaults": {key: self.defaults.get(key) for key in SETTINGS_KEYS},
@@ -355,12 +457,12 @@ class EditorService:
             if error and error["kind"] == "invalid_key":
                 raise HTTPException(400, error["message"])
         try:
-            settings.save_key(self.env_file, key_env, value or None)
+            self.keys.set(key_env, value or None)
         except settings.SettingsError as error:
             raise HTTPException(400, str(error)) from error
         except OSError as error:
             raise HTTPException(
-                500, f"cannot write {self.env_file}: {error}"
+                500, f"cannot save the key in {self.keys.location}: {error}"
             ) from error
         return self.settings_state()
 
@@ -389,9 +491,28 @@ class EditorService:
             argv += ["--breath-cleanup", str(chosen["breath_cleanup"])]
         return argv
 
+    def worker_environment(self, chosen: dict[str, Any]) -> dict[str, str]:
+        """The planner key for the worker, unless the pipeline reads it itself.
+
+        The pipeline reads the editor's environment and the env file; a key
+        kept anywhere else travels in the worker's environment.
+        """
+
+        key_env = API_KEY_ENV_BY_BACKEND.get(chosen["planner_backend"])
+        if not key_env or self.keys.kind == "env_file":
+            return {}
+        value, source = settings.key_value(self.keys, key_env)
+        return {key_env: value} if value and source == self.keys.kind else {}
+
     def start_voicecut(self, project: Project, body: dict[str, Any]) -> Job:
         chosen = self.settings_from(project, body)
         self.check_planner(chosen)
+        if not documents.source_available(project):
+            raise HTTPException(
+                400,
+                f"The original recording {project.source_path.name} was moved or "
+                "deleted; locate it first",
+            )
         with self._lock:
             if self.jobs.running(project.id, EXCLUSIVE_JOBS):
                 raise HTTPException(409, "Voice Cut or an export is already running")
@@ -411,8 +532,13 @@ class EditorService:
             }
 
         self.store.update(project.id, running)
+        environment = self.worker_environment(chosen)
         try:
-            job.process = spawn_worker(request_path)
+            job.process = (
+                spawn_worker(request_path, environment)
+                if environment
+                else spawn_worker(request_path)
+            )
         except OSError as error:
             job.append({"type": "error", "message": f"cannot start VoiceCut: {error}"})
             self._finish_voicecut(job)
@@ -511,6 +637,10 @@ class EditorService:
             return
         manifest = project.media_manifest()
         if manifest.get("canonical_audio_sha256") == proposal.source_audio_sha256:
+            if project.document:
+                # The same audio twice in one document: share its blocks.
+                with contextlib.suppress(OSError):
+                    documents.clone_file(proposal.source_audio, project.canonical_wav)
             return
         pipeline_manifest = proposal.source_audio.parent / "media_input.json"
         if not pipeline_manifest.is_file():
@@ -678,18 +808,62 @@ async def _json(request: Request) -> Any:
         raise HTTPException(400, "the request body must be JSON") from error
 
 
+def _local_host(value: str) -> bool:
+    """Whether a ``Host`` header names this computer's loopback interface."""
+
+    if value.startswith("["):  # [::1]:port
+        host = value[1:].split("]", 1)[0]
+    else:
+        host = value.rsplit(":", 1)[0] if value.count(":") == 1 else value
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def create_app(
     *,
     projects_dir: Path,
     env_file: Path,
     defaults: dict[str, Any] | None = None,
     static_dir: Path | None = None,
+    keys: settings.KeyStore | None = None,
+    desktop: bool = False,
 ) -> FastAPI:
-    store = ProjectStore(projects_dir)
+    store = (documents.DocumentStore if desktop else ProjectStore)(projects_dir)
     store.recover_interrupted()
-    service = EditorService(store, env_file=env_file, defaults=defaults or {})
-    app = FastAPI(title="VoiceCut editor", version=__version__)
+    service = EditorService(
+        store, env_file=env_file, defaults=defaults or {}, keys=keys
+    )
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_: FastAPI):
+        yield
+        # Quitting the editor stops Voice Cut instead of orphaning its worker.
+        await run_in_threadpool(service.stop_jobs)
+
+    app = FastAPI(title="VoiceCut editor", version=__version__, lifespan=lifespan)
     app.state.service = service
+
+    if desktop:
+
+        @app.middleware("http")
+        async def only_the_app(request: Request, call_next):
+            """Refuse requests from web pages and DNS-rebound host names.
+
+            The desktop engine listens on the loopback interface; anything but
+            the app's own pages and the app itself is turned away.
+            """
+
+            host = request.headers.get("host", "")
+            origin = request.headers.get("origin")
+            if not _local_host(host) or (
+                origin is not None and origin != f"http://{host}"
+            ):
+                return JSONResponse({"detail": "forbidden"}, status_code=403)
+            return await call_next(request)
 
     @app.exception_handler(ProjectNotFound)
     async def not_found(_: Request, error: ProjectNotFound) -> JSONResponse:
@@ -707,6 +881,7 @@ def create_app(
     def config() -> dict[str, Any]:
         return {
             "version": __version__,
+            "desktop": desktop,
             "languages": list(SUPPORTED_LANGUAGE_CODES),
             "planner_backends": list(PLANNER_BACKENDS),
             "defaults": {key: service.defaults.get(key) for key in SETTINGS_KEYS},
@@ -863,6 +1038,65 @@ def create_app(
             )
             return {"ok": True}
         return {"ok": False}
+
+    @app.post("/api/projects/{project_id}/locate-source")
+    async def locate_source(project_id: str, request: Request) -> dict[str, Any]:
+        body = await _json(request)
+        path = body.get("path") if isinstance(body, dict) else None
+        project = service.project(project_id)
+        located = await run_in_threadpool(
+            lambda: service.locate_source(
+                project, path if isinstance(path, str) else None
+            )
+        )
+        return await run_in_threadpool(lambda: service.state(located))
+
+    if desktop:
+
+        @app.post("/api/documents/open")
+        async def open_document(request: Request) -> dict[str, Any]:
+            body = await _json(request)
+            path = body.get("path") if isinstance(body, dict) else None
+            project = await run_in_threadpool(
+                lambda: service.open_document(path if isinstance(path, str) else None)
+            )
+            return await run_in_threadpool(lambda: service.state(project))
+
+        @app.post("/api/documents/create")
+        async def create_document(request: Request) -> dict[str, Any]:
+            body = await _json(request) or {}
+            if not isinstance(body, dict):
+                raise HTTPException(400, "the request body must be an object")
+            source, path = body.get("source"), body.get("path")
+            project = await run_in_threadpool(
+                lambda: service.create_document(
+                    source if isinstance(source, str) else None,
+                    path if isinstance(path, str) else None,
+                )
+            )
+            return await run_in_threadpool(lambda: service.state(project))
+
+        @app.post("/api/projects/{project_id}/save-as")
+        async def save_as(project_id: str, request: Request) -> dict[str, Any]:
+            body = await _json(request)
+            path = body.get("path") if isinstance(body, dict) else None
+            project = service.project(project_id)
+            saved = await run_in_threadpool(
+                lambda: service.save_document_as(
+                    project, path if isinstance(path, str) else None
+                )
+            )
+            return await run_in_threadpool(lambda: service.state(saved))
+
+        @app.post("/api/projects/{project_id}/close", status_code=204)
+        def close_document(project_id: str, cancel: bool = False) -> Response:
+            service.close_document(service.project(project_id), cancel=cancel)
+            return Response(status_code=204)
+
+        @app.post("/api/desktop/stop-jobs")
+        def stop_all_jobs() -> dict[str, bool]:
+            service.stop_jobs()
+            return {"ok": True}
 
     @app.get("/api/jobs/{job_id}")
     def job_state(job_id: str) -> dict[str, Any]:

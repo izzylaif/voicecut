@@ -1,0 +1,39 @@
+[package]
+name = "voicecut-desktop"
+version = "0.2.0"
+description = "VoiceCut for macOS: the VoiceCut editor as a desktop app"
+authors = ["VoiceCut contributors"]
+license = "MIT"
+repository = "https://github.com/vectozavr/voicecut"
+edition = "2021"
+rust-version = "1.80"
+
+[lib]
+name = "voicecut_desktop"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+tauri-plugin-dialog = "2.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "3", features = ["json"] }
+sha2 = "0.10"
+flate2 = "1"
+tar = "0.4"
+libc = "0.2"
+trash = "5"
+
+[features]
+# A loopback control port for end-to-end tests (see src/automation.rs);
+# never part of a release build.
+automation = []
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

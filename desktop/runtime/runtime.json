@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "about": "What the VoiceCut app installs on first launch into ~/Library/Application Support/VoiceCut. The same runtime scripts/install.sh builds in a checkout, pinned and verified. Changing anything here (or a lock file) makes the app update the affected part on its next launch.",
+  "uv": {
+    "version": "0.13.4",
+    "url": "https://github.com/astral-sh/uv/releases/download/0.13.4/uv-aarch64-apple-darwin.tar.gz",
+    "sha256": "e0b1d4743ce64c55d9f0f4a444afa6b81125680070ee04e853fcd0f6c1ebf8f1"
+  },
+  "micromamba": {
+    "version": "2.9.0",
+    "url": "https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-osx-arm64",
+    "sha256": "ec2a072f028e1a7cf20f3e2e74d5a8127cf5a5f27636375b5359811565f4e5be"
+  },
+  "python": {
+    "main": "3.12.15",
+    "mlx": "3.11.17"
+  },
+  "requirements": {
+    "main": "requirements-main.txt",
+    "mlx": "requirements-mlx.txt"
+  },
+  "mfa": {
+    "version": "3.4.1",
+    "lock": "mfa-osx-arm64.txt",
+    "patches": [
+      {
+        "why": "MFA 3.4.1 wraps executable paths that contain a space in quotes and then runs them without a shell, so it cannot find its own Kaldi tools under ~/Library/Application Support.",
+        "file": "lib/python3.11/site-packages/montreal_forced_aligner/utils.py",
+        "sha256": "2e31c3776f9ea29fab1354b7d97da022f22a5c9752b8231921a2742558b24a2e",
+        "remove": "    if \" \" in bin_path:\n        return f'\"{bin_path}\"'\n"
+      }
+    ]
+  },
+  "respiro": {
+    "commit": "70e01c60c2f582c41092730680f2894ab24d6467",
+    "url": "https://raw.githubusercontent.com/ydqmkkx/Respiro-en/70e01c60c2f582c41092730680f2894ab24d6467",
+    "files": {
+      "modules.py": "f789e0986e3090d7df5f9f0f596d9e3601c6da514c3ac01a65920a493b840e46",
+      "respiro-en.pt": "1f4a9b96f96645c480bf0e07b1e18cd68878ac0b4bb5dc920ad93f9b17df858a",
+      "LICENSE": "a34ad1af58dc7c02f867f620f7ddc952029b383c9b0dce349d54f6b875e079cd"
+    }
+  },
+  "space": {
+    "download_gb": 1.6,
+    "installed_gb": 4.3,
+    "needed_gb": 7
+  }
+}

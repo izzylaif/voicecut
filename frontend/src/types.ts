@@ -146,6 +146,10 @@ export interface ProjectSummary {
 
 export interface ProjectState extends ProjectSummary {
   uploaded: boolean;
+  /** The source recording is not where the project says (moved or deleted). */
+  source_missing: boolean;
+  /** The `.vc` document this project is, in the desktop app. */
+  document: { path: string; name: string } | null;
   media: MediaState;
   settings: RunSettings;
   run: RunState;
@@ -160,6 +164,7 @@ export interface ProjectState extends ProjectSummary {
 
 export interface EditorConfig {
   version: string;
+  desktop: boolean;
   languages: string[];
   planner_backends: string[];
   defaults: RunSettings;
@@ -182,12 +187,14 @@ export interface PlannerInfo {
   default_model: string;
   key_env: string | null;
   key_page: string | null;
-  key: { set: boolean; masked: string | null; source: 'environment' | 'env_file' | null } | null;
+  key: { set: boolean; masked: string | null; source: 'environment' | 'env_file' | 'keychain' | null } | null;
   available: boolean;
 }
 
 export interface SettingsState {
   env_file: string;
+  /** Where saved keys live: the dotenv file, or the macOS Keychain (absent from older servers). */
+  key_store?: { kind: 'env_file' | 'keychain'; location: string };
   planners: PlannerInfo[];
   default_models: Record<string, string>;
   languages: string[];

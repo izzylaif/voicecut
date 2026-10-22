@@ -1,10 +1,12 @@
 """Planner choice, API keys and live model lists for the editor's settings.
 
-* API keys live where the pipeline already reads them: the dotenv file the
-  editor passes to ``voicecut --env-file`` (the repository ``.env`` by
-  default).  Saving a key rewrites only that key's line; every other line,
-  comment and the file's permissions are kept.  A key is never sent back to
-  the browser in full and never logged.
+* API keys live in a key store.  The browser editor keeps them where the
+  pipeline already reads them: the dotenv file it passes to ``voicecut
+  --env-file`` (the repository ``.env`` by default); saving a key rewrites
+  only that key's line, keeping every other line, comment and the file's
+  permissions.  The desktop app keeps them in the macOS login keychain and
+  hands the planner's key to a Voice Cut run in its environment.  Either way
+  a key is never sent back to the browser in full and never logged.
 * Model lists come from each provider's models API, called with the saved
   key, and are filtered to text models that can serve as the take planner.
   Failing to list models doubles as a key check: the UI says whether a key is
@@ -18,13 +20,14 @@ import json
 import os
 import re
 import stat
+import subprocess
 import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from ..planner_backends import (
     API_KEY_ENV_BY_BACKEND,
@@ -39,6 +42,10 @@ GEMINI_MODELS_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
 )
 LIST_TIMEOUT_SECONDS = 12
+KEYCHAIN_SERVICE = "VoiceCut"
+SECURITY_TOOL = "/usr/bin/security"
+# ``security`` exits with this status when the keychain has no such item.
+SECURITY_ITEM_NOT_FOUND = 44
 MODEL_CACHE_SECONDS = 600
 MAX_KEY_LENGTH = 512
 KEY_PAGES = {
@@ -93,18 +100,19 @@ def read_env_file(path: Path) -> dict[str, str]:
     return values
 
 
-def key_value(env_file: Path, name: str) -> tuple[str | None, str | None]:
+def key_value(keys: KeyStore | Path, name: str) -> tuple[str | None, str | None]:
     """The key the pipeline would use and where it comes from.
 
     Like the pipeline, a variable of the editor's own environment wins over
-    the dotenv file.
+    the key store (a dotenv file when ``keys`` is a path).
     """
 
     environment = os.environ.get(name, "").strip()
     if environment:
         return environment, "environment"
-    stored = read_env_file(env_file).get(name, "").strip()
-    return (stored, "env_file") if stored else (None, None)
+    store = EnvFileKeys(keys) if isinstance(keys, Path) else keys
+    stored = store.get(name)
+    return (stored, store.kind) if stored else (None, None)
 
 
 def mask(value: str) -> str:
@@ -121,11 +129,7 @@ def save_key(env_file: Path, name: str, value: str | None) -> None:
     """Set (or with ``None``/empty remove) one variable, keeping the rest."""
 
     if value is not None:
-        value = value.strip()
-        if len(value) > MAX_KEY_LENGTH or any(
-            ord(c) < 32 or c.isspace() for c in value
-        ):
-            raise SettingsError("the key must be one line without spaces")
+        value = _check_key(value)
     lines = (
         env_file.read_text(encoding="utf-8").splitlines() if env_file.is_file() else []
     )
@@ -152,6 +156,107 @@ def save_key(env_file: Path, name: str, value: str | None) -> None:
     temporary.replace(env_file)
 
 
+def _check_key(value: str) -> str:
+    value = value.strip()
+    if len(value) > MAX_KEY_LENGTH or any(ord(c) < 32 or c.isspace() for c in value):
+        raise SettingsError("the key must be one line without spaces")
+    return value
+
+
+class KeyStore(Protocol):
+    """Where the editor keeps the planners' API keys."""
+
+    kind: str
+
+    @property
+    def location(self) -> str: ...
+
+    def get(self, name: str) -> str | None: ...
+
+    def set(self, name: str, value: str | None) -> None: ...
+
+
+class EnvFileKeys:
+    """Keys in a dotenv file, the one ``voicecut --env-file`` reads."""
+
+    kind = "env_file"
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    @property
+    def location(self) -> str:
+        return str(self.path)
+
+    def get(self, name: str) -> str | None:
+        return read_env_file(self.path).get(name, "").strip() or None
+
+    def set(self, name: str, value: str | None) -> None:
+        save_key(self.path, name, value)
+
+
+class KeychainKeys:
+    """Keys as generic passwords of the macOS login keychain.
+
+    ``security`` reads and writes them; a new key reaches it on standard
+    input (``security -i``), never on a command line other processes can see.
+    """
+
+    kind = "keychain"
+
+    def __init__(
+        self, service: str = KEYCHAIN_SERVICE, *, tool: str = SECURITY_TOOL
+    ) -> None:
+        self.service = service
+        self.tool = tool
+
+    @property
+    def location(self) -> str:
+        return f"the macOS Keychain (“{self.service}” items)"
+
+    def _run(
+        self, arguments: list[str], *, stdin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [self.tool, *arguments],
+            input=stdin,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+    def get(self, name: str) -> str | None:
+        try:
+            result = self._run(
+                ["find-generic-password", "-s", self.service, "-a", name, "-w"]
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() or None
+
+    def set(self, name: str, value: str | None) -> None:
+        if not value:
+            result = self._run(
+                ["delete-generic-password", "-s", self.service, "-a", name]
+            )
+            if result.returncode not in (0, SECURITY_ITEM_NOT_FOUND):
+                raise SettingsError(f"the Keychain refused: {result.stderr.strip()}")
+            return
+        value = _check_key(value)
+        if '"' in value or "\\" in value:
+            raise SettingsError("the key must not contain quotes or backslashes")
+        command = (
+            f'add-generic-password -U -s "{self.service}" -a "{name}" '
+            f'-l "{self.service}: {name}" -w "{value}"\n'
+        )
+        result = self._run(["-i"], stdin=command)
+        if result.returncode != 0:
+            raise SettingsError(f"the Keychain refused: {result.stderr.strip()}")
+
+
 # ---------------------------------------------------------------------------
 # Planners and their models
 
@@ -162,7 +267,7 @@ def audio_listening_backends() -> frozenset[str]:
     return AUDIO_LISTENING_BACKENDS
 
 
-def planners(env_file: Path) -> list[dict[str, Any]]:
+def planners(keys: KeyStore | Path) -> list[dict[str, Any]]:
     """The planner providers the editor offers, with their key status."""
 
     listening = audio_listening_backends()
@@ -178,7 +283,7 @@ def planners(env_file: Path) -> list[dict[str, Any]]:
             "key_page": KEY_PAGES.get(backend),
         }
         if key_env:
-            value, source = key_value(env_file, key_env)
+            value, source = key_value(keys, key_env)
             entry["key"] = {
                 "set": value is not None,
                 "masked": mask(value) if value else None,
@@ -318,8 +423,9 @@ def _sorted(models: list[dict[str, Any]], default: str) -> list[dict[str, Any]]:
 class ModelCatalog:
     """Live model lists per provider, cached for a few minutes per key."""
 
-    def __init__(self, env_file: Path) -> None:
+    def __init__(self, env_file: Path, keys: KeyStore | None = None) -> None:
         self.env_file = env_file
+        self.keys = keys or EnvFileKeys(env_file)
         self._lock = threading.Lock()
         self._cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
 
@@ -344,7 +450,7 @@ class ModelCatalog:
             }
         key_env = API_KEY_ENV_BY_BACKEND[backend]
         if key is None:
-            key, _ = key_value(self.env_file, key_env)
+            key, _ = key_value(self.keys, key_env)
         if not key:
             label = PLANNER_LABELS[backend]
             return self._failure(

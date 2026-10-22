@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VoiceCut",
+  "version": "0.2.0",
+  "identifier": "com.vectozavr.voicecut",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "category": "public.app-category.video",
+    "copyright": "© 2026 VoiceCut contributors · MIT License",
+    "shortDescription": "Edits retake-heavy narration automatically",
+    "longDescription": "VoiceCut listens to a narration recording, keeps the best take of every line, fixes the pauses, and lets you fine-tune every cut on a timeline before exporting.",
+    "resources": {
+      "../build/runtime/": "runtime/",
+      "icons/VoiceCutDocument.icns": "VoiceCutDocument.icns"
+    },
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": true,
+      "entitlements": "Entitlements.plist"
+    }
+  }
+}

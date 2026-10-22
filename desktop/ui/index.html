@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoiceCut</title>
+    <link rel="stylesheet" href="app.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main class="card">
+      <header>
+        <img class="mark" src="mark.svg" alt="" width="88" height="88" />
+        <div>
+          <h1>Voice<span>Cut</span></h1>
+          <p class="muted" id="version"></p>
+        </div>
+      </header>
+
+      <!-- Checking what is installed, or starting the engine. -->
+      <section id="starting" hidden>
+        <p class="status"><span class="spinner"></span><span id="starting-text">Starting VoiceCut…</span></p>
+      </section>
+
+      <!-- First launch: what will be installed. -->
+      <section id="intro" hidden>
+        <h2>Welcome to VoiceCut</h2>
+        <p>
+          VoiceCut edits your narration on this Mac. Before the first project it sets up its engine:
+          Python, PyTorch, MLX Whisper, the Montreal Forced Aligner and FFmpeg.
+        </p>
+        <ul class="facts">
+          <li><strong id="download-size"></strong> to download, once</li>
+          <li><strong id="installed-size"></strong> on disk, in <code id="data-dir"></code></li>
+          <li>Speech models (about 2 GB) download the first time you run Voice Cut</li>
+        </ul>
+        <p class="error-text" id="space-warning" hidden></p>
+        <div class="actions">
+          <button class="button primary" id="install">Install</button>
+        </div>
+      </section>
+
+      <!-- Installing (or updating). -->
+      <section id="installing" hidden>
+        <h2 id="installing-title">Setting up VoiceCut</h2>
+        <div class="meter"><div id="meter-fill"></div></div>
+        <p class="muted small" id="meter-text"></p>
+        <ol class="steps" id="steps"></ol>
+        <details>
+          <summary>Details</summary>
+          <pre class="log" id="log"></pre>
+        </details>
+        <div class="actions">
+          <button class="button subtle" id="cancel">Cancel</button>
+        </div>
+      </section>
+
+      <!-- Something went wrong. -->
+      <section id="failed" hidden>
+        <h2 id="failed-title">Setup did not finish</h2>
+        <p class="error-text" id="failed-message"></p>
+        <p class="muted small" id="failed-hint"></p>
+        <ol class="steps" id="failed-steps"></ol>
+        <details>
+          <summary>Details</summary>
+          <pre class="log" id="failed-log"></pre>
+        </details>
+        <div class="actions">
+          <button class="button subtle" id="logs">Show Logs</button>
+          <button class="button primary" id="retry">Try Again</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

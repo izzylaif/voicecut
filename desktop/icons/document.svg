@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Icon of a VoiceCut project (.vc): a page with its corner folded, the
+       app's mark in the middle and the format's name below, the way macOS
+       draws document icons. -->
+  <defs>
+    <linearGradient id="paper" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#eceef2"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="672" y1="100" x2="832" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d9dce2"/>
+      <stop offset="1" stop-color="#f7f8fa"/>
+    </linearGradient>
+    <linearGradient id="tile" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#262a31"/>
+      <stop offset="1" stop-color="#0c0d10"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="512" cy="600" r="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34c7a0" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#34c7a0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="green" x1="0" y1="280" x2="0" y2="780" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7beccb"/>
+      <stop offset="0.55" stop-color="#34c7a0"/>
+      <stop offset="1" stop-color="#1b9a77"/>
+    </linearGradient>
+    <filter id="page-shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <filter id="mark-shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <mask id="split" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#ffffff"/>
+      <line x1="534" y1="433" x2="726" y2="519" stroke="#000000" stroke-width="18"/>
+    </mask>
+    <clipPath id="tile-shape">
+      <rect x="100" y="100" width="824" height="824" rx="186"/>
+    </clipPath>
+  </defs>
+
+  <!-- The page. -->
+  <g filter="url(#page-shadow)">
+    <path d="M232 100 H672 L832 260 V884 Q832 924 792 924 H232 Q192 924 192 884 V140 Q192 100 232 100 Z"
+          fill="url(#paper)"/>
+  </g>
+  <path d="M232 100 H672 L832 260 V884 Q832 924 792 924 H232 Q192 924 192 884 V140 Q192 100 232 100 Z"
+        fill="none" stroke="#c9cdd4" stroke-width="3"/>
+  <path d="M672 100 V228 Q672 260 704 260 H832 Z" fill="url(#fold)" stroke="#c9cdd4" stroke-width="3"
+        stroke-linejoin="round"/>
+
+  <!-- The app's mark, scaled onto the page. -->
+  <g transform="translate(512 470) scale(0.46) translate(-512 -512)">
+    <g filter="url(#mark-shadow)">
+      <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#tile)"/>
+    </g>
+    <g clip-path="url(#tile-shape)">
+      <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+    </g>
+    <polyline points="316,300 512,740 708,300" fill="none" stroke="url(#green)" stroke-width="122"
+              stroke-linecap="round" stroke-linejoin="round" mask="url(#split)"/>
+  </g>
+
+  <text x="512" y="812" text-anchor="middle" fill="#7a808c" letter-spacing="10"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="64" font-weight="700">VOICECUT</text>
+</svg>

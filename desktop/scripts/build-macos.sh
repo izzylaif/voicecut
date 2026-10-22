@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Build VoiceCut.app and its disk image for Apple Silicon Macs.
+#
+#   desktop/scripts/build-macos.sh
+#
+# Writes desktop/build/VoiceCut-<version>-arm64.dmg.  Without an Apple
+# Developer ID the app is signed ad hoc: it runs on the Mac that built it.
+# With one (see desktop/README.md, "Signing and notarization"):
+#
+#   APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+#   APPLE_API_ISSUER=... APPLE_API_KEY=... APPLE_API_KEY_PATH=... \
+#   desktop/scripts/build-macos.sh
+#
+# signs the app and the image with the hardened runtime and a secure
+# timestamp, has Apple notarize both, and staples the tickets.  APPLE_ID,
+# APPLE_PASSWORD (an app-specific password) and APPLE_TEAM_ID work instead of
+# the App Store Connect API key.
+#
+# VOICECUT_TEST_BUILD=1 builds the end-to-end test variant instead (cargo
+# feature `automation`, see src-tauri/src/automation.rs) and no disk image.
+#
+# Needs: Rust (cargo), Node.js, resvg (cargo install resvg), uv.
+set -euo pipefail
+
+DESKTOP="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "${DESKTOP}/.." && pwd)"
+BUILD="${DESKTOP}/build"
+UV="${UV:-$(command -v uv || echo "${HOME}/Library/Python/3.9/bin/uv")}"
+VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
+  "${DESKTOP}/src-tauri/tauri.conf.json")"
+DMG="${BUILD}/VoiceCut-${VERSION}-arm64.dmg"
+APP="${DESKTOP}/src-tauri/target/release/bundle/macos/VoiceCut.app"
+IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
+
+step() { printf '\n== %s\n' "$*"; }
+
+notarize() {
+  if [[ -n "${APPLE_API_KEY:-}" ]]; then
+    xcrun notarytool submit "$1" --wait \
+      --key "${APPLE_API_KEY_PATH}" --key-id "${APPLE_API_KEY}" --issuer "${APPLE_API_ISSUER}"
+  else
+    xcrun notarytool submit "$1" --wait \
+      --apple-id "${APPLE_ID}" --password "${APPLE_PASSWORD}" --team-id "${APPLE_TEAM_ID}"
+  fi
+}
+
+step "Building the editor frontend"
+if [[ ! -d "${ROOT}/frontend/node_modules" ]]; then
+  npm ci --prefix "${ROOT}/frontend" --no-audit --no-fund
+fi
+npm run build --prefix "${ROOT}/frontend"
+
+step "Staging VoiceCut's runtime"
+rm -rf "${BUILD}/runtime"
+mkdir -p "${BUILD}/runtime/source/src"
+cp "${DESKTOP}"/runtime/{runtime.json,requirements-main.txt,requirements-mlx.txt,mfa-osx-arm64.txt} \
+  "${BUILD}/runtime/"
+rsync -a --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store' \
+  "${ROOT}/src/voicecut" "${BUILD}/runtime/source/src/"
+cp "${ROOT}"/{pyproject.toml,README.md,LICENSE} "${BUILD}/runtime/source/"
+# The app updates the installed source when this hash changes.
+(cd "${BUILD}/runtime/source" && find . -type f | LC_ALL=C sort | xargs shasum -a 256) \
+  | shasum -a 256 | cut -d' ' -f1 >"${BUILD}/runtime/source.sha256"
+
+step "Rendering the icons"
+"${DESKTOP}/scripts/make-icons.sh"
+
+step "Building VoiceCut.app"
+if [[ ! -d "${DESKTOP}/node_modules" ]]; then
+  npm ci --prefix "${DESKTOP}" --no-audit --no-fund
+fi
+if [[ -n "${VOICECUT_TEST_BUILD:-}" ]]; then
+  (cd "${DESKTOP}" && npx tauri build --bundles app --features automation)
+  codesign --verify --deep --strict "${APP}"
+  echo "test build: ${APP}"
+  exit 0
+fi
+(cd "${DESKTOP}" && npx tauri build --bundles app)
+codesign --verify --deep --strict --verbose=2 "${APP}"
+
+step "Building the disk image"
+rm -f "${DMG}"
+"${UV}" tool run --from dmgbuild==1.6.7 dmgbuild \
+  -s "${DESKTOP}/scripts/dmg_settings.py" \
+  -D app="${APP}" \
+  -D background="${BUILD}/dmg-background.png" \
+  -D icon="${DESKTOP}/src-tauri/icons/icon.icns" \
+  "VoiceCut" "${DMG}"
+
+if [[ -n "${IDENTITY}" ]]; then
+  step "Signing and notarizing the disk image"
+  codesign --sign "${IDENTITY}" --timestamp "${DMG}"
+  if [[ -n "${APPLE_API_KEY:-}${APPLE_ID:-}" ]]; then
+    # `tauri build` notarized and stapled the app inside; now the image.
+    notarize "${DMG}"
+    xcrun stapler staple "${DMG}"
+    spctl --assess --type open --context context:primary-signature --verbose=2 "${DMG}"
+  fi
+fi
+
+step "Done"
+du -sh "${APP}" "${DMG}"

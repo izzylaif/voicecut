@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="420" viewBox="0 0 660 420">
+  <!-- Background of the VoiceCut disk image window: the app (left) and the
+       Applications folder (right) sit on the two marks; Finder draws them. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbfbfc"/>
+      <stop offset="1" stop-color="#eceef2"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="250" y1="0" x2="410" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34c7a0" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#22a884"/>
+    </linearGradient>
+  </defs>
+  <rect width="660" height="420" fill="url(#bg)"/>
+  <text x="330" y="62" text-anchor="middle" fill="#1f2228"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="22" font-weight="700">VoiceCut</text>
+  <text x="330" y="88" text-anchor="middle" fill="#7a808c"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13">Edits retake-heavy narration automatically</text>
+  <!-- Drag arrow from the app to Applications. -->
+  <path d="M258 205 C 300 180, 360 180, 398 205" fill="none" stroke="url(#arrow)" stroke-width="5"
+        stroke-linecap="round" stroke-dasharray="1 12"/>
+  <path d="M388 190 L404 209 L380 214" fill="none" stroke="#22a884" stroke-width="5" stroke-linecap="round"
+        stroke-linejoin="round"/>
+  <text x="330" y="352" text-anchor="middle" fill="#5d636e"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14">Drag VoiceCut into Applications to install it.</text>
+  <text x="330" y="374" text-anchor="middle" fill="#9aa0aa"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12">On first launch it sets up its engine (about 1.6 GB download).</text>
+</svg>

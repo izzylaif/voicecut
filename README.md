@@ -31,6 +31,14 @@ recordings on Apple Silicon Macs.
 - English or Russian single-speaker narration
 - An API key for the planner; Gemini is the default
 
+### The Mac app
+
+VoiceCut for macOS (Apple Silicon, macOS 14 or later) is the editor as a
+native app: open the `.dmg`, drag VoiceCut into Applications, and open it.
+On first launch it installs its engine (about 1.6 GB to download, once);
+projects are saved as `.vc` documents you open from the Finder. See
+[desktop/README.md](desktop/README.md) to build it.
+
 ### Install
 
 The installer sets up FFmpeg, MLX Whisper, Montreal Forced Aligner 3.4.1, the
@@ -223,6 +231,7 @@ recorded in the run manifest.
 | --- | --- |
 | [Installation](docs/installation.md) | Supported setup, first-run downloads, and manual installation |
 | [Editor](docs/editor.md) | Browser editor: import, Voice Cut, clips and pauses, shortcuts, settings, export |
+| [Mac app](desktop/README.md) | VoiceCut for macOS: first-run setup, `.vc` documents, building, signing and notarization |
 | [Examples](examples/README.md) | Exact commands, media files, and reproduction workflow |
 | [Architecture](docs/architecture.md) | Production call graph, safety invariants, and manifests |
 | [Configuration](docs/configuration.md) | Planner backends, languages, caching, and CLI options |

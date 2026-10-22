@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FileAudio, FileVideo, FolderOpen, Loader2, Trash2, Upload } from 'lucide-react';
 import { api } from '../api';
+import { confirmAction } from '../desktop';
 import type { ProjectState, ProjectSummary } from '../types';
 
 const ACCEPT = '.wav,.mp3,.m4a,.flac,.aac,.aif,.aiff,.ogg,.oga,.opus,.mov,.mp4,.mkv,.webm';
@@ -141,9 +142,11 @@ export function Welcome({ onOpen }: { onOpen: (project: ProjectState) => void })
                     className="icon-button"
                     title="Delete this project (the original file is kept)"
                     onClick={() => {
-                      if (window.confirm(`Delete the project “${project.name}”? The original file is not touched.`)) {
-                        api.deleteProject(project.id).then(refresh, (failure: unknown) => setError(String(failure)));
-                      }
+                      void confirmAction(`Delete the project “${project.name}”? The original file is not touched.`).then(
+                        (ok) => {
+                          if (ok) api.deleteProject(project.id).then(refresh, (failure: unknown) => setError(String(failure)));
+                        },
+                      );
                     }}
                   >
                     <Trash2 size={14} />

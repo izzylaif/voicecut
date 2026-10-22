@@ -21,6 +21,7 @@ import { wordsBetween } from '../model/words';
 import type { Filmstrip } from '../types';
 import type { PeakStore } from './peaks';
 
+const GESTURE_EVENTS = ['gesturestart', 'gesturechange', 'gestureend'] as const;
 const OVERVIEW_HEIGHT = 26;
 const RULER_HEIGHT = 24;
 const VIDEO_HEIGHT = 56;
@@ -124,6 +125,8 @@ export class TimelineView {
   private readonly unsubscribe: () => void;
   private readonly observer: ResizeObserver;
   peaks: PeakStore | null = null;
+  /** Scale of the trackpad pinch in progress (WebKit's gesture events). */
+  private gestureScale: number | null = null;
   /** Right-click on the timeline (the playhead has moved there). */
   onMenu: ((target: ContextTarget) => void) | null = null;
 
@@ -143,6 +146,7 @@ export class TimelineView {
     canvas.addEventListener('pointercancel', this.onPointerUp);
     canvas.addEventListener('pointerleave', this.onPointerLeave);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    for (const type of GESTURE_EVENTS) canvas.addEventListener(type, this.onGesture);
     canvas.addEventListener('contextmenu', this.onContextMenu);
     this.unsubscribe = store.onFrame((frame, playing) => this.tick(frame, playing));
   }
@@ -156,6 +160,7 @@ export class TimelineView {
     this.canvas.removeEventListener('pointercancel', this.onPointerUp);
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
     this.canvas.removeEventListener('wheel', this.onWheel);
+    for (const type of GESTURE_EVENTS) this.canvas.removeEventListener(type, this.onGesture);
     this.canvas.removeEventListener('contextmenu', this.onContextMenu);
   }
 
@@ -353,6 +358,8 @@ export class TimelineView {
   private onWheel = (event: WheelEvent): void => {
     event.preventDefault();
     const store = this.store;
+    // A pinch WebKit reports as gesture events too is zoomed there.
+    if (this.gestureScale !== null && event.ctrlKey) return;
     if (event.ctrlKey || event.metaKey) {
       const { x } = this.local(event);
       store.zoom(Math.exp(-event.deltaY * 0.01), x);
@@ -361,6 +368,29 @@ export class TimelineView {
     const pixels = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
     const lines = event.deltaMode === 1 ? 16 : 1;
     store.setView({ scroll: store.clampScroll(store.view.scroll + (pixels * lines) / store.view.pxPerSecond) });
+  };
+
+  /**
+   * Trackpad pinch in Safari and the desktop app (WKWebView): WebKit reports
+   * it as `gesturestart/change/end` with a cumulative `scale` rather than
+   * the ctrl+wheel events Chrome sends.
+   */
+  private onGesture = (event: Event): void => {
+    event.preventDefault();
+    if (event.type === 'gestureend') {
+      this.gestureScale = null;
+      return;
+    }
+    const gesture = event as Event & { scale: number; clientX: number };
+    if (event.type === 'gesturestart' || this.gestureScale === null) {
+      this.gestureScale = gesture.scale || 1;
+      return;
+    }
+    const factor = gesture.scale / this.gestureScale;
+    this.gestureScale = gesture.scale;
+    if (Number.isFinite(factor) && factor > 0) {
+      this.store.zoom(factor, gesture.clientX - this.canvas.getBoundingClientRect().left);
+    }
   };
 
   private scrubTo(x: number): void {

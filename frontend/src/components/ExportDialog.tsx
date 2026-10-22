@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Download, FolderOpen, Loader2, X } from 'lucide-react';
 import { api, ApiError, followJob } from '../api';
+import { desktop, invoke } from '../desktop';
 import { duration } from '../format';
 import type { EditorStore } from '../store';
 import type { ExportRecord } from '../types';
@@ -84,6 +85,20 @@ export function ExportDialog({ store, onClose }: { store: EditorStore; onClose: 
     }
   };
 
+  /** Desktop: pick the destination in a save panel (it asks before replacing). */
+  const choose = async () => {
+    try {
+      const path = await invoke<string | null>('choose_export_path', { path: destination, extensions: [extension] });
+      if (path) {
+        setDestination(path);
+        setOverwrite(true);
+        setExists(false);
+      }
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    }
+  };
+
   const running = progress?.status === 'running';
   const done = progress?.status === 'complete' && record;
 
@@ -125,14 +140,22 @@ export function ExportDialog({ store, onClose }: { store: EditorStore; onClose: 
             </label>
             <label className="field">
               <span>Save to</span>
-              <input
-                value={destination}
-                spellCheck={false}
-                onChange={(event) => {
-                  setDestination(event.target.value);
-                  setExists(false);
-                }}
-              />
+              <span className="field-row">
+                <input
+                  value={destination}
+                  spellCheck={false}
+                  onChange={(event) => {
+                    setDestination(event.target.value);
+                    setExists(false);
+                    setOverwrite(false);
+                  }}
+                />
+                {desktop && (
+                  <button type="button" className="button" onClick={() => void choose()}>
+                    Choose…
+                  </button>
+                )}
+              </span>
             </label>
             {(exists || overwrite) && (
               <label className="checkbox">
@@ -207,9 +230,11 @@ export function ExportDialog({ store, onClose }: { store: EditorStore; onClose: 
                   <button type="button" className="button subtle" onClick={() => void api.revealExport(store.id, record.export_id)}>
                     <FolderOpen size={14} /> Show in Finder
                   </button>
-                  <a className="button subtle" href={api.downloadUrl(store.id, record.export_id)} download>
-                    <Download size={14} /> Download
-                  </a>
+                  {!desktop && (
+                    <a className="button subtle" href={api.downloadUrl(store.id, record.export_id)} download>
+                      <Download size={14} /> Download
+                    </a>
+                  )}
                 </>
               )}
               {progress.status === 'failed' && (

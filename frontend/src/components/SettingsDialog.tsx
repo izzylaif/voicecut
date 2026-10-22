@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink, KeyRound, Loader2, X } from 'lucide-react';
 import { api, ApiError } from '../api';
+import { confirmAction } from '../desktop';
 import type { PlannerInfo, RunSettings, SettingsState } from '../types';
 
-/** Settings: API keys of the cloud planners, and Voice Cut options. */
+/**
+ * Settings: API keys of the cloud planners, and (in a project) Voice Cut
+ * options.
+ */
 export function SettingsDialog({
   state,
   settings,
@@ -12,9 +16,9 @@ export function SettingsDialog({
   onClose,
 }: {
   state: SettingsState;
-  settings: RunSettings;
+  settings?: RunSettings;
   onState: (state: SettingsState) => void;
-  onSettings: (settings: RunSettings) => void;
+  onSettings?: (settings: RunSettings) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -37,17 +41,24 @@ export function SettingsDialog({
 
         <section className="settings-section">
           <h3>API keys</h3>
-          <p className="muted small">
-            Keys are saved in <code>{state.env_file}</code> on this computer — the file the <code>voicecut</code> command
-            reads — and are sent only to their provider.
-          </p>
+          {state.key_store?.kind === 'keychain' ? (
+            <p className="muted small">
+              Keys are kept in your macOS Keychain on this Mac and are sent only to their provider.
+            </p>
+          ) : (
+            <p className="muted small">
+              Keys are saved in <code>{state.env_file}</code> on this computer — the file the <code>voicecut</code>{' '}
+              command reads — and are sent only to their provider.
+            </p>
+          )}
           {state.planners
             .filter((planner) => planner.key_env)
             .map((planner) => (
-              <KeyRow key={planner.id} planner={planner} onState={onState} />
+              <KeyRow key={planner.id} planner={planner} state={state} onState={onState} />
             ))}
         </section>
 
+        {settings && onSettings && (
         <section className="settings-section">
           <h3>Voice Cut</h3>
           <label className="field">
@@ -65,6 +76,7 @@ export function SettingsDialog({
           </label>
           <p className="muted small">The planner, its model and the language are chosen in the top bar.</p>
         </section>
+        )}
 
         <footer>
           <button type="button" className="button primary" onClick={onClose}>
@@ -76,7 +88,15 @@ export function SettingsDialog({
   );
 }
 
-function KeyRow({ planner, onState }: { planner: PlannerInfo; onState: (state: SettingsState) => void }) {
+function KeyRow({
+  planner,
+  state,
+  onState,
+}: {
+  planner: PlannerInfo;
+  state: SettingsState;
+  onState: (state: SettingsState) => void;
+}) {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
@@ -114,7 +134,8 @@ function KeyRow({ planner, onState }: { planner: PlannerInfo; onState: (state: S
       </div>
       {key?.source === 'environment' && (
         <p className="muted small">
-          The {planner.key_env} environment variable of the editor's process is set and takes precedence over the file.
+          The {planner.key_env} environment variable of the editor's process is set and takes precedence over the saved
+          key.
         </p>
       )}
       <form
@@ -135,13 +156,16 @@ function KeyRow({ planner, onState }: { planner: PlannerInfo; onState: (state: S
         <button type="submit" className="button" disabled={busy || !value.trim()}>
           {busy ? <Loader2 size={14} className="spin" /> : null} Save
         </button>
-        {key?.set && key.source === 'env_file' && (
+        {key?.set && key.source === (state.key_store?.kind ?? 'env_file') && (
           <button
             type="button"
             className="button subtle"
             disabled={busy}
             onClick={() => {
-              if (window.confirm(`Remove the ${planner.label} key from ${planner.key_env}?`)) void save('');
+              const where = state.key_store?.kind === 'keychain' ? 'the Keychain' : planner.key_env;
+              void confirmAction(`Remove the ${planner.label} key from ${where}?`, { ok: 'Remove' }).then((ok) => {
+                if (ok) void save('');
+              });
             }}
           >
             Remove

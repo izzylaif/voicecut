@@ -1,0 +1,271 @@
+/* The app's own pages share the editor's look (frontend/src/styles.css). */
+:root {
+  --bg: #111215;
+  --panel: #18191d;
+  --panel-2: #1f2126;
+  --line: #2a2d34;
+  --text: #e7e9ee;
+  --muted: #8b919c;
+  --accent: #34c7a0;
+  --accent-strong: #22a884;
+  --error: #ff6b61;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.card {
+  width: min(640px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 32px 36px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.mark {
+  width: 88px;
+  height: 88px;
+  margin: -8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+h1 span {
+  color: var(--accent);
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+p {
+  margin: 0 0 12px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 12px;
+}
+
+code {
+  font: 12px ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--text);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.facts {
+  margin: 0 0 18px;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.facts strong {
+  color: var(--text);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.button {
+  font: inherit;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  padding: 8px 18px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.button.primary {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #04130e;
+}
+
+.button.primary:hover {
+  background: var(--accent);
+}
+
+.button.subtle:hover {
+  border-color: #3a3e47;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+  flex: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.meter {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  overflow: hidden;
+  margin: 14px 0 6px;
+}
+
+.meter div {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+  transition: width 0.3s ease;
+}
+
+.steps {
+  list-style: none;
+  margin: 16px 0 8px;
+  padding: 0;
+}
+
+.steps li {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 5px 0;
+  color: var(--muted);
+}
+
+.steps li .label {
+  color: var(--text);
+}
+
+.steps li.pending .label {
+  color: var(--muted);
+}
+
+.steps li .detail {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.steps li .icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+}
+
+.steps li.running .icon {
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+
+.steps li.done .icon {
+  border: none;
+  background: var(--accent-strong);
+  position: relative;
+}
+
+.steps li.done .icon::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 3px;
+  width: 5px;
+  height: 8px;
+  border: solid #04130e;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.steps li.failed .icon {
+  border-color: var(--error);
+  background: var(--error);
+}
+
+.steps li .percent {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.log {
+  margin: 8px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  background: #0c0d10;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: 11px/1.45 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: #b6bcc7;
+  white-space: pre-wrap;
+  word-break: break-all;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.error-text {
+  color: var(--error);
+}

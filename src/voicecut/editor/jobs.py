@@ -106,6 +106,10 @@ class JobRegistry:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def all(self) -> list[Job]:
+        with self._lock:
+            return list(self._jobs.values())
+
     def running(self, project_id: str, kinds: frozenset[str]) -> Job | None:
         with self._lock:
             return next(
