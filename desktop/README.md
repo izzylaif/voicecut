@@ -85,7 +85,9 @@ libraries add about 1 GB). Each step records a fingerprint of its pins in
 finish ("Try Again"), and a new app version updates only what changed (a new
 VoiceCut source takes seconds). Model weights download on first use into
 `~/.cache/huggingface`, as with the command line. Logs are in the data
-directory's `logs/`.
+directory's `logs/`, and the appearance (System, Light, Dark) and playback
+speed in its `preferences.json`: the editor's page cannot keep them, since its
+address changes with the engine's port on every launch.
 
 To start over, quit VoiceCut and delete its data directory. To uninstall:
 macOS — also delete `VoiceCut.app` and the "VoiceCut" items in Keychain

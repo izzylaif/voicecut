@@ -19,6 +19,8 @@ import { type Timeline, isThroughEdit, pauseLimits, resizePause, trimClip } from
 import type { EditorStore } from '../store';
 import { wordsBetween } from '../model/words';
 import type { Filmstrip } from '../types';
+import { onThemeChange, theme } from '../theme';
+import { PALETTES, type Palette } from './palette';
 import type { PeakStore } from './peaks';
 
 const GESTURE_EVENTS = ['gesturestart', 'gesturechange', 'gestureend'] as const;
@@ -33,40 +35,6 @@ const SNAP_PX = 8;
 const AUTOSCROLL_ZONE = 48;
 const WORD_ROW = 18;
 const TITLE_ROW = 16;
-
-const COLOR = {
-  background: '#141519',
-  laneBackground: '#1a1c21',
-  overview: '#1d2026',
-  overviewWave: '#3b404a',
-  overviewKept: 'rgba(52, 199, 160, 0.38)',
-  overviewSelected: 'rgba(255, 204, 0, 0.55)',
-  overviewWindow: 'rgba(255, 255, 255, 0.75)',
-  ruler: '#1d2026',
-  rulerText: '#8c93a0',
-  rulerTick: '#3a3f49',
-  clip: '#1e5f50',
-  clipSelected: '#277a66',
-  clipBorder: '#2f8f77',
-  wave: '#86e8cb',
-  waveRestored: '#ffb056',
-  bodyRestored: 'rgba(255, 166, 64, 0.12)',
-  video: '#25467e',
-  videoSelected: '#30599f',
-  pause: '#262a33',
-  pauseSelected: '#30364a',
-  pauseHatch: '#353b47',
-  pauseHatchAdded: '#3d4a66',
-  pauseText: '#8b93a3',
-  title: 'rgba(230, 255, 247, 0.85)',
-  word: 'rgba(225, 240, 235, 0.92)',
-  wordRemoved: '#ffbf75',
-  selection: '#ffcc00',
-  edge: '#ffd60a',
-  snapped: '#5ad1ff',
-  playhead: '#ff453a',
-  throughEdit: 'rgba(255, 255, 255, 0.45)',
-};
 
 type Row = 'overview' | 'ruler' | 'video' | 'audio' | 'none';
 
@@ -123,7 +91,9 @@ export class TimelineView {
   private readonly textWidths = new Map<string, number>();
   private readonly range = new Float32Array(2);
   private readonly unsubscribe: () => void;
+  private readonly unsubscribeTheme: () => void;
   private readonly observer: ResizeObserver;
+  private colors: Palette = PALETTES[theme()];
   peaks: PeakStore | null = null;
   /** Scale of the trackpad pinch in progress (WebKit's gesture events). */
   private gestureScale: number | null = null;
@@ -149,10 +119,15 @@ export class TimelineView {
     for (const type of GESTURE_EVENTS) canvas.addEventListener(type, this.onGesture);
     canvas.addEventListener('contextmenu', this.onContextMenu);
     this.unsubscribe = store.onFrame((frame, playing) => this.tick(frame, playing));
+    this.unsubscribeTheme = onThemeChange((next) => {
+      this.colors = PALETTES[next];
+      store.redraw();
+    });
   }
 
   dispose(): void {
     this.unsubscribe();
+    this.unsubscribeTheme();
     this.observer.disconnect();
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
@@ -548,13 +523,13 @@ export class TimelineView {
   private draw(frame: number): void {
     const context = this.context;
     context.setTransform(this.ratio, 0, 0, this.ratio, 0, 0);
-    context.fillStyle = COLOR.background;
+    context.fillStyle = this.colors.background;
     context.fillRect(0, 0, this.width, this.height);
     const layout = this.store.layout;
     this.drawOverview(layout, frame);
     this.drawRuler();
     const rows = this.rows();
-    context.fillStyle = COLOR.laneBackground;
+    context.fillStyle = this.colors.laneBackground;
     if (this.video) context.fillRect(0, rows.videoTop, this.width, VIDEO_HEIGHT);
     context.fillRect(0, rows.audioTop, this.width, rows.audioHeight);
     this.drawPauses(layout, rows.audioTop, rows.audioHeight);
@@ -568,12 +543,12 @@ export class TimelineView {
     const context = this.context;
     const width = this.width;
     const frames = this.store.sourceFrames;
-    context.fillStyle = COLOR.overview;
+    context.fillStyle = this.colors.overview;
     context.fillRect(0, 0, width, OVERVIEW_HEIGHT);
     const middle = OVERVIEW_HEIGHT / 2;
     const peaks = this.peaks;
     if (peaks) {
-      context.fillStyle = COLOR.overviewWave;
+      context.fillStyle = this.colors.overviewWave;
       const gain = this.gain();
       for (let x = 0; x < width; x += 1) {
         if (!peaks.range((x / width) * frames, ((x + 1) / width) * frames, this.range)) continue;
@@ -584,7 +559,7 @@ export class TimelineView {
     }
     const selection = this.store.selection;
     this.store.segments.forEach((segment) => {
-      context.fillStyle = selection.has(segment.id) ? COLOR.overviewSelected : COLOR.overviewKept;
+      context.fillStyle = selection.has(segment.id) ? this.colors.overviewSelected : this.colors.overviewKept;
       const left = (segment.start / frames) * width;
       context.fillRect(left, 0, Math.max(1, (segment.end / frames) * width - left), OVERVIEW_HEIGHT);
     });
@@ -592,7 +567,7 @@ export class TimelineView {
     const view = this.store.view;
     const first = view.scroll * this.sampleRate;
     const last = (view.scroll + width / view.pxPerSecond) * this.sampleRate;
-    context.strokeStyle = COLOR.overviewWindow;
+    context.strokeStyle = this.colors.overviewWindow;
     context.lineWidth = 1;
     for (const clip of layout.clips) {
       const from = Math.max(first, clip.outStart);
@@ -604,7 +579,7 @@ export class TimelineView {
     }
     const sample = sourceAt(layout, Math.min(frame, layout.total - 1));
     if (sample !== null) {
-      context.fillStyle = COLOR.playhead;
+      context.fillStyle = this.colors.playhead;
       context.fillRect(Math.round((sample / frames) * width) - 1, 0, 2, OVERVIEW_HEIGHT);
     }
   }
@@ -613,7 +588,7 @@ export class TimelineView {
     const context = this.context;
     const top = OVERVIEW_HEIGHT + GAP;
     const view = this.store.view;
-    context.fillStyle = COLOR.ruler;
+    context.fillStyle = this.colors.ruler;
     context.fillRect(0, top, this.width, RULER_HEIGHT);
     const steps = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
     const step = steps.find((value) => value * view.pxPerSecond >= 90) ?? 3600;
@@ -629,10 +604,10 @@ export class TimelineView {
       if (time < 0) continue;
       const x = Math.round((time - view.scroll) * view.pxPerSecond) + 0.5;
       const major = Math.abs(time / step - Math.round(time / step)) < 1e-6;
-      context.fillStyle = COLOR.rulerTick;
+      context.fillStyle = this.colors.rulerTick;
       context.fillRect(x, top + (major ? 10 : 16), 1, major ? RULER_HEIGHT - 10 : RULER_HEIGHT - 16);
       if (major) {
-        context.fillStyle = COLOR.rulerText;
+        context.fillStyle = this.colors.rulerText;
         context.fillText(timecode(time, digits), x + 3, top + 3);
       }
     }
@@ -654,14 +629,14 @@ export class TimelineView {
       const inset = right - left > 3 ? 0.5 : 0;
       const x = left + inset;
       const width = right - left - inset * 2;
-      context.fillStyle = selected ? COLOR.pauseSelected : COLOR.pause;
+      context.fillStyle = selected ? this.colors.pauseSelected : this.colors.pause;
       roundRect(context, x, top + 1, width, height - 2, 4);
       context.fill();
       context.save();
       context.beginPath();
       context.rect(x, top + 1, width, height - 2);
       context.clip();
-      context.strokeStyle = pause.join === null ? COLOR.pauseHatchAdded : COLOR.pauseHatch;
+      context.strokeStyle = pause.join === null ? this.colors.pauseHatchAdded : this.colors.pauseHatch;
       context.lineWidth = 1;
       for (let hatch = left - height; hatch < right; hatch += 7) {
         context.beginPath();
@@ -671,7 +646,7 @@ export class TimelineView {
       }
       if (right - left > 34) {
         const seconds = (pause.outEnd - pause.outStart) / this.sampleRate;
-        context.fillStyle = selected ? COLOR.title : COLOR.pauseText;
+        context.fillStyle = selected ? this.colors.title : this.colors.pauseText;
         context.font = '600 10px system-ui, sans-serif';
         context.textBaseline = 'top';
         context.fillText(right - left > 76 ? `pause ${seconds.toFixed(2)} s` : `${seconds.toFixed(1)} s`, x + 5, top + 4);
@@ -697,7 +672,7 @@ export class TimelineView {
     const inset = right - left > 3 ? 0.5 : 0;
 
     if (this.video) {
-      context.fillStyle = selected ? COLOR.videoSelected : COLOR.video;
+      context.fillStyle = selected ? this.colors.videoSelected : this.colors.video;
       roundRect(context, x0 + inset, rows.videoTop + 1, x1 - x0 - inset * 2, VIDEO_HEIGHT - 2, 4);
       context.fill();
       this.drawFilmstrip(clip, x0 + inset, x1 - inset, rows.videoTop + 1, VIDEO_HEIGHT - 2);
@@ -706,7 +681,7 @@ export class TimelineView {
 
     const top = rows.audioTop + 1;
     const height = rows.audioHeight - 2;
-    context.fillStyle = selected ? COLOR.clipSelected : COLOR.clip;
+    context.fillStyle = selected ? this.colors.clipSelected : this.colors.clip;
     roundRect(context, x0 + inset, top, x1 - x0 - inset * 2, height, 4);
     context.fill();
     context.save();
@@ -716,7 +691,7 @@ export class TimelineView {
     this.drawWaveform(clip, Math.max(0, left), Math.min(this.width, right), top + TITLE_ROW, height - TITLE_ROW - WORD_ROW);
     this.drawWords(clip, left, right, top + height - WORD_ROW + 3);
     if (right - left > 36) {
-      context.fillStyle = COLOR.title;
+      context.fillStyle = this.colors.title;
       context.font = '600 10px system-ui, sans-serif';
       context.textBaseline = 'top';
       const seconds = (clip.outEnd - clip.outStart) / this.sampleRate;
@@ -729,7 +704,7 @@ export class TimelineView {
 
   private outline(x: number, y: number, width: number, height: number): void {
     const context = this.context;
-    context.strokeStyle = COLOR.selection;
+    context.strokeStyle = this.colors.selection;
     context.lineWidth = 2;
     roundRect(context, x + 1, y + 1, width - 2, height - 2, 4);
     context.stroke();
@@ -749,7 +724,7 @@ export class TimelineView {
     const firstPixel = Math.floor(left * ratio);
     const lastPixel = Math.ceil(right * ratio);
     const restored: number[] = [];
-    context.fillStyle = COLOR.wave;
+    context.fillStyle = this.colors.wave;
     for (let pixel = firstPixel; pixel < lastPixel; pixel += 1) {
       const frame = (this.store.view.scroll + pixel / ratio / this.store.view.pxPerSecond) * this.sampleRate;
       const from = clip.sourceAtStart + (frame - clip.outStart);
@@ -768,11 +743,11 @@ export class TimelineView {
       else context.fillRect(pixel / ratio, y, 1 / ratio, h);
     }
     if (restored.length) {
-      context.fillStyle = COLOR.bodyRestored;
+      context.fillStyle = this.colors.bodyRestored;
       for (let index = 0; index < restored.length; index += 3) {
         context.fillRect(restored[index]!, top - TITLE_ROW, 1 / ratio, height + TITLE_ROW + WORD_ROW);
       }
-      context.fillStyle = COLOR.waveRestored;
+      context.fillStyle = this.colors.waveRestored;
       for (let index = 0; index < restored.length; index += 3) {
         context.fillRect(restored[index]!, restored[index + 1]!, 1 / ratio, restored[index + 2]!);
       }
@@ -800,7 +775,7 @@ export class TimelineView {
       const span = ((Math.min(word.end, to) - Math.max(word.start, from)) / this.sampleRate) * view.pxPerSecond;
       if (x < lastEnd + 4 || x + width > right + 2 || (span < 8 && width > span * 3)) continue;
       if (x + width < 0) continue;
-      context.fillStyle = word.kept ? COLOR.word : COLOR.wordRemoved;
+      context.fillStyle = word.kept ? this.colors.word : this.colors.wordRemoved;
       context.fillText(word.text, x, baseline);
       lastEnd = x + width;
     }
@@ -867,7 +842,7 @@ export class TimelineView {
   private drawThroughEdits(layout: Layout, rows: ReturnType<TimelineView['rows']>): void {
     const context = this.context;
     const timeline = this.store.timeline;
-    context.strokeStyle = COLOR.throughEdit;
+    context.strokeStyle = this.colors.throughEdit;
     context.setLineDash([3, 3]);
     context.lineWidth = 1;
     for (const clip of layout.clips) {
@@ -895,7 +870,7 @@ export class TimelineView {
     const x = this.xOf(target.edge === 'start' ? item.outStart : item.outEnd);
     const top = this.video && target.target === 'clip' ? rows.videoTop : rows.audioTop;
     const bottom = rows.audioTop + rows.audioHeight;
-    const color = drag?.snapped !== null && drag?.snapped !== undefined ? COLOR.snapped : COLOR.edge;
+    const color = drag?.snapped !== null && drag?.snapped !== undefined ? this.colors.snapped : this.colors.edge;
     context.fillStyle = color;
     const inward = target.edge === 'start' ? 1 : -1;
     const barX = target.edge === 'start' ? x : x - 3;
@@ -919,7 +894,7 @@ export class TimelineView {
     const width = context.measureText(text).width + 14;
     const boxX = Math.max(4, Math.min(this.width - width - 4, x - width / 2));
     const boxY = rows.audioTop + 4;
-    context.fillStyle = 'rgba(12, 13, 16, 0.92)';
+    context.fillStyle = this.colors.label;
     roundRect(context, boxX, boxY, width, 20, 5);
     context.fill();
     context.fillStyle = color;
@@ -932,7 +907,7 @@ export class TimelineView {
     if (x < -10 || x > this.width + 10) return;
     const context = this.context;
     const top = OVERVIEW_HEIGHT + GAP;
-    context.fillStyle = COLOR.playhead;
+    context.fillStyle = this.colors.playhead;
     context.fillRect(x - 0.5, top, 1.5, this.height - top);
     context.beginPath();
     context.moveTo(x - 6, top);

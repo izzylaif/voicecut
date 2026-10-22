@@ -1,15 +1,42 @@
-/* The app's own pages share the editor's look (frontend/src/styles.css). */
+/* The app's own pages share the editor's look (frontend/src/styles.css),
+   dark or light as the window is: the app themes its windows by the user's
+   appearance (System follows the system), which sets prefers-color-scheme. */
 :root {
   --bg: #111215;
   --panel: #18191d;
   --panel-2: #1f2126;
   --line: #2a2d34;
+  --line-strong: #3a3e47;
   --text: #e7e9ee;
   --muted: #8b919c;
   --accent: #34c7a0;
   --accent-strong: #22a884;
+  --on-accent: #04130e;
   --error: #ff6b61;
+  --shadow: rgba(0, 0, 0, 0.35);
+  --log-bg: #0c0d10;
+  --log-text: #b6bcc7;
   color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --panel-2: #f0f2f5;
+    --line: #dde0e6;
+    --line-strong: #c5cad3;
+    --text: #1b1d22;
+    --muted: #697080;
+    --accent: #0a8264;
+    --accent-strong: #0a7a5d;
+    --on-accent: #ffffff;
+    --error: #cc3329;
+    --shadow: rgba(20, 26, 38, 0.16);
+    --log-bg: #f3f4f6;
+    --log-text: #4a505b;
+    color-scheme: light;
+  }
 }
 
 * {
@@ -39,7 +66,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 32px 36px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 20px 60px var(--shadow);
 }
 
 header {
@@ -120,7 +147,7 @@ code {
 .button.primary {
   background: var(--accent-strong);
   border-color: var(--accent-strong);
-  color: #04130e;
+  color: var(--on-accent);
 }
 
 .button.primary:hover {
@@ -128,7 +155,7 @@ code {
 }
 
 .button.subtle:hover {
-  border-color: #3a3e47;
+  border-color: var(--line-strong);
 }
 
 .button:disabled {
@@ -228,7 +255,7 @@ code {
   top: 3px;
   width: 5px;
   height: 8px;
-  border: solid #04130e;
+  border: solid var(--on-accent);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -254,12 +281,12 @@ details summary {
   margin: 8px 0 0;
   max-height: 180px;
   overflow: auto;
-  background: #0c0d10;
+  background: var(--log-bg);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 12px;
   font: 11px/1.45 ui-monospace, 'SF Mono', Menlo, monospace;
-  color: #b6bcc7;
+  color: var(--log-text);
   white-space: pre-wrap;
   word-break: break-all;
   -webkit-user-select: text;

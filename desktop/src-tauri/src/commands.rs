@@ -457,3 +457,34 @@ pub fn reveal(path: &Path) {
         open_path(parent);
     }
 }
+
+/// The user's appearance: "system", "light" or "dark".
+#[tauri::command]
+pub fn appearance(state: State<'_, AppState>) -> String {
+    state.preferences.lock().unwrap().appearance.clone()
+}
+
+#[tauri::command]
+pub fn set_appearance(app: AppHandle, appearance: String) -> Result<(), String> {
+    crate::set_appearance(&app, &appearance)
+}
+
+/// An editor preference the app keeps across launches (playback speed).
+#[tauri::command]
+pub fn preference(state: State<'_, AppState>, key: String) -> Option<String> {
+    state.preferences.lock().unwrap().editor.get(&key).cloned()
+}
+
+#[tauri::command]
+pub fn set_preference(
+    state: State<'_, AppState>,
+    key: String,
+    value: Option<String>,
+) -> Result<(), String> {
+    let mut preferences = state.preferences.lock().unwrap();
+    if preferences.editor.get(&key) == value.as_ref() {
+        return Ok(());
+    }
+    preferences.set_editor(&key, value)?;
+    preferences.save(&state.paths.preferences())
+}

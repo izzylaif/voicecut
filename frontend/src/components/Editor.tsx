@@ -335,7 +335,7 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
           <button type="button" className="button accent" disabled={running} onClick={() => void startVoiceCut()}>
             <Sparkles size={14} /> {store.proposal ? 'Voice Cut again' : 'Voice Cut'}
           </button>
-          <button type="button" className="icon-button" title="Settings: API keys and Voice Cut options" onClick={() => setSettingsOpen(true)}>
+          <button type="button" className="icon-button" title="Settings: appearance, API keys and Voice Cut options" onClick={() => setSettingsOpen(true)}>
             <Settings size={16} />
           </button>
           <button type="button" className="button primary" onClick={() => setExporting(true)}>

@@ -10,6 +10,7 @@
  */
 import { api, ApiError } from './api';
 import { OutputPlayer } from './audio/player';
+import { remember, remembered } from './desktop';
 import { History } from './model/history';
 import { computeLayout, outputAt, sourceAt, clipAt, editPoints, pauseAt, type Layout } from './model/layout';
 import type { EditContext, Edge, Segment } from './model/segments';
@@ -122,6 +123,12 @@ export class EditorStore {
     this.dirty = true; // register the loaded timeline with the server
     this.scheduleSave(0);
     this.loop();
+    // In the app, the speed chosen in an earlier launch.
+    const initialRate = this.rate;
+    void remembered(RATE_KEY).then((value) => {
+      const rate = Number(value);
+      if (this.rate === initialRate && (PLAYBACK_RATES as readonly number[]).includes(rate)) this.setRate(rate);
+    });
   }
 
   // -- subscriptions ----------------------------------------------------------------
@@ -524,6 +531,7 @@ export class EditorStore {
     } catch {
       // the choice just is not remembered
     }
+    remember(RATE_KEY, String(rate));
     if (this.player.isPlaying) {
       this.playhead = this.player.stop();
       void this.play();

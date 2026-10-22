@@ -1,21 +1,97 @@
+/* Colours.  Dark is the default; <html data-theme="light"> (src/theme.ts)
+   switches every token to the light palette.  Tints are mixed from these
+   tokens, so they follow the theme too.  The timeline canvas has its own
+   palettes in src/timeline/palette.ts. */
 :root {
+  color-scheme: dark;
   --bg: #111215;
   --panel: #18191d;
   --panel-2: #1f2126;
+  --hover: #272a31;
+  --surface: #1c1e23;
+  --input-bg: #101114;
   --line: #2a2d34;
+  --line-strong: #3a3e47;
   --text: #e7e9ee;
+  --text-strong: #ffffff;
+  --text-soft: #c9ced8;
   --muted: #8b919c;
   --accent: #34c7a0;
   --accent-strong: #22a884;
+  --on-accent: #04130e;
   --primary: #3d7cff;
+  --primary-hover: #5a90ff;
+  --link: #8fb3ff;
   --warn: #ffb056;
   --error: #ff6b61;
   --selection: #ffcc00;
-  color-scheme: dark;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --shadow-strong: rgba(0, 0, 0, 0.6);
+  --backdrop: rgba(0, 0, 0, 0.55);
+  --viewer-bg: #0b0b0d;
+  --caption-glow: #17191e;
+  --caption-edge: #0e0f12;
+  --caption-text: #8a909b;
+  --caption-restored: #b8864c;
+  --caption-restored-now: #ffd29a;
+  --hover-wash: rgba(255, 255, 255, 0.08);
+  --stage-done: #b9e8da;
+  --log-bg: #0d0e10;
+  --log-text: #aab0bb;
+  --play-fg: #111111;
+  --play-hover: #ffffff;
+  --toast-bg: #2a2d34;
+  --toast-line: transparent;
+  --toast-error-bg: #4a2421;
+  --toast-error-text: #ffd6d2;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
   font-size: 13px;
   color: var(--text);
   background: var(--bg);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --hover: #e7eaef;
+  --surface: #ffffff;
+  --input-bg: #ffffff;
+  --line: #dde0e6;
+  --line-strong: #c5cad3;
+  --text: #1b1d22;
+  --text-strong: #0b0c0f;
+  --text-soft: #3d434d;
+  --muted: #697080;
+  --accent: #0a8264;
+  --accent-strong: #0a7a5d;
+  --on-accent: #ffffff;
+  --primary: #2f6fed;
+  --primary-hover: #245fd8;
+  --link: #2a62d4;
+  --warn: #b4600a;
+  --error: #cc3329;
+  --selection: #b86e00;
+  --shadow: rgba(20, 26, 38, 0.16);
+  --shadow-strong: rgba(20, 26, 38, 0.22);
+  --backdrop: rgba(28, 32, 40, 0.3);
+  --viewer-bg: #e6e8ec;
+  --caption-glow: #ffffff;
+  --caption-edge: #eceef2;
+  --caption-text: #737a86;
+  --caption-restored: #a2621a;
+  --caption-restored-now: #8a4c00;
+  --hover-wash: rgba(15, 20, 30, 0.06);
+  --stage-done: #0d6e55;
+  --log-bg: #f3f4f6;
+  --log-text: #4a505b;
+  --play-fg: #ffffff;
+  --play-hover: #000000;
+  --toast-bg: #ffffff;
+  --toast-line: #dde0e6;
+  --toast-error-bg: #fdeceb;
+  --toast-error-text: #a3281f;
 }
 
 * {
@@ -39,7 +115,7 @@ input,
 select {
   font: inherit;
   color: var(--text);
-  background: #101114;
+  background: var(--input-bg);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 6px 8px;
@@ -48,7 +124,7 @@ select {
 
 input:focus,
 select:focus {
-  outline: 2px solid rgba(61, 124, 255, 0.5);
+  outline: 2px solid color-mix(in srgb, var(--primary) 50%, transparent);
   outline-offset: 0;
 }
 
@@ -85,7 +161,7 @@ select:focus {
 }
 
 .button:hover:not(:disabled) {
-  background: #272a31;
+  background: var(--hover);
 }
 
 .button:disabled {
@@ -100,13 +176,13 @@ select:focus {
 }
 
 .button.primary:hover:not(:disabled) {
-  background: #5a90ff;
+  background: var(--primary-hover);
 }
 
 .button.accent {
   background: var(--accent-strong);
   border-color: var(--accent-strong);
-  color: #04130e;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -127,7 +203,7 @@ select:focus {
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
-  color: #c9ced8;
+  color: var(--text-soft);
 }
 
 .icon-button:hover:not(:disabled) {
@@ -142,7 +218,7 @@ select:focus {
 
 .icon-button.active {
   color: var(--accent);
-  background: rgba(52, 199, 160, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .meter {
@@ -168,7 +244,7 @@ select:focus {
   overflow: auto;
   white-space: pre-wrap;
   color: var(--error);
-  background: rgba(255, 107, 97, 0.08);
+  background: color-mix(in srgb, var(--error) 8%, transparent);
   border-radius: 6px;
   padding: 8px;
   font-size: 11px;
@@ -176,7 +252,7 @@ select:focus {
 
 .banner {
   padding: 8px 14px;
-  background: rgba(255, 176, 86, 0.12);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
   color: var(--warn);
   border-bottom: 1px solid var(--line);
 }
@@ -219,7 +295,7 @@ select:focus {
 
 .dropzone {
   margin: 24px 0 12px;
-  border: 1.5px dashed #3a3e47;
+  border: 1.5px dashed var(--line-strong);
   border-radius: 14px;
   padding: 36px 16px;
   display: grid;
@@ -234,7 +310,7 @@ select:focus {
 
 .dropzone.dragging {
   border-color: var(--accent);
-  background: rgba(52, 199, 160, 0.06);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .dropzone p {
@@ -328,12 +404,12 @@ select:focus {
 }
 
 .badge-complete {
-  background: rgba(52, 199, 160, 0.15);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
   color: var(--accent);
 }
 
 .badge-failed {
-  background: rgba(255, 107, 97, 0.15);
+  background: color-mix(in srgb, var(--error) 15%, transparent);
   color: var(--error);
 }
 
@@ -385,10 +461,10 @@ select:focus {
 .popover {
   position: absolute;
   z-index: 20;
-  background: #1c1e23;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 40px var(--shadow);
   padding: 12px;
 }
 
@@ -424,7 +500,7 @@ select:focus {
 
 .popover.help dd {
   margin: 0;
-  color: #c9ced8;
+  color: var(--text-soft);
 }
 
 .field {
@@ -476,7 +552,7 @@ select:focus {
 .viewer {
   min-width: 0;
   min-height: 0;
-  background: #0b0b0d;
+  background: var(--viewer-bg);
   position: relative;
 }
 
@@ -513,7 +589,7 @@ select:focus {
   place-content: center;
   padding: 24px 40px;
   gap: 18px;
-  background: radial-gradient(ellipse at center, #17191e 0%, #0e0f12 70%);
+  background: radial-gradient(ellipse at center, var(--caption-glow) 0%, var(--caption-edge) 70%);
 }
 
 .caption-clip {
@@ -531,7 +607,7 @@ select:focus {
   text-align: center;
   font-size: clamp(18px, 2.4vw, 30px);
   line-height: 1.5;
-  color: #8a909b;
+  color: var(--caption-text);
 }
 
 .caption-words {
@@ -546,15 +622,15 @@ select:focus {
 }
 
 .caption-words .now {
-  color: white;
+  color: var(--text-strong);
 }
 
 .caption-words .restored {
-  color: #b8864c;
+  color: var(--caption-restored);
 }
 
 .caption-words .restored.now {
-  color: #ffd29a;
+  color: var(--caption-restored-now);
 }
 
 .caption-caret {
@@ -563,7 +639,7 @@ select:focus {
   top: 0;
   z-index: 0;
   border-radius: 6px;
-  background: rgba(52, 199, 160, 0.26);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
   opacity: 0;
   pointer-events: none;
   transition:
@@ -601,7 +677,7 @@ select:focus {
 }
 
 .transcript-block.selected {
-  background: rgba(255, 204, 0, 0.07);
+  background: color-mix(in srgb, var(--selection) 7%, transparent);
   box-shadow: inset 2px 0 0 var(--selection);
 }
 
@@ -631,7 +707,7 @@ select:focus {
 }
 
 .word:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-wash);
 }
 
 .word.restored {
@@ -639,8 +715,8 @@ select:focus {
 }
 
 .word.now {
-  background: rgba(52, 199, 160, 0.28);
-  color: white;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--text-strong);
 }
 
 .run-panel {
@@ -693,7 +769,7 @@ select:focus {
 
 .stage-completed,
 .stage-cached {
-  color: #b9e8da;
+  color: var(--stage-done);
 }
 
 .stage-completed svg,
@@ -736,11 +812,11 @@ select:focus {
   overflow: auto;
   font-size: 10.5px;
   line-height: 1.35;
-  background: #0d0e10;
+  background: var(--log-bg);
   border-radius: 6px;
   padding: 8px;
   white-space: pre-wrap;
-  color: #aab0bb;
+  color: var(--log-text);
 }
 
 /* ---- transport & timeline ---------------------------------------------------- */
@@ -770,14 +846,14 @@ select:focus {
   border-radius: 50%;
   border: none;
   background: var(--text);
-  color: #111;
+  color: var(--play-fg);
   display: grid;
   place-items: center;
   cursor: pointer;
 }
 
 .play-button:hover {
-  background: white;
+  background: var(--play-hover);
 }
 
 .timecode {
@@ -831,15 +907,16 @@ select:focus {
   transform: translateX(-50%);
   padding: 8px 14px;
   border-radius: 8px;
-  background: #2a2d34;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-line);
+  box-shadow: 0 8px 30px var(--shadow);
   z-index: 30;
   pointer-events: none;
 }
 
 .toast-error {
-  background: #4a2421;
-  color: #ffd6d2;
+  background: var(--toast-error-bg);
+  color: var(--toast-error-text);
 }
 
 /* ---- modal ------------------------------------------------------------------- */
@@ -847,7 +924,7 @@ select:focus {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--backdrop);
   display: grid;
   place-items: center;
   z-index: 40;
@@ -855,11 +932,11 @@ select:focus {
 
 .modal {
   width: min(560px, calc(100% - 32px));
-  background: #1b1d22;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 16px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 24px 60px var(--shadow-strong);
 }
 
 .modal header {
@@ -915,7 +992,7 @@ select:focus {
   border-radius: 7px;
   border: 1px solid var(--line);
   background: transparent;
-  color: #c9ced8;
+  color: var(--text-soft);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   cursor: pointer;
@@ -927,8 +1004,8 @@ select:focus {
 
 .rate-button.active {
   color: var(--accent);
-  border-color: rgba(52, 199, 160, 0.5);
-  background: rgba(52, 199, 160, 0.1);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .popover.rate-options {
@@ -963,7 +1040,7 @@ select:focus {
 
 .rate-options button.selected {
   color: var(--accent);
-  background: rgba(52, 199, 160, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 /* ---- Voice Cut controls --------------------------------------------------- */
@@ -1017,16 +1094,16 @@ select:focus {
   padding: 0 8px 0 10px;
   border-radius: 7px;
   border: 1px solid var(--line);
-  background: #101114;
+  background: var(--input-bg);
   cursor: pointer;
 }
 
 .model-button:hover:not(:disabled) {
-  border-color: #3a3e47;
+  border-color: var(--line-strong);
 }
 
 .model-button.warning {
-  border-color: rgba(255, 176, 86, 0.6);
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
   color: var(--warn);
 }
 
@@ -1057,7 +1134,7 @@ select:focus {
 .model-status {
   padding: 8px;
   border-radius: 6px;
-  background: rgba(255, 176, 86, 0.1);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
   color: var(--warn);
   display: grid;
   gap: 6px;
@@ -1094,7 +1171,7 @@ select:focus {
 }
 
 .model-list button.selected {
-  background: rgba(52, 199, 160, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .model-id {
@@ -1149,6 +1226,43 @@ select:focus {
   margin: 0;
 }
 
+.segmented {
+  justify-self: start;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--input-bg);
+}
+
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.segmented button:hover:not(.selected) {
+  background: var(--panel-2);
+}
+
+.segmented button.selected {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.segmented button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 50%, transparent);
+}
+
 .settings-section code {
   font-size: 11px;
   word-break: break-all;
@@ -1185,7 +1299,7 @@ select:focus {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #8fb3ff;
+  color: var(--link);
   text-decoration: none;
 }
 
@@ -1209,8 +1323,8 @@ select:focus {
   padding: 5px;
   border-radius: 9px;
   border: 1px solid var(--line);
-  background: #1c1e23;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+  background: var(--surface);
+  box-shadow: 0 14px 34px var(--shadow);
   display: grid;
   gap: 1px;
 }

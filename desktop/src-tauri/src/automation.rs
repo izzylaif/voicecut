@@ -120,10 +120,14 @@ fn handle(app: &AppHandle, mut stream: TcpStream) {
     );
 }
 
-/// `NSWindow.collectionBehavior` (full screen capability), read on the main
-/// thread.
+/// An integer property of the window's NSWindow, read on the main thread:
+/// `collectionBehavior` (full screen capability), `windowNumber` (for
+/// `screencapture -l`).
 #[cfg(target_os = "macos")]
-fn collection_behavior(window: &tauri::WebviewWindow) -> Option<u64> {
+fn ns_window_integer(
+    window: &tauri::WebviewWindow,
+    property: &'static std::ffi::CStr,
+) -> Option<u64> {
     use std::ffi::{c_char, c_void};
     #[link(name = "objc")]
     extern "C" {
@@ -136,7 +140,7 @@ fn collection_behavior(window: &tauri::WebviewWindow) -> Option<u64> {
         .run_on_main_thread(move || {
             let send: extern "C" fn(*mut c_void, *const c_void) -> u64 =
                 unsafe { std::mem::transmute(objc_msgSend as *const ()) };
-            let selector = unsafe { sel_registerName(c"collectionBehavior".as_ptr()) };
+            let selector = unsafe { sel_registerName(property.as_ptr()) };
             let _ = sender.send(send(address as *mut c_void, selector));
         })
         .ok()?;
@@ -144,7 +148,7 @@ fn collection_behavior(window: &tauri::WebviewWindow) -> Option<u64> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn collection_behavior(_: &tauri::WebviewWindow) -> Option<u64> {
+fn ns_window_integer(_: &tauri::WebviewWindow, _: &'static std::ffi::CStr) -> Option<u64> {
     None
 }
 
@@ -240,7 +244,9 @@ fn route(app: &AppHandle, path: &str, request: &Value) -> Value {
                         "visible": window.is_visible().ok(),
                         "fullscreen": window.is_fullscreen().ok(),
                         "resizable": window.is_resizable().ok(),
-                        "collection_behavior": collection_behavior(&window),
+                        "collection_behavior": ns_window_integer(&window, c"collectionBehavior"),
+                        "window_number": ns_window_integer(&window, c"windowNumber"),
+                        "theme": window.theme().ok(),
                         "size": size,
                     })
                 })

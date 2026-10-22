@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FileAudio, FilePlus2, FolderOpen, KeyRound, Loader2, Upload } from 'lucide-react';
+import { FileAudio, FilePlus2, FolderOpen, Loader2, Settings, Upload } from 'lucide-react';
 import { api } from '../api';
 import { invoke, listen, onMenu, type MenuCommand, type RecentDocument } from '../desktop';
 import { errorText } from '../store';
@@ -137,7 +137,7 @@ export function DesktopWelcome({ onOpen }: { onOpen: (project: ProjectState) => 
 
         <p className="welcome-footer">
           <button type="button" className="button subtle" onClick={openSettings}>
-            <KeyRound size={14} /> API keys…
+            <Settings size={14} /> Settings…
           </button>
         </p>
       </div>

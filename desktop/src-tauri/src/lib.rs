@@ -15,6 +15,7 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 mod paths;
+mod preferences;
 mod process;
 mod runtime;
 mod setup;
@@ -31,13 +32,14 @@ use tauri::menu::{
     AboutMetadata, Menu, MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder,
 };
 use tauri::{
-    AppHandle, DragDropEvent, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindow,
+    AppHandle, DragDropEvent, Emitter, Manager, RunEvent, Theme, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent, Wry,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use engine::Engine;
 use paths::Paths;
+use preferences::Preferences;
 use runtime::Bundle;
 
 const RECENT_LIMIT: usize = 12;
@@ -74,6 +76,10 @@ const EDITOR_PERMISSIONS: &[&str] = &[
     "allow-reveal-path",
     "allow-flush-done",
     "allow-take-pending-action",
+    "allow-appearance",
+    "allow-set-appearance",
+    "allow-preference",
+    "allow-set-preference",
 ];
 
 #[derive(Clone, Serialize)]
@@ -114,6 +120,7 @@ pub struct AppState {
     pub counter: AtomicU64,
     pub quitting: AtomicBool,
     pub recent_menu: Mutex<Option<Submenu<Wry>>>,
+    pub preferences: Mutex<Preferences>,
 }
 
 impl AppState {
@@ -409,19 +416,49 @@ pub fn create_window(
     let state = app.state::<AppState>();
     let label = format!("window-{}", state.next());
     let navigator = app.clone();
+    let theme = state.preferences.lock().unwrap().theme();
     let window = WebviewWindowBuilder::new(app, &label, url)
         .title(title)
         .inner_size(1440.0, 900.0)
         .min_inner_size(980.0, 640.0)
         .resizable(true)
         .focused(true)
+        .theme(theme)
+        .background_color(preferences::background(theme.unwrap_or(Theme::Dark)))
         .on_navigation(move |url| navigation_allowed(&navigator, url))
         .build()
         .map_err(|error| error.to_string())?;
+    if theme.is_none() {
+        // System: the window knows which one that is now.
+        if let Ok(system) = window.theme() {
+            let _ = window.set_background_color(Some(preferences::background(system)));
+        }
+    }
     #[cfg(target_os = "macos")]
     macos::allow_full_screen(&window);
     state.roles.lock().unwrap().insert(label, role);
     Ok(window)
+}
+
+/// Keep the user's appearance ("system", "light" or "dark"), theme every
+/// window by it and tell the pages, which follow it.
+pub fn set_appearance(app: &AppHandle, appearance: &str) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let theme = {
+        let mut preferences = state.preferences.lock().unwrap();
+        preferences.set_appearance(appearance)?;
+        preferences.save(&state.paths.preferences())?;
+        preferences.theme()
+    };
+    for window in app.webview_windows().values() {
+        let _ = window.set_theme(theme);
+        // System: `WindowEvent::ThemeChanged` brings the background along.
+        if let Some(theme) = theme {
+            let _ = window.set_background_color(Some(preferences::background(theme)));
+        }
+    }
+    let _ = app.emit("appearance", appearance);
+    Ok(())
 }
 
 fn engine_url(app: &AppHandle, query: &str) -> Result<tauri::Url, String> {
@@ -1154,6 +1191,10 @@ macro_rules! handlers {
             commands::reveal_path,
             commands::flush_done,
             commands::take_pending_action,
+            commands::appearance,
+            commands::set_appearance,
+            commands::preference,
+            commands::set_preference,
             $($extra),*
         ]
     };
@@ -1195,6 +1236,7 @@ pub fn run() {
             let paths = Paths::new(resources.join("runtime"));
             let bundle = Bundle::load(&paths);
             let recents = load_recents(&paths);
+            let preferences = Preferences::load(&paths.preferences());
             app.manage(AppState {
                 paths,
                 bundle,
@@ -1210,6 +1252,7 @@ pub fn run() {
                 counter: AtomicU64::new(1),
                 quitting: AtomicBool::new(false),
                 recent_menu: Mutex::new(None),
+                preferences: Mutex::new(preferences),
             });
             let handle = app.handle().clone();
             #[cfg(feature = "automation")]
@@ -1253,6 +1296,9 @@ pub fn run() {
                         api.prevent_close();
                         close_document_window(app.clone(), label, project_id, path);
                     }
+                }
+                WindowEvent::ThemeChanged(theme) => {
+                    let _ = window.set_background_color(Some(preferences::background(*theme)));
                 }
                 WindowEvent::Destroyed => {
                     state.roles.lock().unwrap().remove(&label);

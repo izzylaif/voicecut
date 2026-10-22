@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FileAudio, FileVideo, FolderOpen, Loader2, Trash2, Upload } from 'lucide-react';
+import { FileAudio, FileVideo, FolderOpen, Loader2, Settings, Trash2, Upload } from 'lucide-react';
 import { api } from '../api';
 import { confirmAction } from '../desktop';
-import type { ProjectState, ProjectSummary } from '../types';
+import type { ProjectState, ProjectSummary, SettingsState } from '../types';
+import { SettingsDialog } from './SettingsDialog';
 
 const ACCEPT = '.wav,.mp3,.m4a,.flac,.aac,.aif,.aiff,.ogg,.oga,.opus,.mov,.mp4,.mkv,.webm';
 
@@ -13,6 +14,7 @@ export function Welcome({ onOpen }: { onOpen: (project: ProjectState) => void })
   const [upload, setUpload] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [settings, setSettings] = useState<SettingsState | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
@@ -156,7 +158,18 @@ export function Welcome({ onOpen }: { onOpen: (project: ProjectState) => void })
             </ul>
           </div>
         )}
+
+        <p className="welcome-footer">
+          <button
+            type="button"
+            className="button subtle"
+            onClick={() => api.settings().then(setSettings, (failure: unknown) => setError(String(failure)))}
+          >
+            <Settings size={14} /> Settings…
+          </button>
+        </p>
       </div>
+      {settings && <SettingsDialog state={settings} onState={setSettings} onClose={() => setSettings(null)} />}
     </div>
   );
 }

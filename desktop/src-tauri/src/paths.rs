@@ -16,6 +16,7 @@
 //!   logs/             setup.log, engine.log
 //!   setup.json        which parts of the runtime are installed
 //!   recent.json       File > Open Recent
+//!   preferences.json  appearance, playback speed
 //! ```
 //!
 //! Model weights download on first use into the usual Hugging Face cache
@@ -86,6 +87,9 @@ impl Paths {
     }
     pub fn recent(&self) -> PathBuf {
         self.data.join("recent.json")
+    }
+    pub fn preferences(&self) -> PathBuf {
+        self.data.join("preferences.json")
     }
 
     pub fn venv(&self) -> PathBuf {

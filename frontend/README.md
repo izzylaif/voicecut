@@ -29,13 +29,15 @@ src/model/history.ts       undo/redo over immutable snapshots
 src/model/words.ts         transcript lookups
 src/model/caption.ts       subtitle blocks (one clip at a time) and their pages
 src/store.ts               EditorStore: history + drag drafts, playhead, autosave, playback
+src/theme.ts               appearance (System, Light, Dark) → <html data-theme>, live
 src/audio/player.ts        streams rendered output chunks onto an AudioContext
 src/audio/stretch.ts       pitch-preserving time stretch (WSOLA) for 0.5×–2.5× preview
 src/video/videoSync.ts     two <video> decks driven by the audio clock
 src/timeline/view.ts       canvas timeline: drawing and pointer gestures
 src/timeline/peaks.ts      waveform levels (base + derived + fetched fine tiles)
+src/timeline/palette.ts    canvas colours, one palette per theme
 src/components/*           start page, editor shell, viewer, transcript, transport,
-                           planner/model/language controls, settings (API keys),
+                           planner/model/language controls, settings (appearance, API keys),
                            Voice Cut progress panel, export dialog
 tests/*.test.ts            vitest suites; fixtures/layout_cases.json comes from
                            tests/test_editor_plan.py

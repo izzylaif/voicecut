@@ -22,6 +22,10 @@ fn main() {
             "reveal_path",
             "flush_done",
             "take_pending_action",
+            "appearance",
+            "set_appearance",
+            "preference",
+            "set_preference",
             "automation_result",
         ]),
     ))

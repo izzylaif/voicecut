@@ -118,6 +118,16 @@ sent back to the browser or logged. A key set as an environment variable of the
 `voicecut-editor` process takes precedence over the file, as in the CLI; the
 dialog says so.
 
+**Appearance.** The editor has a light and a dark theme. *Settings →
+Appearance* (also reachable from *Settings…* on the start page) chooses
+**System** (the default), **Light** or **Dark**. System follows the light or
+dark mode of the operating system, live: switching macOS to dark mode while
+the editor is open switches the editor too. The choice belongs to the user,
+not to a project; in a browser it is remembered for the editor's address, and
+in the VoiceCut app the app remembers it. Both themes are drawn on their own —
+the light timeline has mint clips with a dark green waveform and darker amber
+and red marks — rather than one inverted from the other.
+
 ### 3. Correct the edit
 
 The timeline shows, top to bottom:
@@ -315,8 +325,8 @@ in Voice Cut's edit), so the converted edit sounds exactly as before.
  │ audio/player.ts    streaming player  │           │ peaks.py    waveform peaks      │
  │ audio/stretch.ts   speed, same pitch │           │ proxy.py    video preview       │
  │ video/videoSync.ts two-deck video    │           │ export.py   render + publish    │
- └─────────────────────────────────────┘           │ jobs.py     jobs, SSE           │
-                                                    │ settings.py keys, model lists   │
+ │ theme.ts           light and dark    │           │ jobs.py     jobs, SSE           │
+ └─────────────────────────────────────┘           │ settings.py keys, model lists   │
                                                     └────────────────────────────────┘
                                                                │
                                        full_pipeline.run_full_pipeline · cut_render ·
@@ -351,6 +361,14 @@ in Voice Cut's edit), so the converted edit sounds exactly as before.
 - **Playback.** `GET /render?rev=…&start=…&frames=…` renders any stretch of the
   output (`plan.render_range`); the player fetches fixed chunks ahead of the
   playhead and schedules them sample-exactly.
+- **Theme.** `frontend/src/theme.ts` resolves the appearance to
+  `<html data-theme="light|dark">`, following `prefers-color-scheme` for
+  System. `styles.css` keys every colour on it (tints are `color-mix`es of the
+  theme's tokens) and the timeline canvas takes its palette from
+  `timeline/palette.ts`, redrawing when the theme changes. `index.html` sets the
+  theme before the first paint, so a page never flashes the other one. In the
+  VoiceCut app the theme module also asks the app for the choice (`appearance`)
+  and reports changes (`set_appearance`), so that native windows match.
 - **Waveform.** One base level (min/max per 256 samples) covers the whole
   recording; the browser derives coarser levels and fetches finer ones
   (`/peaks/fine`) for the zoomed-in stretch only.
@@ -422,8 +440,10 @@ for rotated and mirrored phone video, audio and video exports, and the HTTP
 API with a stand-in pipeline worker. Frontend tests cover the layout against
 the Python fixture, edits (pauses survive trims and splits, deleting a clip
 between two pauses keeps the longer one), undo history, waveform levels, the player's
-sample-exact scheduling, and the time stretcher (duration follows the rate,
-pitch and stereo alignment are kept). None of them download models or call planner APIs.
+sample-exact scheduling, the time stretcher (duration follows the rate,
+pitch and stereo alignment are kept), and the themes (System follows the
+system; both palettes have every colour and keep text and timeline marks at
+readable contrast). None of them download models or call planner APIs.
 
 ## Limitations
 

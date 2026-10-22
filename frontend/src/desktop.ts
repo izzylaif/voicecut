@@ -51,6 +51,20 @@ export function listen<T>(event: string, handler: (payload: T) => void): () => v
   };
 }
 
+/**
+ * A small preference the app keeps for the editor (playback speed).  The
+ * page's own storage does not survive a relaunch of the app: the engine's
+ * address, and with it the page's origin, changes every time.
+ */
+export function remembered(key: string): Promise<string | null> {
+  if (!desktop) return Promise.resolve(null);
+  return invoke<string | null>('preference', { key }).catch(() => null);
+}
+
+export function remember(key: string, value: string): void {
+  if (desktop) invoke('set_preference', { key, value }).catch(() => undefined);
+}
+
 /** A command from the app's menu (or the app itself, like `flush`). */
 export interface MenuCommand {
   command: string;

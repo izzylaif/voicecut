@@ -1,12 +1,19 @@
-import { useEffect, useState } from 'react';
-import { ExternalLink, KeyRound, Loader2, X } from 'lucide-react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { ExternalLink, KeyRound, Loader2, type LucideIcon, Monitor, Moon, Sun, X } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { confirmAction, desktop } from '../desktop';
+import { type Appearance, appearance, setAppearance, subscribe } from '../theme';
 import type { PlannerInfo, RunSettings, SettingsState } from '../types';
 
+const APPEARANCE_OPTIONS: { value: Appearance; label: string; icon: LucideIcon }[] = [
+  { value: 'system', label: 'System', icon: Monitor },
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+];
+
 /**
- * Settings: API keys of the cloud planners, and (in a project) Voice Cut
- * options.
+ * Settings: appearance, API keys of the cloud planners, and (in a project)
+ * Voice Cut options.
  */
 export function SettingsDialog({
   state,
@@ -38,6 +45,14 @@ export function SettingsDialog({
             <X size={16} />
           </button>
         </header>
+
+        <section className="settings-section">
+          <h3>Appearance</h3>
+          <AppearancePicker />
+          <p className="muted small">
+            System follows the light or dark mode of your {desktop ? 'Mac' : 'computer'}, also while the editor is open.
+          </p>
+        </section>
 
         <section className="settings-section">
           <h3>API keys</h3>
@@ -84,6 +99,26 @@ export function SettingsDialog({
           </button>
         </footer>
       </div>
+    </div>
+  );
+}
+
+function AppearancePicker() {
+  const current = useSyncExternalStore(subscribe, appearance);
+  return (
+    <div className="segmented" role="radiogroup" aria-label="Appearance">
+      {APPEARANCE_OPTIONS.map(({ value, label, icon: Icon }) => (
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={current === value}
+          className={current === value ? 'selected' : undefined}
+          onClick={() => setAppearance(value)}
+        >
+          <Icon size={14} /> {label}
+        </button>
+      ))}
     </div>
   );
 }
