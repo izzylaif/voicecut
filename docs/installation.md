@@ -1,11 +1,15 @@
-# Installation
+# Installing from source
 
-VoiceCut currently supports Apple Silicon Macs running macOS. The production
-pipeline uses three isolated runtimes, so the supported installation method is
-a source checkout followed by the repository installer.
+This guide sets up a source checkout for the `voicecut` command line, the
+browser editor and development. To simply use VoiceCut, install the desktop
+app for macOS, Windows or Linux instead: see [Install](../README.md#install)
+in the README.
 
-For the shortest path back to the product overview, see the
-[main README](../README.md). Runtime options are documented in
+A source checkout runs on Apple Silicon Macs. The production pipeline uses
+three isolated runtimes, which the repository installer sets up.
+
+[Development](development.md) gives an overview of the command line, the
+browser editor and the tests. Runtime options are documented in
 [Configuration](configuration.md), and common setup failures are covered in
 [Troubleshooting](troubleshooting.md).
 

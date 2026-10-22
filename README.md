@@ -1,274 +1,326 @@
-# VoiceCut — automatic narration editing for content creators
+<p align="center">
+  <img src="desktop/src-tauri/icons/128x128@2x.png" width="128" height="128" alt="VoiceCut app icon">
+</p>
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-2f855a.svg)](LICENSE)
-[![Python 3.11–3.12](https://img.shields.io/badge/python-3.11%E2%80%933.12-3776ab.svg)](pyproject.toml)
-[![Platform: Apple Silicon](https://img.shields.io/badge/platform-Apple%20Silicon-111827.svg)](#requirements)
-[![Languages: English and Russian](https://img.shields.io/badge/speech-English%20%7C%20Russian-7c3aed.svg)](#requirements)
+<h1 align="center">VoiceCut</h1>
 
-VoiceCut turns retake-heavy narration into a clean audio or video edit. It
-finds false starts, repeated takes, corrections, and recording directions,
-keeps the best take of every sentence, removes breaths, and gives every pause a
-natural length. In the VoiceCut Editor you can then fix anything by hand
-before exporting. VoiceCut never synthesizes replacement speech: every sound in
-the edit comes from your recording.
+<p align="center">
+  <strong>Record with all your retakes. Get back one clean take.</strong><br>
+  A free desktop app that edits narration for you: it keeps the best take of
+  every line, drops false starts, repeats and recording directions, cleans up
+  breaths and gives every pause a natural length. Then you fine-tune every
+  cut on a timeline and export audio or video.
+</p>
 
-![VoiceCut pipeline from fragmented source takes to a clean audio and video edit](docs/assets/readme/voicecut-pipeline-cover.svg)
+<p align="center">
+  <a href="https://vectozavr.github.io/voicecut/"><img alt="Download VoiceCut" src="https://img.shields.io/badge/Download-VoiceCut-0a8264?style=for-the-badge"></a>
+</p>
 
-The project is in beta and currently targets narrated, single-speaker
-recordings on Apple Silicon Macs.
+<p align="center">
+  <a href="https://github.com/vectozavr/voicecut/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/vectozavr/voicecut?label=release&color=0a8264"></a>
+  <a href="#install"><img alt="macOS, Windows and Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-desktop-1b1d22"></a>
+  <a href="#current-limitations"><img alt="English and Russian" src="https://img.shields.io/badge/speech-English%20%C2%B7%20Russian-7c3aed"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2f855a"></a>
+</p>
 
-## Examples
+<p align="center">
+  <a href="https://vectozavr.github.io/voicecut/">Website</a> ·
+  <a href="#install">Install</a> ·
+  <a href="https://vectozavr.github.io/voicecut/#examples">Listen to examples</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="docs/development.md">Build from source</a>
+</p>
 
-[**See examples →**](https://vectozavr.github.io/voicecut/)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/editor-dark.webp">
+  <img alt="The VoiceCut editor after Voice Cut: a 38-second take full of retakes became 23.6 seconds of clips on the timeline, with a live caption and the full text" src="docs/assets/screenshots/editor-light.webp">
+</picture>
 
-## Quick start
+## What VoiceCut does
 
-### Requirements
+You record the way people really talk: a sentence, a stumble, the same
+sentence again, "let me start over", a better version. VoiceCut listens to
+the whole recording and edits it the way a human editor would.
 
-- Apple Silicon Mac running macOS
-- Python 3.11 or 3.12
-- Homebrew (the installer uses it for FFmpeg, micromamba, and Node.js)
-- English or Russian single-speaker narration
-- An API key for the planner; Gemini is the default
+- **Keeps the best take of every line.** It tells a corrected retake from a
+  fluent but abandoned attempt, and drops the abandoned one.
+- **Cuts only where it is silent.** Every cut lands between words, never
+  inside one, and keeps each word's natural decay.
+- **Gives every pause a natural length.** Breaths and clicks inside pauses
+  become clean room tone from your own recording.
+- **Never fakes your voice.** Nothing is synthesized: every sound in the
+  edit comes from your recording.
+- **Edits video too.** The picture follows the kept speech with direct cuts.
+- **Leaves the last word to you.** The automatic edit opens as clips on a
+  timeline over the original recording, ready to adjust.
+- **Runs on your computer.** Transcription, alignment and rendering are
+  local; only the planner request goes to the cloud (see
+  [Planners](#planners)).
 
-### The Mac app
+## A quick tour
 
-VoiceCut for macOS (Apple Silicon, macOS 14 or later) is the editor as a
-native app: open the `.dmg`, drag VoiceCut into Applications, and open it.
-On first launch it installs its engine (about 1.6 GB to download, once);
-projects are saved as `.vc` documents you open from the Finder. See
-[desktop/README.md](desktop/README.md) to build it.
+### Start a project
 
-### Install
+Drop a recording on the window or choose **New Project…**: WAV, MP3, M4A,
+FLAC, MOV, MP4 and other common formats. Each project is saved as one `.vc`
+document that you open from the Finder, your file manager or Explorer.
 
-The installer sets up FFmpeg, MLX Whisper, Montreal Forced Aligner 3.4.1, the
-editor, and the isolated runtimes used by VoiceCut:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/start-dark.webp">
+  <img alt="The VoiceCut start page: drop a recording, New Project, Open, and recent projects" src="docs/assets/screenshots/start-light.webp">
+</picture>
 
-```bash
-git clone https://github.com/vectozavr/voicecut.git
-cd voicecut
-./scripts/install.sh
-source .venv/bin/activate
-```
+### Press Voice Cut
 
-See the [installation guide](docs/installation.md) for first-run model
-downloads and manual setup.
+Pick the planner, its model and the language in the toolbar, then press
+**Voice Cut**. Every stage shows its progress, and a long recording that was
+interrupted picks up where it stopped.
 
-### Edit in the browser
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/voice-cut-run-dark.webp">
+  <img alt="Voice Cut running: transcription, retake recovery and take selection, each stage with its time" src="docs/assets/screenshots/voice-cut-run-light.webp">
+</picture>
 
-![The VoiceCut Editor: the automatic edit as clips over the original recording, with pauses, word labels, a live caption and the full text](docs/assets/readme/voicecut-editor.png)
+### Fine-tune every cut
 
-```bash
-voicecut-editor                 # opens http://127.0.0.1:8765 in your browser
-voicecut-editor recording.wav   # or open a recording right away
-```
+The edit appears as clips and pauses over the original recording. Every clip
+still references the source, so nothing is lost:
 
-1. **Import** a recording: WAV, MP3, M4A, FLAC, MOV, MP4, and other common
-   formats. Video works too.
-2. Open **Settings** (the gear) and paste your Gemini, OpenAI, or DeepSeek API
-   key. Keys are checked with the provider and saved to `.env`.
-3. Pick the **planner**, the **model** (the list comes live from the provider),
-   and the **language**, then press **Voice Cut**. The pipeline runs locally
-   with live stage progress; only the planner request goes to the cloud.
-4. **Correct the edit.** Every clip references the original recording:
-   - drag a clip edge to bring back removed material or trim it, and later
-     clips follow;
-   - drag a pause edge to make it longer or shorter, or press `P` to insert a
-     1-second pause at the playhead;
-   - split with `S`, delete, undo and redo;
-   - listen at 0.5× to 2.5× with the `1×` button, at the same pitch, while the
-     caption highlights every word.
-5. **Export** audio or video. The preview is rendered by the same code as the
-   export, so what you hear in the editor is what you get.
+- drag a clip edge to bring back removed material or trim it — later clips
+  follow;
+- drag a pause edge to make it longer or shorter, or press `P` to insert one;
+- split with `S`, delete, undo and redo;
+- listen at 0.5× to 2.5× at the same pitch while the caption highlights each
+  word, and click any word in the text to jump to it.
 
-The editor is developed and tested in Chromium-based browsers (Chrome, Edge,
-Arc, Brave). See the [editor guide](docs/editor.md) for every shortcut and
-option.
+The preview is rendered by the same code as the export, so what you hear is
+exactly what you get. The [editor guide](docs/editor.md) lists every shortcut.
 
-### Use the command line
+### Video works the same way
 
-The same pipeline runs without the editor. Add the planner key to `.env`:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/video-dark.webp">
+  <img alt="A video project after Voice Cut: the picture, filmstrip and waveform follow the seven kept takes" src="docs/assets/screenshots/video-light.webp">
+</picture>
 
-```dotenv
-GEMINI_API_KEY=your_key_here
-```
+### Export
 
-Then run VoiceCut with only the input file:
+Export MP4 or MOV video (H.264), or WAV (24-bit), FLAC, AAC (`.m4a`) or MP3
+audio. An unchanged Voice Cut edit exports exactly the sound of the preview.
 
-```bash
-voicecut recording.wav
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/export-dark.webp">
+  <img alt="The Export dialog with the video and audio formats" src="docs/assets/screenshots/export-light.webp">
+</picture>
 
-The result is written beside the input as `recording_edited.wav`. VoiceCut
-keeps a supported input container by default and accepts common formats via
-FFmpeg, including WAV, MP3, M4A, FLAC, MOV, and MP4. Uncommon audio containers
-default to WAV; recognized video inputs default to MP4 when needed.
+## Install
 
-Useful variants:
+Download the installer for your system from the
+[latest release](https://github.com/vectozavr/voicecut/releases/latest) — or
+open the [website](https://vectozavr.github.io/voicecut/), which picks the
+right one for you.
 
-```bash
-# Choose the output path.
-voicecut recording.mp3 -o final.mp3
+| System | Download | Then |
+| --- | --- | --- |
+| **macOS** 14 Sonoma or later, Apple Silicon (M1 or newer) | `VoiceCut-<version>-arm64.dmg` | Open it and drag VoiceCut to Applications. |
+| **Windows** 10 or 11, x64 | `VoiceCut-<version>-x64-setup.exe` | Run it. It installs for you alone, no administrator needed. |
+| **Linux** x86_64 with glibc 2.35+ (Ubuntu 22.04, Debian 12, Fedora 36 or newer) | `VoiceCut-<version>-x86_64.AppImage` | `chmod +x` it and run it. It adds itself to your applications. |
+| **Debian, Ubuntu** | `VoiceCut-<version>-amd64.deb` | `sudo apt install ./VoiceCut-<version>-amd64.deb` |
 
-# Edit Russian narration.
-voicecut recording_ru.wav --language ru
+The release also lists `VoiceCut-<version>-arm64.app.tar.gz` and
+`latest.json`: installed apps download them to update themselves; you don't
+need them.
 
-# Edit video from its speech track.
-voicecut presentation.mp4 -o presentation_cut.mp4
+The AppImage needs FUSE 2. If it does not start on Ubuntu, install it with
+`sudo apt install libfuse2` (`libfuse2t64` on Ubuntu 24.04 and later).
 
-# Keep reusable diagnostics and stage metadata.
-voicecut recording.wav --work-dir voicecut_work --debug-artifacts
-```
+### Opening it the first time
 
-An existing output is never overwritten unless `--overwrite` is supplied.
+The installers are not signed with paid certificates yet, so the first
+launch of a downloaded copy shows a warning once:
+
+- **macOS** says VoiceCut cannot be opened because Apple cannot check it for
+  malicious software. Close the message, open **System Settings › Privacy &
+  Security**, scroll down and choose **Open Anyway**, then confirm. (Or run
+  `xattr -dr com.apple.quarantine /Applications/VoiceCut.app` once.)
+- **Windows** SmartScreen says it protected your PC. Choose **More info** ›
+  **Run anyway**.
+- **Linux** has no such step.
+
+Then VoiceCut shows what it needs and installs its engine with one click:
+Python, PyTorch, Whisper, the Montreal Forced Aligner and FFmpeg — about
+1.5 GB to download, once, and about 4 GB on disk (keep up to 7 GB free while
+it installs). The speech models, about 2 GB more, download the first time
+you run Voice Cut.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/setup-dark.webp">
+  <img alt="First launch: VoiceCut explains what it will install and how much space it needs, with an Install button" src="docs/assets/screenshots/setup-light.webp">
+</picture>
+
+Last, open **Settings** and paste a planner API key — a
+[Gemini key](https://aistudio.google.com/apikey) is all you need to start.
+VoiceCut keeps it in the macOS Keychain, the Windows Credential Manager or
+your Linux keyring, never in your projects.
+
+Whisper runs on the GPU on Apple Silicon and on NVIDIA GPUs with a recent
+driver (CUDA 12); anywhere else it runs on the CPU, roughly as fast as the
+recording plays.
+
+### Updates
+
+VoiceCut updates itself. When a new version is out, a download button
+appears in the toolbar; by default the update downloads in the background
+and installs when you quit VoiceCut, and your open projects come back after
+the restart. Turn that off in **Settings › Updates** to install only from
+the button. On Debian and Ubuntu the update asks for your password.
+
+## Planners
+
+The planner is the language model that reads the transcript and chooses the
+takes. Pick it in the toolbar; the list of models comes live from the
+provider, and you can type any other model name.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/planner-models-dark.webp">
+  <img alt="The model picker in the toolbar: Gemini models listed live from the provider, with Gemini 3.1 Pro Preview as the default" src="docs/assets/screenshots/planner-models-light.webp">
+</picture>
+
+| Planner | Default model | What it receives | Status |
+| --- | --- | --- | --- |
+| **Gemini** | `gemini-3.1-pro-preview` | the transcript of each planning window and that window's audio | Recommended |
+| **OpenAI** | `gpt-5-mini` | the transcript of each planning window | Supported |
+| **DeepSeek** | `deepseek-v4-flash` | the transcript of each planning window | Supported |
+| **Local (MLX)** | Qwen or Gemma, on your Mac | nothing leaves the computer | Experimental, Apple Silicon only |
+
+Gemini **hears audio**: it receives a compressed 16 kHz mono copy of each
+window, so it can hear stumbles and fix mis-heard words. Your original file
+and any video never leave the computer. Keys are added in **Settings**, each
+with a link to get one, and are sent only to their own provider.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/settings-dark.webp">
+  <img alt="Settings: appearance, automatic updates, and API keys for Gemini, OpenAI and DeepSeek kept in the macOS Keychain" src="docs/assets/screenshots/settings-light.webp">
+</picture>
 
 ## How it works
 
-![VoiceCut production pipeline](docs/assets/readme/pipeline.svg)
+![From fragmented source takes, through word selection and aligned cuts, to one clean edit](docs/assets/readme/voicecut-pipeline-cover.svg)
 
-1. **Build one source transcript.** MLX Whisper transcribes every speech
-   region of the recording. Any speech that no word covers is transcribed
-   again on its own, because Whisper likes to skip repeated phrases. English
-   can add narrowly gated hidden-retry evidence.
-2. **Select the takes like an editor.** The planner sees about four minutes of
-   transcript at a time plus two minutes of look-ahead, and with Gemini also
-   hears that audio. It returns the word ranges of the final narration and the
-   pause after each sentence, and it can revoke a recent choice when a better
-   retake appears. A final review re-decides any place where the edit still
-   repeats itself.
-3. **Find where words really start and stop.** Montreal Forced Aligner maps the
-   kept words to the sound; the waveform energy then decides where each word's
-   sound, including its natural decay, begins and ends. A cut never lands
-   inside audible speech.
-4. **Normalize every pause.** Gaps at cuts and inside kept takes get a length
-   for their class (phrase, comma, sentence, paragraph); breaths and clicks
-   inside pauses are replaced by clean room tone from the same recording.
-5. **Render once.** Retained speech is copied sample-exact and joined with short
-   crossfades placed in silence; video follows the same source intervals with
-   direct picture cuts.
-6. **Correct in the editor.** The editor shows that plan as clips and pauses
-   over the original recording and re-renders your changes with the same
-   renderer.
+1. **One transcript of everything you said.** Whisper (large-v3-turbo; MLX
+   on Apple Silicon, faster-whisper elsewhere) transcribes every speech
+   region. Speech that no word covers is transcribed again on its own,
+   because Whisper likes to skip repeated phrases.
+2. **Takes chosen the way an editor would.** The planner reads about four
+   minutes of transcript at a time plus two minutes of look-ahead — with
+   Gemini it also hears that audio — and returns the word ranges of the final
+   narration and the pause after each sentence. It can revoke a recent choice
+   when a better retake comes later, and a final review re-decides any place
+   where the edit still repeats itself.
+3. **Where every word really starts and stops.** The Montreal Forced Aligner
+   maps the kept words to the sound; the waveform's energy then decides
+   where each word's sound, including its natural decay, begins and ends. A
+   cut never lands inside audible speech.
+4. **Natural pauses.** Gaps at cuts and inside kept takes get a length for
+   their kind — phrase, comma, sentence, paragraph — and breaths and clicks
+   inside them are replaced by clean room tone from the same recording.
+5. **One render.** Kept speech is copied sample for sample and joined with
+   short crossfades placed in silence; video follows the same source
+   intervals with direct picture cuts.
+6. **Your corrections.** The editor shows that plan as clips and pauses over
+   the original recording and renders your changes with the same renderer.
 
-Breath and noise removal is on by default for English; disable it with
-`--breath-cleanup off`. Russian defaults to off because the Respiro-en breath
-detector has not been validated for Russian.
+Every planner answer is checked and retried when invalid, and every request
+is cached by its exact content, so an interrupted run resumes where it
+stopped. Places where the edit may still repeat itself are reported as
+warnings. If the aligner is unavailable, cuts use Whisper's timing refined
+by the waveform; if the breath detector fails, pauses are cleaned by
+waveform energy alone.
 
-Read the [architecture guide](docs/architecture.md) for the invariants and
-artifact flow.
+<details>
+<summary><strong>The whole pipeline</strong></summary>
+
+![VoiceCut production pipeline: Whisper, gap recovery, take planner, repeat review, MFA, waveform edges, pauses and a single render](docs/assets/readme/pipeline.svg)
+
+The [architecture guide](docs/architecture.md) has the invariants and the
+artifacts of every stage.
+
+</details>
 
 ## Why VoiceCut is different
 
-- **Semantic editing, not silence trimming.** It can distinguish a corrected
-  take from a fluent but abandoned attempt.
-- **Source-grounded decisions.** Every retained phrase maps back to exact word
-  occurrences in the recording.
-- **Speech-safe joins.** MFA identifies the words; the waveform decides where
-  their sound ends, so words are not clipped and their decay is kept.
-- **One boundary plan, one render.** Retained speech is not repeatedly cut,
-  faded, and re-rendered by sequential cleanup stages.
-- **Audio and video.** The same narration decision can publish a common audio
-  format or a directly cut video.
-- **Inspectable output.** A persistent work directory contains the transcript,
-  semantic plan, alignment evidence, final boundary plan, and run summary.
+| | Silence trimmers and filler-word removers | VoiceCut |
+| --- | --- | --- |
+| **What it understands** | loudness, or a list of words like "um" | what you meant to say, sentence by sentence |
+| **Retakes** | kept, one after another | the best take kept, abandoned attempts removed |
+| **Where it cuts** | at a loudness threshold, often clipping words | between words, where the waveform is silent |
+| **Pauses** | shortened to one length | a natural length for each kind of pause, filled with your room tone |
+| **Your voice** | sometimes regenerated by AI | never synthesized: every sound is from your recording |
+| **Afterwards** | a finished file | an editable plan on a timeline, rendered once from the source |
 
-## Planner backends
-
-Cloud planners receive the transcript of each planning window. Gemini also
-receives, by default, a compressed 16 kHz mono copy of that window's audio so
-it can hear stumbles and correct mis-heard words; pass `--planner-audio off` to
-send text only. The original file and any video never leave the machine, and
-transcription, alignment, and rendering stay local.
-
-| Backend | Default model | Credential | Status |
-| --- | --- | --- | --- |
-| Gemini | `gemini-3.1-pro-preview` | `GEMINI_API_KEY` | Recommended |
-| OpenAI | `gpt-5-mini` | `OPENAI_API_KEY` | Supported |
-| DeepSeek | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` | Supported |
-| Qwen / Gemma / custom MLX-LM | configurable local model | none | Experimental |
-
-Select a backend or model explicitly when needed:
-
-```bash
-voicecut recording.wav --planner-backend openai
-voicecut recording.wav --planner-backend gemini --planner-model gemini-3.8-flash
-voicecut recording.wav --planner-backend gemma \
-  --planner-model mlx-community/gemma-3-12b-it-4bit
-```
-
-Local planners are available for evaluation but are not yet the recommended
-production path. See [configuration](docs/configuration.md) for every backend,
-environment variable, and advanced option.
-
-## Reliability and graceful degradation
-
-VoiceCut validates the structure of every planner answer and retries invalid or
-failed requests. Every request is cached by its exact content, so an
-interrupted long recording resumes where it stopped. Places where the edit may
-still repeat itself after the review are reported as warnings. If MFA is
-unavailable, cuts use Whisper timing refined by the waveform; if the breath
-detector fails, pauses are cleaned by waveform energy alone. Both cases are
-recorded in the run manifest.
+Every kept phrase maps back to exact word occurrences in the recording, and
+each project keeps its run's transcript, plan, alignment and final boundary
+plan, so you can always see why a cut was made.
 
 ## Current limitations
 
-- macOS on Apple Silicon is the supported platform today.
-- VoiceCut is designed for one main narrator, not overlapping conversation or
-  multi-camera visual editing.
-- English and Russian are supported; language selection is explicit.
-- Video is edited from speech timing only. VoiceCut does not understand visual
-  continuity, slides, gestures, or camera changes.
-- LLM planning is probabilistic and may occasionally select the wrong take.
-- A cut inside tightly connected speech (no pause between a kept and a
-  removed word) relies on MFA's phone boundary and can occasionally sound
-  abrupt. Review every final export before publication.
-- Local Qwen/Gemma planning remains experimental.
-- The first run downloads several model assets and can take time.
+- **Systems:** macOS 14+ on Apple Silicon (no Intel Macs), Windows 10/11 on
+  x64 and Linux on x86_64 with glibc 2.35+. There are no ARM builds for
+  Windows or Linux.
+- **Speed without a GPU:** off Apple Silicon and NVIDIA, Whisper runs on the
+  CPU at roughly the length of the recording.
+- **Recordings:** one main narrator, in English or Russian; choose the
+  language in the toolbar. Conversations with overlapping speakers are not
+  supported.
+- **Cloud planner:** the recommended planners need an internet connection and
+  an API key from their provider. The local MLX planners are experimental
+  and run only on Apple Silicon.
+- **Judgement:** the planner is a language model and can occasionally choose
+  the wrong take, and a cut inside tightly connected speech (no pause
+  between a kept and a removed word) can sound abrupt. Listen to the edit
+  before you publish it.
+- **Video:** edited from speech only. VoiceCut does not consider slides,
+  gestures, camera changes or visual continuity.
+- **Breaths:** breath removal is on by default only for English; the breath
+  detector has not been validated for Russian.
+- **Unsigned installers:** the first launch needs the steps above, and on
+  macOS the "VoiceCut would like to access files in…" questions come back
+  once after each update until builds are signed with a Developer ID.
+- **First launch** downloads about 1.5 GB, and the first Voice Cut about
+  2 GB more.
 
-## Documentation
+## Command line and development
+
+The same engine runs without the app: `voicecut recording.wav` edits a
+recording in the terminal, and `voicecut-editor` opens the editor in a
+browser. Both come from a source checkout (macOS on Apple Silicon). See
+**[docs/development.md](docs/development.md)** for building from source, the
+command line, the browser editor, tests and building the desktop app.
 
 | Guide | Contents |
 | --- | --- |
-| [Installation](docs/installation.md) | Supported setup, first-run downloads, and manual installation |
-| [Editor](docs/editor.md) | Browser editor: import, Voice Cut, clips and pauses, shortcuts, settings, export |
-| [Mac app](desktop/README.md) | VoiceCut for macOS: first-run setup, `.vc` documents, building, signing and notarization |
-| [Examples](examples/README.md) | Exact commands, media files, and reproduction workflow |
-| [Architecture](docs/architecture.md) | Production call graph, safety invariants, and manifests |
-| [Configuration](docs/configuration.md) | Planner backends, languages, caching, and CLI options |
-| [Troubleshooting](docs/troubleshooting.md) | Installation, model, long-recording, and media errors |
-| [Contributing](CONTRIBUTING.md) | Development environment, tests, and contribution scope |
-| [Credits](docs/credits.md) | Upstream projects, models, and licenses |
-
-## Development
-
-```bash
-.venv/bin/python -m pytest -q
-ruff check src tests
-ruff format --check src tests
-```
-
-Frontend checks for the editor:
-
-```bash
-cd frontend
-npm run typecheck
-npm test
-npm run build
-```
-
-VoiceCut's tests use small fixtures and mocked external model responses; they
-do not download MFA or Respiro-en during normal CI-style runs.
+| [Development](docs/development.md) | Source checkout, command line, browser editor, tests, desktop builds |
+| [Editor](docs/editor.md) | Clips, pauses, shortcuts, settings and export |
+| [Desktop app](desktop/README.md) | How the app installs its engine, documents, updates, signing and releases |
+| [Examples](examples/README.md) | The example recordings and how to reproduce them |
+| [Architecture](docs/architecture.md) | Production call graph, safety invariants and manifests |
+| [Configuration](docs/configuration.md) | Planner backends, languages, caching and command-line options |
+| [Troubleshooting](docs/troubleshooting.md) | Model, long-recording and media errors |
+| [Contributing](CONTRIBUTING.md) | Development environment, tests and contribution scope |
+| [Credits](docs/credits.md) | Upstream projects, models and licenses |
 
 ## Built with
 
 VoiceCut builds on
 [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper),
+[faster-whisper](https://github.com/SYSTRAN/faster-whisper),
 [WhisperX](https://github.com/m-bain/whisperX),
 [Montreal Forced Aligner](https://montreal-forced-aligner.readthedocs.io/),
 [Respiro-en](https://github.com/ydqmkkx/Respiro-en),
-[Silero VAD](https://github.com/snakers4/silero-vad), and
-[FFmpeg](https://ffmpeg.org/), together with the selected planner provider.
-See [credits and licensing details](docs/credits.md).
+[Silero VAD](https://github.com/snakers4/silero-vad),
+[FFmpeg](https://ffmpeg.org/) and [Tauri](https://tauri.app/), together with
+the planner provider you choose. See
+[credits and licensing details](docs/credits.md).
 
 ## Star history
 
@@ -276,5 +328,6 @@ See [credits and licensing details](docs/credits.md).
 
 ## License
 
-VoiceCut is released under the [MIT License](LICENSE). Third-party models and
-components retain their own licenses; see [docs/credits.md](docs/credits.md).
+VoiceCut is free and open source under the [MIT License](LICENSE).
+Third-party models and components keep their own licenses; see
+[docs/credits.md](docs/credits.md).

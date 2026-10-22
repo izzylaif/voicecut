@@ -92,6 +92,18 @@ acceptable-use terms; users and distributors are responsible for reviewing
 them. OpenAI Whisper's code and released model weights are distributed under
 its [MIT license](https://github.com/openai/whisper/blob/main/LICENSE).
 
+### faster-whisper
+
+Off Apple Silicon (Linux and Windows) VoiceCut transcribes with
+[faster-whisper](https://github.com/SYSTRAN/faster-whisper), which runs the
+same Whisper large-v3-turbo model through
+[CTranslate2](https://github.com/OpenNMT/CTranslate2): in float16 on an NVIDIA
+GPU, in float32 on the CPU.
+
+- Pinned packages: faster-whisper 1.2.1 and CTranslate2 4.8.1
+- Licenses: [MIT](https://github.com/SYSTRAN/faster-whisper/blob/master/LICENSE)
+  and [MIT](https://github.com/OpenNMT/CTranslate2/blob/master/LICENSE)
+
 ### CrisperWhisper
 
 [CrisperWhisper](https://github.com/nyrahealth/CrisperWhisper) 2.0 is an
@@ -168,6 +180,10 @@ own code. The frontend uses [React](https://react.dev/) (MIT),
 [Lucide](https://lucide.dev/) icons (ISC). The Python backend uses
 [FastAPI](https://fastapi.tiangolo.com/) (MIT) and
 [Uvicorn](https://www.uvicorn.org/) (BSD 3-Clause).
+
+The desktop app is built with [Tauri](https://tauri.app/) 2 (MIT or
+Apache-2.0) and its dialog and updater plugins, and shows the editor in the
+system's web view (WKWebView, WebView2 or WebKitGTK).
 
 ## Additional libraries and services
 
