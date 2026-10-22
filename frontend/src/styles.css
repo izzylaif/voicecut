@@ -949,6 +949,8 @@ select:focus {
 
 .modal {
   width: min(560px, calc(100% - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1166,8 +1168,9 @@ select:focus {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 320px;
+  max-height: min(320px, calc(100vh - 220px));
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .model-list button {
@@ -1218,6 +1221,64 @@ select:focus {
   margin: 0;
   font-size: 11px;
   color: var(--muted);
+}
+
+.model-group {
+  padding: 8px 8px 2px;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.local-model-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.model-list .local-model-row > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-list .local-model-row > .icon-button {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.pull-bar {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.pull-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+.pull-bar.indeterminate > span {
+  animation: pull-slide 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes pull-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(240%);
+  }
 }
 
 /* ---- settings dialog ------------------------------------------------------ */
@@ -1331,6 +1392,39 @@ select:focus {
 
 .ok-text {
   color: var(--accent);
+}
+
+.local-models {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: grid;
+  gap: 6px;
+  max-height: min(360px, 45vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.local-model {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.local-model-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.local-model-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 6px;
 }
 
 .context-menu {

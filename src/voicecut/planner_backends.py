@@ -1,36 +1,41 @@
 #!/usr/bin/env python3
 """Provider-neutral structured-JSON backends for VoiceCut planners.
 
-The semantic narration planner and the pause classifier deliberately share
-this small transport layer.  Validation, grounding, and the one-retry policy
-remain in those planners; a backend has only one responsibility: return the
-model's raw textual JSON response.
+The take planner talks to every provider through this small transport
+layer.  Validation, grounding and the retry policy remain in the planner; a
+backend has only one responsibility: return the model's raw textual JSON
+response.  Cloud planners are Gemini, OpenAI and DeepSeek; planners on this
+computer run through Ollama (:mod:`voicecut.ollama`) on every system.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
-import select
-import subprocess
+import sys
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
+from . import local_models, ollama
+
 DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
 DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
-DEFAULT_QWEN_MODEL = "mlx-community/Qwen3.5-9B-4bit"
-DEFAULT_GEMMA_MODEL = "mlx-community/gemma-3-12b-it-4bit"
+DEFAULT_OLLAMA_MODEL = local_models.default_model()
 DEFAULT_MAX_OUTPUT_TOKENS = 8192
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-DEFAULT_LOCAL_PYTHON = Path(__file__).resolve().parents[2] / ".venv-mlx/bin/python"
 
-PLANNER_BACKENDS = ("gemini", "openai", "deepseek", "local", "qwen", "gemma")
+PLANNER_BACKENDS = ("gemini", "openai", "deepseek", "ollama")
+# Earlier local planners (MLX-LM on Apple Silicon); settings that name one
+# now mean Ollama.
+LEGACY_LOCAL_BACKENDS = frozenset({"local", "qwen", "gemma"})
 API_KEY_ENV_BY_BACKEND = {
     "gemini": "GEMINI_API_KEY",
     "openai": "OPENAI_API_KEY",
@@ -40,10 +45,15 @@ DEFAULT_MODEL_BY_BACKEND = {
     "gemini": DEFAULT_GEMINI_MODEL,
     "openai": DEFAULT_OPENAI_MODEL,
     "deepseek": DEFAULT_DEEPSEEK_MODEL,
-    "local": DEFAULT_QWEN_MODEL,
-    "qwen": DEFAULT_QWEN_MODEL,
-    "gemma": DEFAULT_GEMMA_MODEL,
+    "ollama": DEFAULT_OLLAMA_MODEL,
 }
+THINK_CHOICES = ("auto", "on", "off")
+# A prompt's length in tokens, estimated from its characters on the safe
+# side: word IDs ("[123]word") make the window prompts dense.
+CHARACTERS_PER_TOKEN = 2.5
+# The least room a local answer gets, reasoning included.
+MIN_OUTPUT_TOKENS = 8192
+PROGRESS_SECONDS = 30.0
 
 NARRATION_SYSTEM_INSTRUCTION = (
     "You are a precise source-grounded narration editor. "
@@ -58,6 +68,10 @@ class PlannerRuntimeConfiguration:
     provider: str
     base_url: str | None
     api_key_env: str | None
+
+
+class PermanentPlannerError(RuntimeError):
+    """A planner failure that retrying the same request cannot fix."""
 
 
 @dataclass(frozen=True)
@@ -203,9 +217,10 @@ def preflight_planner_backend(
     env_file: Path,
     base_url: str | None,
     api_key_env: str | None,
-    local_python: Path,
+    model: str | None = None,
 ) -> PlannerRuntimeConfiguration:
-    """Fail before media work when planner credentials or SDKs are unavailable."""
+    """Fail before media work when planner credentials or SDKs are unavailable,
+    or a local model is not downloaded."""
 
     effective_base_url = resolve_planner_base_url(
         provider=provider,
@@ -242,13 +257,40 @@ def preflight_planner_backend(
             api_key_env=selected_key_env,
         )
 
-    if not local_python.is_file():
-        raise FileNotFoundError(f"local model Python does not exist: {local_python}")
+    check_ollama_model(model or default_model_for_backend(provider))
     return PlannerRuntimeConfiguration(
         provider=provider,
         base_url=None,
         api_key_env=None,
     )
+
+
+def check_ollama_model(model: str) -> None:
+    """Raise with what to do when Ollama or ``model`` is missing.
+
+    A stopped Ollama passes when one is installed: the planner starts it.
+    """
+
+    client = ollama.OllamaClient(ollama.configured_url())
+    if client.version() is None:
+        if ollama.OllamaServer.installed() is None:
+            raise RuntimeError(
+                "local models need Ollama: install it from "
+                f"{ollama.INSTALL_PAGE}, or choose a cloud planner"
+            )
+        return
+    try:
+        names = {
+            ollama.canonical_name(str(entry.get("model") or entry.get("name")))
+            for entry in client.models()
+        }
+    except ollama.OllamaError as error:
+        raise RuntimeError(str(error)) from None
+    if ollama.canonical_name(model) not in names:
+        raise RuntimeError(
+            f"the local model {model} is not downloaded: download it from the "
+            f"planner's model list in the editor, or run `ollama pull {model}`"
+        )
 
 
 def _schema_prompt(prompt: str, response_schema: dict[str, Any]) -> str:
@@ -494,59 +536,85 @@ class OpenAICompatiblePlannerBackend:
             close()
 
 
-class LocalMLXPlannerBackend:
-    """Long-lived local MLX-LM worker for Hugging Face model repositories."""
+class OllamaPlannerBackend:
+    """A model that Ollama serves on this computer.
 
-    backend_name = "local"
+    The answer is constrained to the response schema (Ollama's structured
+    outputs), and a reasoning model may reason first: its reasoning arrives
+    apart from the answer.  Should the reasoning fill the whole output budget,
+    the request is asked again without it, so an answer still comes.  Each
+    request gets the context it needs (at least :data:`ollama.CONTEXT_TOKENS`)
+    and an explicit output budget, because Ollama otherwise keeps generating
+    past a full context.
+    """
+
+    backend_name = "ollama"
 
     def __init__(
         self,
         *,
-        python: Path,
-        model: str = DEFAULT_QWEN_MODEL,
+        model: str = DEFAULT_OLLAMA_MODEL,
+        think: bool | None = None,
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
-        local_files_only: bool = False,
-        enable_thinking: bool = False,
         system_instruction: str = NARRATION_SYSTEM_INSTRUCTION,
-        timeout_seconds: float = 600.0,
+        context_tokens: int = ollama.CONTEXT_TOKENS,
+        client: ollama.OllamaClient | None = None,
     ) -> None:
         if max_output_tokens <= 0:
             raise ValueError("max_output_tokens must be positive")
-        if timeout_seconds <= 0:
-            raise ValueError("timeout_seconds must be positive")
         self.model = model
+        self.think = think
+        self.max_output_tokens = max_output_tokens
         self.system_instruction = system_instruction
-        self.timeout_seconds = timeout_seconds
-        self.command = [
-            str(python),
-            "-m",
-            "voicecut.local_llm_worker",
-            "--model",
-            model,
-            "--max-tokens",
-            str(max_output_tokens),
-        ]
-        if local_files_only:
-            self.command.append("--local-files-only")
-        if enable_thinking:
-            self.command.append("--enable-thinking")
-        self._process: subprocess.Popen[str] | None = None
-        self._request_count = 0
+        self.context_tokens = context_tokens
+        self._client = client
+        self._server: ollama.OllamaServer | None = None
+        self._model_info: tuple[set[str], int | None] | None = None
 
-    def _start(self) -> subprocess.Popen[str]:
-        if self._process is None:
-            self._process = subprocess.Popen(
-                self.command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                text=True,
-                bufsize=1,
+    def _connect(self) -> ollama.OllamaClient:
+        if self._client is None:
+            url = ollama.configured_url()
+            if ollama.OllamaClient(url).version() is None:
+                # A command-line run without a running Ollama starts one.
+                self._server = ollama.OllamaServer()
+                url = self._server.ensure()
+            self._client = ollama.OllamaClient(url)
+        return self._client
+
+    def _info(self) -> tuple[set[str], int | None]:
+        """The model's capabilities and longest context."""
+
+        if self._model_info is None:
+            try:
+                shown = self._connect().show(self.model)
+            except ollama.OllamaError as error:
+                raise _planner_error(error, self.model) from None
+            capabilities = {str(value) for value in shown.get("capabilities") or []}
+            context = next(
+                (
+                    int(value)
+                    for key, value in (shown.get("model_info") or {}).items()
+                    if key.endswith(".context_length") and isinstance(value, int)
+                ),
+                None,
             )
-        if self._process.poll() is not None:
-            raise RuntimeError(
-                f"local model worker exited with code {self._process.returncode}"
-            )
-        return self._process
+            self._model_info = (capabilities, context)
+        return self._model_info
+
+    def options(self, prompt: str) -> dict[str, int]:
+        """The context and output budget of one request."""
+
+        _, model_context = self._info()
+        estimate = math.ceil(
+            len(self.system_instruction + prompt) / CHARACTERS_PER_TOKEN
+        )
+        context = self.context_tokens
+        if estimate + MIN_OUTPUT_TOKENS > context:
+            context = math.ceil((estimate + MIN_OUTPUT_TOKENS) / 8192) * 8192
+        if model_context:
+            context = min(context, model_context)
+        output = min(self.max_output_tokens, max(context - estimate, 1024))
+        return {"num_ctx": context, "num_predict": output}
 
     def generate(
         self,
@@ -555,80 +623,92 @@ class LocalMLXPlannerBackend:
         response_schema: dict[str, Any],
         request_id: str,
     ) -> str:
-        process = self._start()
-        if process.stdin is None or process.stdout is None:
-            raise RuntimeError("local model worker pipes are unavailable")
-        self._request_count += 1
-        process.stdin.write(
-            json.dumps(
-                {
-                    "prompt": _schema_prompt(prompt, response_schema),
-                    "request_id": f"{request_id}:{self._request_count}",
-                    "system_instruction": self.system_instruction,
-                },
-                ensure_ascii=False,
+        capabilities, _ = self._info()
+        # A model without reasoning refuses the parameter.
+        think = None
+        if "thinking" in capabilities:
+            think = True if self.think is None else self.think
+        options = self.options(prompt)
+        result = self._chat(prompt, response_schema, think, options, request_id)
+        if think and result.done_reason == "length" and not result.content.strip():
+            print(
+                f"{request_id}: the reasoning filled the output budget; asking "
+                "again without reasoning",
+                file=sys.stderr,
+                flush=True,
             )
-            + "\n"
-        )
-        process.stdin.flush()
-        ready, _, _ = select.select(
-            [process.stdout],
-            [],
-            [],
-            self.timeout_seconds,
-        )
-        if not ready:
-            process.kill()
-            process.wait()
-            self._process = None
-            raise TimeoutError("local semantic planning timed out")
-        line = process.stdout.readline()
-        if not line:
-            raise RuntimeError("local model worker ended before returning a response")
-        response = json.loads(line)
-        if not isinstance(response, dict) or response.get("ok") is not True:
-            detail = (
-                response.get("error")
-                if isinstance(response, dict)
-                else "invalid worker response"
+            result = self._chat(prompt, response_schema, False, options, request_id)
+        if result.done_reason == "length":
+            print(
+                f"{request_id}: the answer reached the output budget "
+                f"({options['num_predict']} tokens) and may be cut off",
+                file=sys.stderr,
+                flush=True,
             )
-            raise RuntimeError(f"local model generation failed: {detail}")
-        output = response.get("output")
-        if not isinstance(output, str) or not output.strip():
-            raise RuntimeError("local model returned no textual JSON output")
-        return output
+        return result.content
+
+    def _chat(
+        self,
+        prompt: str,
+        response_schema: dict[str, Any],
+        think: bool | None,
+        options: dict[str, int],
+        request_id: str,
+    ) -> ollama.ChatResult:
+        started = time.monotonic()
+        reported = [started]
+
+        def progress(phase: str, tokens: int) -> None:
+            now = time.monotonic()
+            if now - reported[0] >= PROGRESS_SECONDS:
+                reported[0] = now
+                print(
+                    f"{request_id}: {self.model} {phase}, {tokens} tokens in "
+                    f"{now - started:.0f}s",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+        try:
+            return self._connect().chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_instruction},
+                    {"role": "user", "content": prompt},
+                ],
+                format=response_schema,
+                think=think,
+                options=options,
+                on_progress=progress,
+            )
+        except ollama.OllamaError as error:
+            if error.status is None:
+                # Ollama is gone: the next try finds or starts one again.
+                self._client = None
+            raise _planner_error(error, self.model) from None
 
     def close(self) -> None:
-        process = self._process
-        self._process = None
-        if process is None:
-            return
-        if process.stdin is not None:
-            try:
-                process.stdin.close()
-            except OSError:
-                pass
-        try:
-            process.wait(timeout=5.0)
-        except subprocess.TimeoutExpired:
-            process.terminate()
-            try:
-                process.wait(timeout=3.0)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+        server, self._server = self._server, None
+        if server is not None:
+            server.stop()
 
 
-class QwenPlannerBackend(LocalMLXPlannerBackend):
-    """Backward-compatible local-Qwen adapter."""
+def _planner_error(error: ollama.OllamaError, model: str) -> Exception:
+    """An Ollama error, as permanent when asking again cannot help."""
 
-    backend_name = "qwen"
-
-
-class GemmaPlannerBackend(LocalMLXPlannerBackend):
-    """Convenience adapter selecting the default local Gemma model."""
-
-    backend_name = "gemma"
+    message = str(error)
+    if isinstance(error, ollama.OllamaUnavailable):
+        return PermanentPlannerError(message)
+    if error.status == 404 or "not found" in message.casefold():
+        return PermanentPlannerError(
+            f"the local model {model} is not downloaded: download it from the "
+            f"planner's model list in the editor, or run `ollama pull {model}`"
+        )
+    if (error.status is not None and 400 <= error.status < 500) or (
+        "memory" in message.casefold()
+    ):
+        return PermanentPlannerError(f"Ollama cannot run {model}: {message}")
+    return error
 
 
 def default_model_for_backend(provider: str) -> str:
@@ -647,8 +727,7 @@ def create_planner_backend(
     system_instruction: str = NARRATION_SYSTEM_INSTRUCTION,
     base_url: str | None = None,
     api_key_env: str | None = None,
-    local_python: Path = DEFAULT_LOCAL_PYTHON,
-    local_files_only: bool = False,
+    think: bool | None = None,
     gemini_temperature: float | None = 0.0,
 ) -> PlannerBackend:
     """Create one planner transport from provider-neutral configuration."""
@@ -682,27 +761,14 @@ def create_planner_backend(
             base_url=selected_base_url,
             strict_json_schema=provider == "openai",
         )
-    backend_type: type[LocalMLXPlannerBackend]
-    if provider == "qwen":
-        backend_type = QwenPlannerBackend
-    elif provider == "gemma":
-        backend_type = GemmaPlannerBackend
-    elif provider == "local":
-        backend_type = LocalMLXPlannerBackend
-    else:
-        raise ValueError(f"unsupported planner backend: {provider}")
-    if not local_python.is_file():
-        raise FileNotFoundError(f"local model Python does not exist: {local_python}")
-    return backend_type(
-        python=local_python,
-        model=selected_model,
-        max_output_tokens=max_output_tokens,
-        local_files_only=local_files_only,
-        enable_thinking=(
-            provider in {"qwen", "local"} and "qwen" in selected_model.casefold()
-        ),
-        system_instruction=system_instruction,
-    )
+    if provider == "ollama":
+        return OllamaPlannerBackend(
+            model=selected_model,
+            think=think,
+            max_output_tokens=max_output_tokens,
+            system_instruction=system_instruction,
+        )
+    raise ValueError(f"unsupported planner backend: {provider}")
 
 
 def add_planner_backend_arguments(
@@ -717,13 +783,13 @@ def add_planner_backend_arguments(
         choices=PLANNER_BACKENDS,
         default=default_backend,
         help=(
-            "LLM transport. Use local with any MLX-LM-compatible Hugging Face "
-            "model; qwen and gemma are local convenience aliases."
+            "LLM transport: a cloud provider, or ollama for a model that "
+            "runs on this computer."
         ),
     )
     parser.add_argument(
         "--planner-model",
-        help="Provider model name or local Hugging Face model/path.",
+        help="Provider model name, or an Ollama model (e.g. qwen3.6:27b).",
     )
     parser.add_argument(
         "--planner-base-url",
@@ -740,9 +806,14 @@ def add_planner_backend_arguments(
         ),
     )
     parser.add_argument(
-        "--planner-python",
-        type=Path,
-        default=DEFAULT_LOCAL_PYTHON,
-        help="Python executable from the local MLX environment.",
+        "--planner-think",
+        choices=THINK_CHOICES,
+        default="auto",
+        help=("Let an Ollama model reason before it answers (auto: when it can)."),
     )
-    parser.add_argument("--local-files-only", action="store_true")
+
+
+def think_setting(value: str) -> bool | None:
+    """``--planner-think`` as the backend's ``think`` argument."""
+
+    return {"on": True, "off": False}.get(value)

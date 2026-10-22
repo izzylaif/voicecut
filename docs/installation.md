@@ -78,12 +78,12 @@ The separation is intentional:
 | Runtime | Purpose |
 | --- | --- |
 | `.venv` | CLI, audio analysis, rendering, publication, and cloud SDKs |
-| `.venv-mlx` | MLX Whisper (and optional CrisperWhisper) transcription and optional local MLX language models |
+| `.venv-mlx` | MLX Whisper (and optional CrisperWhisper) transcription |
 | `.mfa-env` | Montreal Forced Aligner 3.4.1 and its Conda/Kaldi dependencies |
 
-Current `mlx-lm` and the `.venv` audio stack (WhisperX, pyannote) require
-conflicting Transformers and Hugging Face Hub versions. Keeping MLX in a helper environment
-prevents one component from destabilizing the other. MFA is isolated because
+The `.venv` audio stack (WhisperX, pyannote) pins Transformers and Hugging
+Face Hub versions that MLX packages have moved past. Keeping MLX in a helper
+environment prevents one component from destabilizing the other. MFA is isolated because
 its supported distribution uses the Conda/Kaldi ecosystem; VoiceCut invokes
 the documented MFA CLI and does not import undocumented MFA Python internals.
 
@@ -138,8 +138,9 @@ downloaded when a relevant feature first runs:
   `MontrealCorpusTools/russian_mfa` bundle;
 - English hidden-retry recovery downloads WhisperX's English CTC model;
 - Respiro-en downloads its pinned breath-detection checkpoint;
-- a local semantic planner downloads its selected Hugging Face model unless a
-  local path or `--local-files-only` is used.
+- a local planner (`--planner-backend ollama`) uses a model you downloaded
+  into [Ollama](https://ollama.com) with `ollama pull`; the installer does not
+  install Ollama (the desktop app does).
 
 MFA models are stored below `.voicecut-cache/runtime/mfa` by default. The
 pinned Respiro-en files are stored below

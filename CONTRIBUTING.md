@@ -13,7 +13,7 @@ normal installer creates three repository-local runtimes without modifying
 your shell initialization:
 
 - `.venv` for the application, audio stack, and cloud planner SDKs;
-- `.venv-mlx` for MLX Whisper and optional local planners;
+- `.venv-mlx` for MLX Whisper;
 - `.mfa-env` for the pinned MFA 3.4.1 command-line runtime.
 
 Install the project and then add the development dependencies:

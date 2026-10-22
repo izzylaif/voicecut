@@ -207,10 +207,43 @@ export interface ModelInfo {
   detail: string | null;
   alias: boolean;
   default: boolean;
+  /** Local (Ollama) models only: */
+  downloaded?: boolean;
+  size_gb?: number | null;
+  /** How Ollama runs it: MLX (Apple Silicon) or GGUF (llama.cpp). */
+  engine?: string | null;
+  recommended?: boolean;
+  /** Whether the model can reason before answering (null: not known yet). */
+  can_think?: boolean | null;
+  /** Whether it reasons in a Voice Cut (a setting of the model). */
+  think?: boolean;
+  pull?: PullState | null;
+}
+
+/** A model download in progress (or one that failed). */
+export interface PullState {
+  status: string;
+  completed: number;
+  total: number;
+  fraction: number | null;
+  error: string | null;
+  done: boolean;
+}
+
+/** Where the editor's Ollama runs. */
+export interface OllamaStatus {
+  available: boolean;
+  url: string | null;
+  version: string | null;
+  /** `voicecut`: the copy VoiceCut installed and started; `system`: the user's. */
+  source: 'system' | 'voicecut' | null;
+  message: string | null;
 }
 
 export interface ModelList {
   models: ModelInfo[];
   default: string;
   error: { kind: 'missing_key' | 'invalid_key' | 'network' | 'unavailable'; message: string } | null;
+  /** Local models only. */
+  ollama?: OllamaStatus;
 }

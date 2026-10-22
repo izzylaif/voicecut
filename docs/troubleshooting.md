@@ -72,7 +72,7 @@ MLX and alignment interpreters automatically. Repair the complete layout with:
 source .venv/bin/activate
 ```
 
-If you intentionally override `--asr-python` or `--planner-python`, confirm that the selected interpreter contains the required
+If you intentionally override `--asr-python`, confirm that the selected interpreter contains the required
 package. Remove the override before diagnosing the standard installation.
 
 ## Unsupported machine or Python version
@@ -126,14 +126,19 @@ OpenAI overrides must implement the Responses API.
 Never embed a key in the URL. VoiceCut rejects credential-bearing URLs and
 redacts validated endpoints from subprocess error output.
 
-### Local planner does not load
+### Local planner does not start
 
-Confirm `.venv-mlx/bin/python` exists and the model fits available unified
-memory. If `--local-files-only` is set, the complete model must already exist in
-the Hugging Face cache or at the supplied local path.
+The `ollama` planner needs [Ollama](https://ollama.com/download): running
+(`ollama serve`, or the Ollama app) or installed, in which case VoiceCut
+starts it for the run. `OLLAMA_HOST` selects another server. The model must be
+downloaded first (`ollama pull gemma4:31b`, or Download in the editor's model
+list); the error names it. "requires more system memory" means the model does
+not fit: choose a smaller one. In the desktop app, Ollama's log is
+`logs/ollama.log` in the data directory.
 
-Local semantic editing is experimental. When diagnosing edit quality, first
-compare with a strong cloud planner in a separate work directory.
+A local run that seems stuck is usually reading a long prompt or reasoning:
+the log reports its progress every 30 seconds. When diagnosing edit quality,
+first compare with a strong cloud planner in a separate work directory.
 
 ## MFA runtime problems
 

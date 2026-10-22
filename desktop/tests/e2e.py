@@ -1,6 +1,6 @@
 """End-to-end smoke test of a VoiceCut test build (cargo feature `automation`).
 
-    python3 desktop/tests/e2e.py --app PATH [--recording WAV] [--full]
+    python3 desktop/tests/e2e.py --app PATH [--recording WAV] [--full] [--local MODEL]
 
 Starts the app (a binary, an AppImage, or an installed VoiceCut.exe) with an
 empty data directory whose path has a space in it, and through its
@@ -13,7 +13,10 @@ automation port:
 3. creates a project from the recording through File > New Project, checks
    the editor shows it, closes it and opens it again from its launcher file,
    once from inside the app and once by starting the app a second time;
-4. quits, and checks that the app and its engine exit.
+4. with --local MODEL: in that project, downloads MODEL through the editor's
+   local model list (from the Ollama setup installed, or the system's) and
+   runs Voice Cut with it;
+5. quits, and checks that the app and its engine exit.
 
 Prints what it saw as JSON.  On GitHub Actions a failure is also reported as
 an annotation with the tail of the app's logs.  Linux needs a display and a
@@ -40,6 +43,8 @@ ROOT = HERE.parent.parent
 WINDOWS = sys.platform == "win32"
 SETUP_TIMEOUT = 75 * 60
 PIPELINE_TIMEOUT = 60 * 60
+DOWNLOAD_TIMEOUT = 60 * 60
+LOCAL_VOICECUT_TIMEOUT = 60 * 60
 
 
 class Failure(Exception):
@@ -323,6 +328,108 @@ def check_documents(app: App, recording: Path, folder: Path, report: dict) -> No
     report["started_with_launcher"] = True
 
 
+def fetch_json(
+    app: App, label: str, path: str, body: Any = None, method: str = "POST"
+) -> Any:
+    """Call the editor's API from its page, as the editor itself does."""
+
+    options = {"method": method, "body": json.dumps(body)} if body is not None else {}
+    return app.eval(
+        f"""
+        const response = await fetch({json.dumps(path)}, {{
+          headers: {{ 'Content-Type': 'application/json' }}, ...{json.dumps(options)}
+        }});
+        const text = await response.text();
+        return {{ status: response.status, body: text ? JSON.parse(text) : null }};
+        """,
+        label=label,
+    )
+
+
+def check_local_planner(app: App, model: str, report: dict[str, Any]) -> None:
+    """Download ``model`` in the editor and Voice Cut the project with it."""
+
+    window = next(iter(app.documents()), None)
+    if window is None:
+        raise Failure("no project window to run the local planner in")
+    label = window["label"]
+    project = app.eval(
+        "return new URLSearchParams(location.search).get('project');", label=label
+    )
+    listed = fetch_json(app, label, "/api/planners/ollama/models")["body"]
+    status = listed.get("ollama") or {}
+    if not status.get("available"):
+        raise Failure(f"Ollama is not available: {listed.get('error')}")
+    report["ollama"] = {key: status.get(key) for key in ("source", "version", "url")}
+
+    def entry() -> dict[str, Any] | None:
+        models = fetch_json(app, label, "/api/planners/ollama/models")["body"]["models"]
+        return next((m for m in models if m["id"] == model), None)
+
+    started = time.monotonic()
+    pulled = fetch_json(app, label, "/api/local-models/pull", {"model": model})
+    if pulled["status"] != 200:
+        raise Failure(f"the download did not start: {pulled}")
+    fractions: list[float] = []
+
+    def downloaded() -> bool:
+        current = entry()
+        if current is None:
+            return False
+        pull = current.get("pull") or {}
+        if pull.get("error"):
+            raise Failure(f"the download failed: {pull['error']}")
+        if pull.get("fraction") is not None:
+            fractions.append(pull["fraction"])
+        return bool(current.get("downloaded"))
+
+    wait_for(f"{model} to download", downloaded, DOWNLOAD_TIMEOUT, 1)
+    report["local_download"] = {
+        "model": model,
+        "seconds": round(time.monotonic() - started),
+        "progress_seen": sorted({round(f, 1) for f in fractions}),
+    }
+
+    settings = {"planner_backend": "ollama", "planner_model": model, "language": "en"}
+    saved = fetch_json(
+        app, label, f"/api/projects/{project}/settings", settings, method="PUT"
+    )
+    if saved["status"] != 200:
+        raise Failure(f"cannot choose the local planner: {saved}")
+    started = time.monotonic()
+    run = fetch_json(app, label, f"/api/projects/{project}/voicecut", settings)
+    if run["status"] != 200:
+        raise Failure(f"Voice Cut did not start: {run}")
+
+    def finished() -> dict[str, Any] | None:
+        state = fetch_json(app, label, f"/api/projects/{project}")["body"]
+        return state if state["run"]["status"] != "running" else None
+
+    state = wait_for(
+        "Voice Cut with the local planner", finished, LOCAL_VOICECUT_TIMEOUT, 5
+    )
+    run_state = state["run"]
+    if run_state["status"] != "complete":
+        raise Failure(
+            f"Voice Cut with {model} ended {run_state['status']}: {run_state['error']}"
+        )
+    plan_path = Path(run_state["work_dir"]) / "04_semantic_plan" / "take_plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    report["local_voicecut"] = {
+        "minutes": round((time.monotonic() - started) / 60, 1),
+        "backend": plan["backend"],
+        "model": plan["model"],
+        "items": len(plan["items"]),
+        "repairs": sum(len(window["warnings"]) for window in plan["windows"]),
+        "proposal": state["proposal"] is not None,
+        "narration": plan["reconstructed_narration"][:200],
+    }
+    if plan["backend"] != "ollama" or plan["model"] != model or not plan["items"]:
+        raise Failure(
+            f"the plan is not the local planner's: {report['local_voicecut']}"
+        )
+
+
 def quit_app(app: App, report: dict[str, Any]) -> None:
     engine = report.get("engine")
     app.call("/quit")
@@ -383,6 +490,9 @@ def main() -> int:
     )
     parser.add_argument("--work", type=Path, default=None)
     parser.add_argument("--full", action="store_true")
+    parser.add_argument(
+        "--local", metavar="MODEL", help="also Voice Cut with this Ollama model"
+    )
     args = parser.parse_args()
 
     work = args.work or Path(tempfile.mkdtemp(prefix="voicecut-e2e-"))
@@ -406,6 +516,9 @@ def main() -> int:
         report["pipeline"] = run_pipeline(data, recording, work / "pipeline", full)
         step = "documents"
         check_documents(app, recording, projects, report)
+        if args.local:
+            step = "local planner"
+            check_local_planner(app, args.local, report)
         step = "quit"
         quit_app(app, report)
         report["ok"] = True
@@ -424,6 +537,7 @@ def main() -> int:
             ("app output", app.log),
             ("setup.log", logs / "setup.log"),
             ("engine.log", logs / "engine.log"),
+            ("ollama.log", logs / "ollama.log"),
         ):
             text = tail(path)
             if text:

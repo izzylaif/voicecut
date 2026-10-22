@@ -229,7 +229,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if not (args.no_browser or args.dev or args.desktop):
         open_browser_when_ready(base_url, page_url)
     if args.parent_pid is not None:
-        exit_with_parent(args.parent_pid, app.state.service.stop_jobs)
+        exit_with_parent(args.parent_pid, app.state.service.shutdown)
     uvicorn.run(
         app,
         host=args.host,

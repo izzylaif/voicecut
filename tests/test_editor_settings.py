@@ -208,26 +208,33 @@ def test_listing_failures_explain_themselves(
 def test_missing_key_and_local_models(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from voicecut import ollama
+    from voicecut.editor.local import LocalModels
+
     catalog = settings.ModelCatalog(tmp_path / "missing.env")
     assert catalog.models("deepseek")["error"]["kind"] == "missing_key"
-    hub = tmp_path / "hub"
-    for name in (
-        "models--mlx-community--Llama-4-8B-4bit",
-        "models--mlx-community--whisper-large-v3-turbo",
-    ):
-        (hub / name).mkdir(parents=True)
-    monkeypatch.setenv("HF_HUB_CACHE", str(hub))
-    python = tmp_path / "python"
-    python.write_text("", encoding="utf-8")
-    monkeypatch.setattr(settings, "DEFAULT_LOCAL_PYTHON", python)
-    local = catalog.models("local")
-    ids = [model["id"] for model in local["models"]]
-    assert "mlx-community/Llama-4-8B-4bit" in ids and not any(
-        "whisper" in model for model in ids
+    assert catalog.models("ollama")["error"]["kind"] == "unavailable"
+    with pytest.raises(settings.SettingsError):
+        catalog.models("local")  # the MLX-LM planner is gone
+    monkeypatch.setenv("OLLAMA_HOST", "127.0.0.1:9")
+    monkeypatch.delenv("VOICECUT_OLLAMA", raising=False)
+    monkeypatch.setattr(ollama, "system_binary", lambda: None)
+    local = LocalModels(tmp_path)
+    catalog = settings.ModelCatalog(tmp_path / "missing.env", local=local)
+    listed = catalog.models("ollama")
+    # Without Ollama the recommendations still show, with what to install.
+    assert listed["error"]["kind"] == "unavailable"
+    assert "ollama.com/download" in listed["error"]["message"]
+    assert listed["models"][0]["default"] is True
+    assert not any(model["downloaded"] for model in listed["models"])
+    entry = next(p for p in settings.planners(tmp_path / "missing.env", local))
+    assert entry["id"] == "gemini"
+    ollama_entry = next(
+        p
+        for p in settings.planners(tmp_path / "missing.env", local)
+        if p["id"] == "ollama"
     )
-    assert local["models"][0]["default"] is True
-    monkeypatch.setattr(settings, "DEFAULT_LOCAL_PYTHON", tmp_path / "missing-python")
-    assert catalog.models("local")["error"]["kind"] == "unavailable"
+    assert ollama_entry["available"] is False and ollama_entry["key"] is None
 
 
 @needs_ffmpeg
@@ -332,3 +339,76 @@ def test_settings_api_never_returns_keys_and_reaches_the_pipeline(
     assert (
         response.status_code == 400 and "DeepSeek API key" in response.json()["detail"]
     )
+
+
+@needs_ffmpeg
+def test_a_local_planner_runs_through_ollama(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from .ollama_support import FakeOllama
+
+    fake = FakeOllama()
+    monkeypatch.setenv("OLLAMA_HOST", fake.url)
+    spawned: list[tuple[Path, dict[str, str]]] = []
+
+    class Done:
+        stdout = io.StringIO('{"type": "error", "message": "stop"}\n')
+        stderr = io.StringIO("")
+        pid = 0
+
+        def wait(self) -> int:
+            return 1
+
+        def poll(self) -> int:
+            return 1
+
+    def spawn(request: Path, environment: dict[str, str] | None = None) -> Done:
+        spawned.append((request, environment or {}))
+        return Done()
+
+    monkeypatch.setattr(server, "spawn_worker", spawn)
+    try:
+        client = TestClient(
+            server.create_app(
+                projects_dir=tmp_path / "projects", env_file=tmp_path / ".env"
+            )
+        )
+        project = client.post(
+            "/api/projects/import",
+            json={"path": str(write_wav(tmp_path / "a.wav", source_audio()))},
+        ).json()
+        # A project saved with the MLX-LM planner of earlier versions.
+        legacy = client.put(
+            f"/api/projects/{project['id']}/settings",
+            json={"planner_backend": "qwen", "planner_model": "mlx-community/x"},
+        ).json()
+        assert legacy["planner_backend"] == "ollama"
+        assert legacy["planner_model"] is None
+
+        listed = client.get("/api/planners/ollama/models").json()
+        assert any(
+            m["id"] == "qwen3:0.6b" and m["downloaded"] for m in listed["models"]
+        )
+        refused = client.post(f"/api/projects/{project['id']}/voicecut", json={})
+        assert refused.status_code == 400 and "first" in refused.json()["detail"]
+
+        chosen = {"planner_backend": "ollama", "planner_model": "qwen3:0.6b"}
+        client.post(f"/api/projects/{project['id']}/voicecut", json=chosen)
+        request, environment = spawned[-1]
+        argv = json.loads(request.read_text(encoding="utf-8"))["argv"]
+        assert argv[argv.index("--planner-backend") + 1] == "ollama"
+        assert argv[argv.index("--planner-think") + 1] == "on"
+        assert environment == {"OLLAMA_HOST": fake.url}
+
+        client.post(
+            "/api/local-models/think", json={"model": "qwen3:0.6b", "think": False}
+        )
+        client.post(f"/api/projects/{project['id']}/voicecut", json=chosen)
+        argv = json.loads(spawned[-1][0].read_text(encoding="utf-8"))["argv"]
+        assert argv[argv.index("--planner-think") + 1] == "off"
+        assert (
+            client.post("/api/local-models/pull", json={"model": "a b"}).status_code
+            == 400
+        )
+    finally:
+        fake.close()

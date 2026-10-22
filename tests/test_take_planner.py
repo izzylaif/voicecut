@@ -52,33 +52,83 @@ def _response(keep: list[dict[str, Any]], **extra: Any) -> str:
     )
 
 
-def test_parse_rejects_ranges_outside_the_zone_or_overlapping() -> None:
+def _item(first: int, last: int, text: str = "x") -> dict[str, Any]:
+    return {"first_id": first, "last_id": last, "text": text, "break_after": "none"}
+
+
+def test_parse_repairs_geometry_that_loses_no_narration() -> None:
+    words = _words(_sentence("zero one two three four five six", 0.0))
+    lines = build_lines(words)
+    common = {
+        "previous_count": 0,
+        "final": True,
+        "zone_lines": lines,
+        "origin": "w",
+        "words": words,
+    }
+    # Out of order, overlapping, starting before and reaching past the zone.
+    decision = parse_window_response(
+        _response([_item(4, 9), _item(0, 2), _item(2, 3, "two three")]),
+        zone_first_id=1,
+        zone_last_id=5,
+        **common,
+    )
+    assert [(item.first_id, item.last_id) for item in decision.items] == [
+        (1, 2),
+        (3, 3),
+        (4, 5),
+    ]
+    # A changed item says what its words say.
+    assert [item.text for item in decision.items] == ["one two", "three", "four five"]
+    assert decision.warnings
+    # An item wholly inside one kept before it adds nothing.
+    decision = parse_window_response(
+        _response([_item(0, 4), _item(1, 2)]),
+        zone_first_id=0,
+        zone_last_id=6,
+        **common,
+    )
+    assert [(item.first_id, item.last_id) for item in decision.items] == [(0, 4)]
+
+
+def test_parse_leaves_a_sentence_past_the_zone_to_the_next_window() -> None:
+    words = _words(
+        [*_sentence("First sentence here.", 0.0), *_sentence("Second one two", 3.0)]
+    )
+    lines = build_lines(words)
+    decision = parse_window_response(
+        _response([_item(0, 2), _item(3, 6)]),
+        zone_first_id=0,
+        zone_last_id=4,
+        previous_count=0,
+        final=False,
+        zone_lines=lines,
+        origin="w",
+        words=words,
+    )
+    assert [(item.first_id, item.last_id) for item in decision.items] == [(0, 2)]
+    assert decision.resume_from_id == 3
+
+
+def test_parse_rejects_lossy_repairs_until_the_last_attempt() -> None:
     lines = build_lines(_words(_sentence("one two three four", 0.0)))
     common = {
-        "zone_first_id": 0,
+        "zone_first_id": 2,
         "zone_last_id": 3,
         "previous_count": 0,
         "final": True,
         "zone_lines": lines,
         "origin": "w",
     }
-    with pytest.raises(WindowResponseError, match="leaves the editable"):
-        parse_window_response(
-            _response(
-                [{"first_id": 0, "last_id": 4, "text": "x", "break_after": "none"}]
-            ),
-            **common,
-        )
-    with pytest.raises(WindowResponseError, match="overlaps"):
-        parse_window_response(
-            _response(
-                [
-                    {"first_id": 0, "last_id": 2, "text": "a", "break_after": "none"},
-                    {"first_id": 2, "last_id": 3, "text": "b", "break_after": "none"},
-                ]
-            ),
-            **common,
-        )
+    reversed_range = _response([_item(3, 2)])
+    before_zone = _response([_item(0, 1), _item(2, 3)])
+    with pytest.raises(WindowResponseError, match="after last_id"):
+        parse_window_response(reversed_range, **common)
+    with pytest.raises(WindowResponseError, match="precedes the editable"):
+        parse_window_response(before_zone, **common)
+    assert parse_window_response(reversed_range, strict=False, **common).items == []
+    kept = parse_window_response(before_zone, strict=False, **common).items
+    assert [(item.first_id, item.last_id) for item in kept] == [(2, 3)]
 
 
 def test_parse_defers_items_after_resume_to_the_next_window() -> None:
@@ -369,3 +419,28 @@ def test_dropped_connections_are_retried_but_bad_requests_are_not(
     broken = FlakyBackend([RuntimeError("400 INVALID_ARGUMENT: bad schema")])
     with pytest.raises(RuntimeError, match="INVALID_ARGUMENT"):
         take_planner._generate(broken, "p", schema={}, request_id="r", media=())
+
+
+def test_a_review_without_a_usable_answer_leaves_its_region(tmp_path: Path) -> None:
+    words = _words(
+        [
+            *_sentence("Pipeline stages run in order.", 0.0),
+            *_sentence("Pipeline stages run in order.", 5.0),
+        ]
+    )
+    transcript = _transcript(tmp_path / "transcript.json", words)
+    kept = [_item(0, 4, "Pipeline stages run in order."), _item(5, 9, "Again.")]
+    backend = ScriptedBackend([{"keep": kept}, *({"keep": []} for _ in range(3))])
+    plan = run_take_planner(
+        transcript_path=transcript,
+        output_dir=tmp_path / "plan",
+        backend=backend,
+        audio_path=None,
+    )
+    # The window kept both takes; the review (empty answers) could not decide.
+    assert [(item["first_id"], item["last_id"]) for item in plan["items"]] == [
+        (0, 4),
+        (5, 9),
+    ]
+    assert "region unchanged" in plan["review"][0]["warnings"][0]
+    assert plan["status"] == "complete"

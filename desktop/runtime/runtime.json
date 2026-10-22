@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "about": "What the VoiceCut app installs on first launch into its data directory (~/Library/Application Support/VoiceCut, $XDG_DATA_HOME/voicecut or %LOCALAPPDATA%\\com.vectozavr.voicecut): the runtime scripts/install.sh builds in a checkout, pinned and verified. Changing anything here (or a lock file) makes the app update the affected part on its next launch.",
+  "about": "What the VoiceCut app installs on first launch into its data directory (~/Library/Application Support/VoiceCut, $XDG_DATA_HOME/voicecut or %LOCALAPPDATA%\\com.vectozavr.voicecut): the runtime scripts/install.sh builds in a checkout, pinned and verified, and Ollama for planners that run on the computer (unless the system has an Ollama). Changing anything here (or a lock file) makes the app update the affected part on its next launch.",
   "python": {
     "main": "3.12.15",
     "mlx": "3.11.17"
@@ -42,10 +42,15 @@
         "mlx": "requirements-mlx.txt"
       },
       "mfa_lock": "mfa-osx-arm64.txt",
+      "ollama": {
+        "version": "0.40.8",
+        "url": "https://github.com/ollama/ollama/releases/download/v0.40.8/ollama-darwin.tgz",
+        "sha256": "29fce20c736f62aa8885b1e83552c5fd8dcc63edc5ffc1b47f2de591a06cde44"
+      },
       "space": {
-        "download_gb": 1.6,
-        "installed_gb": 4.3,
-        "needed_gb": 7
+        "download_gb": 1.7,
+        "installed_gb": 4.7,
+        "needed_gb": 7.5
       }
     },
     "macos-x86_64": {
@@ -64,10 +69,15 @@
       },
       "main_base": "main-osx-64.txt",
       "mfa_lock": "mfa-osx-64.txt",
+      "ollama": {
+        "version": "0.40.8",
+        "url": "https://github.com/ollama/ollama/releases/download/v0.40.8/ollama-darwin.tgz",
+        "sha256": "29fce20c736f62aa8885b1e83552c5fd8dcc63edc5ffc1b47f2de591a06cde44"
+      },
       "space": {
-        "download_gb": 0.8,
-        "installed_gb": 3.4,
-        "needed_gb": 6
+        "download_gb": 1.0,
+        "installed_gb": 3.9,
+        "needed_gb": 6.5
       }
     },
     "linux-x86_64": {
@@ -86,10 +96,15 @@
         "cuda": "requirements-cuda-linux-x86_64.txt"
       },
       "mfa_lock": "mfa-linux-64.txt",
+      "ollama": {
+        "version": "0.40.8",
+        "url": "https://github.com/ollama/ollama/releases/download/v0.40.8/ollama-linux-amd64.tar.zst",
+        "sha256": "0bb17cc19e9c1339ddbe0cba55148bf068f8f19dec8ec5fd531461aaa207282a"
+      },
       "space": {
-        "download_gb": 1.3,
-        "installed_gb": 3.5,
-        "needed_gb": 6
+        "download_gb": 2.8,
+        "installed_gb": 3.6,
+        "needed_gb": 9
       }
     },
     "windows-x86_64": {
@@ -108,10 +123,15 @@
         "cuda": "requirements-cuda-windows-x86_64.txt"
       },
       "mfa_lock": "mfa-win-64.txt",
+      "ollama": {
+        "version": "0.40.8",
+        "url": "https://github.com/ollama/ollama/releases/download/v0.40.8/ollama-windows-amd64.zip",
+        "sha256": "04d1d43ac62c2deb0393307bb49fed7caf6b192de41bdd497aaa9488089d5552"
+      },
       "space": {
-        "download_gb": 1.3,
-        "installed_gb": 3.5,
-        "needed_gb": 6
+        "download_gb": 2.9,
+        "installed_gb": 3.6,
+        "needed_gb": 9
       }
     }
   }

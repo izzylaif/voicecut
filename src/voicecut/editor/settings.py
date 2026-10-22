@@ -12,7 +12,8 @@
 * Model lists come from each provider's models API, called with the saved
   key, and are filtered to text models that can serve as the take planner.
   Failing to list models doubles as a key check: the UI says whether a key is
-  missing, rejected, or the provider is unreachable.
+  missing, rejected, or the provider is unreachable.  Local models are
+  Ollama's, with VoiceCut's recommendations first (:mod:`.local`).
 """
 
 from __future__ import annotations
@@ -35,12 +36,10 @@ from typing import Any, Protocol
 
 from ..planner_backends import (
     API_KEY_ENV_BY_BACKEND,
-    DEFAULT_GEMMA_MODEL,
-    DEFAULT_LOCAL_PYTHON,
     DEFAULT_MODEL_BY_BACKEND,
-    DEFAULT_QWEN_MODEL,
     resolve_planner_base_url,
 )
+from .local import LocalModels
 
 GEMINI_MODELS_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000"
@@ -61,7 +60,7 @@ PLANNER_LABELS = {
     "gemini": "Gemini",
     "openai": "OpenAI",
     "deepseek": "DeepSeek",
-    "local": "Local (MLX)",
+    "ollama": "Local (Ollama)",
 }
 # Gemini models that generate text but are not general planners.
 GEMINI_EXCLUDED = re.compile(
@@ -73,7 +72,6 @@ OPENAI_EXCLUDED = re.compile(
     r"audio|realtime|tts|transcribe|image|search|embedding|moderation|instruct|"
     r"dall-e|whisper|babbage|davinci",
 )
-LOCAL_EXCLUDED = re.compile(r"whisper|parakeet|wav2vec|asr|crisper", re.IGNORECASE)
 
 
 class SettingsError(ValueError):
@@ -330,7 +328,9 @@ def audio_listening_backends() -> frozenset[str]:
     return AUDIO_LISTENING_BACKENDS
 
 
-def planners(keys: KeyStore | Path) -> list[dict[str, Any]]:
+def planners(
+    keys: KeyStore | Path, local: LocalModels | None = None
+) -> list[dict[str, Any]]:
     """The planner providers the editor offers, with their key status."""
 
     listening = audio_listening_backends()
@@ -355,7 +355,7 @@ def planners(keys: KeyStore | Path) -> list[dict[str, Any]]:
             entry["available"] = value is not None
         else:
             entry["key"] = None
-            entry["available"] = DEFAULT_LOCAL_PYTHON.is_file()
+            entry["available"] = local is not None and local.available()
         entries.append(entry)
     return entries
 
@@ -425,45 +425,6 @@ def _openai_compatible_models(
     return models
 
 
-def _local_models() -> list[dict[str, Any]]:
-    hub = Path(
-        os.environ.get("HF_HUB_CACHE")
-        or Path(os.environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface")
-        / "hub"
-    )
-    found: dict[str, dict[str, Any]] = {
-        DEFAULT_QWEN_MODEL: {
-            "id": DEFAULT_QWEN_MODEL,
-            "label": DEFAULT_QWEN_MODEL,
-            "detail": "Qwen",
-            "alias": False,
-        },
-        DEFAULT_GEMMA_MODEL: {
-            "id": DEFAULT_GEMMA_MODEL,
-            "label": DEFAULT_GEMMA_MODEL,
-            "detail": "Gemma",
-            "alias": False,
-        },
-    }
-    for entry in sorted(hub.glob("models--*")) if hub.is_dir() else []:
-        name = entry.name.removeprefix("models--").replace("--", "/")
-        if "mlx" in name.lower() and not LOCAL_EXCLUDED.search(name):
-            found.setdefault(
-                name, {"id": name, "label": name, "detail": None, "alias": False}
-            )
-    for model in found.values():
-        cached = (hub / f"models--{model['id'].replace('/', '--')}").is_dir()
-        model["detail"] = " · ".join(
-            part
-            for part in (
-                model["detail"],
-                "downloaded" if cached else "downloads on first use",
-            )
-            if part
-        )
-    return list(found.values())
-
-
 def _sorted(models: list[dict[str, Any]], default: str) -> list[dict[str, Any]]:
     """Newest first; within a version pro before flash before lite."""
 
@@ -486,9 +447,15 @@ def _sorted(models: list[dict[str, Any]], default: str) -> list[dict[str, Any]]:
 class ModelCatalog:
     """Live model lists per provider, cached for a few minutes per key."""
 
-    def __init__(self, env_file: Path, keys: KeyStore | None = None) -> None:
+    def __init__(
+        self,
+        env_file: Path,
+        keys: KeyStore | None = None,
+        local: LocalModels | None = None,
+    ) -> None:
         self.env_file = env_file
         self.keys = keys or EnvFileKeys(env_file)
+        self.local = local
         self._lock = threading.Lock()
         self._cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
 
@@ -498,19 +465,12 @@ class ModelCatalog:
         if backend not in PLANNER_LABELS:
             raise SettingsError(f"unknown planner {backend!r}")
         default = DEFAULT_MODEL_BY_BACKEND[backend]
-        if backend == "local":
-            if not DEFAULT_LOCAL_PYTHON.is_file():
+        if backend == "ollama":
+            if self.local is None:
                 return self._failure(
-                    default,
-                    "unavailable",
-                    "Local models need VoiceCut's MLX environment (.venv-mlx); "
-                    "run scripts/install.sh",
+                    default, "unavailable", "Local models are not available here"
                 )
-            return {
-                "models": _sorted(_local_models(), default),
-                "default": default,
-                "error": None,
-            }
+            return self.local.listing()
         key_env = API_KEY_ENV_BY_BACKEND[backend]
         if key is None:
             key, _ = key_value(self.keys, key_env)

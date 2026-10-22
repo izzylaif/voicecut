@@ -14,11 +14,15 @@
 //! libraries when an NVIDIA GPU is present.  PyPI has no PyTorch for Intel
 //! Macs, so there the main environment starts as a conda environment with
 //! PyTorch from conda-forge (`main_base`) and takes the rest from its lock.
+//! Planners that run on the computer need Ollama: setup installs Ollama's own
+//! release unless the system has an Ollama already.
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -88,6 +92,8 @@ pub struct Spec {
     pub main_base: Option<String>,
     pub mfa: Mfa,
     pub respiro: Respiro,
+    /// Ollama's release archive for this system.
+    pub ollama: Option<Download>,
     pub space: Space,
 }
 
@@ -105,6 +111,8 @@ struct Platform {
     #[serde(default)]
     main_base: Option<String>,
     mfa_lock: String,
+    #[serde(default)]
+    ollama: Option<Download>,
     space: Space,
 }
 
@@ -156,6 +164,53 @@ pub fn nvidia_gpu() -> bool {
     })
 }
 
+/// Where Ollama's own installers put it.
+const OLLAMA_LOCATIONS: &[&str] = if cfg!(target_os = "macos") {
+    &[
+        "/Applications/Ollama.app/Contents/Resources/ollama",
+        "~/Applications/Ollama.app/Contents/Resources/ollama",
+        "/usr/local/bin/ollama",
+        "/opt/homebrew/bin/ollama",
+    ]
+} else if cfg!(windows) {
+    &["~/AppData/Local/Programs/Ollama/ollama.exe"]
+} else {
+    &["/usr/local/bin/ollama", "/usr/bin/ollama"]
+};
+
+/// An Ollama of the user's: installed (on PATH or where its installers put
+/// it) or running on its usual port.  VoiceCut uses it instead of its own.
+pub fn system_ollama() -> bool {
+    static FOUND: OnceLock<bool> = OnceLock::new();
+    *FOUND.get_or_init(|| {
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        let name = if cfg!(windows) {
+            "ollama.exe"
+        } else {
+            "ollama"
+        };
+        let installed = OLLAMA_LOCATIONS
+            .iter()
+            .map(|location| match location.strip_prefix("~/") {
+                Some(rest) => home.join(rest),
+                None => PathBuf::from(location),
+            })
+            .chain(
+                std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+                    .map(|dir| dir.join(name)),
+            )
+            .any(|path| path.is_file());
+        installed
+            || TcpStream::connect_timeout(
+                &SocketAddr::from(([127, 0, 0, 1], 11434)),
+                Duration::from_millis(300),
+            )
+            .is_ok()
+    })
+}
+
 /// The pinned runtime of this app version.
 #[derive(Clone)]
 pub struct Bundle {
@@ -174,12 +229,13 @@ pub enum Step {
     Gpu,
     Aligner,
     Respiro,
+    Ollama,
     Verify,
     Cleanup,
 }
 
 impl Step {
-    pub const ALL: [Step; 10] = [
+    pub const ALL: [Step; 11] = [
         Step::Tools,
         Step::Python,
         Step::Source,
@@ -188,6 +244,7 @@ impl Step {
         Step::Gpu,
         Step::Aligner,
         Step::Respiro,
+        Step::Ollama,
         Step::Verify,
         Step::Cleanup,
     ];
@@ -202,6 +259,7 @@ impl Step {
             Step::Gpu => "gpu",
             Step::Aligner => "aligner",
             Step::Respiro => "respiro",
+            Step::Ollama => "ollama",
             Step::Verify => "verify",
             Step::Cleanup => "cleanup",
         }
@@ -217,6 +275,7 @@ impl Step {
             Step::Gpu => "Installing GPU acceleration",
             Step::Aligner => "Installing the aligner and FFmpeg",
             Step::Respiro => "Downloading the breath detector",
+            Step::Ollama => "Installing Ollama",
             Step::Verify => "Checking the installation",
             Step::Cleanup => "Cleaning up",
         }
@@ -241,6 +300,7 @@ impl Step {
                 }
             }
             Step::MlxEnv => "MLX Whisper for Apple Silicon",
+            Step::Ollama => "for planner models that run on this computer",
             Step::Gpu => "NVIDIA CUDA and cuDNN libraries for faster-whisper",
             Step::Aligner => "Montreal Forced Aligner 3.4.1, FFmpeg",
             Step::Respiro => "Respiro-en",
@@ -260,6 +320,14 @@ impl Step {
             Step::Gpu => 20.0,
             Step::Aligner => 25.0,
             Step::Respiro => 3.0,
+            // macOS's is 175 MB; Linux's and Windows's carry GPU libraries.
+            Step::Ollama => {
+                if cfg!(target_os = "macos") {
+                    4.0
+                } else {
+                    20.0
+                }
+            }
             Step::Verify => 7.0,
             Step::Cleanup => 2.0,
         }
@@ -295,6 +363,7 @@ impl Bundle {
         let platform = platforms
             .remove(PLATFORM)
             .ok_or("VoiceCut does not run on this kind of computer yet.")?;
+        let ollama = platform.ollama;
         let patches = mfa
             .patches
             .into_iter()
@@ -315,6 +384,7 @@ impl Bundle {
                 patches,
             },
             respiro,
+            ollama,
             space: platform.space,
         };
         let source_sha256 = read("source.sha256")?.trim().to_string();
@@ -340,6 +410,7 @@ impl Bundle {
             Step::Python => self.spec.main_base.is_none() || self.spec.requirements.mlx.is_some(),
             Step::MlxEnv => self.spec.requirements.mlx.is_some(),
             Step::Gpu => self.spec.requirements.cuda.is_some() && nvidia_gpu(),
+            Step::Ollama => self.spec.ollama.is_some() && !system_ollama(),
             _ => true,
         }
     }
@@ -389,10 +460,24 @@ impl Bundle {
                 serde_json::to_string(&spec.mfa.patches).unwrap_or_default()
             ),
             Step::Respiro => format!("{} {:?}", spec.respiro.commit, spec.respiro.files),
-            // Checking and cleaning up follow any change (but GPU libraries).
+            // Its CUDA libraries are unpacked only next to an NVIDIA GPU.
+            Step::Ollama => format!(
+                "{} {}",
+                spec.ollama
+                    .as_ref()
+                    .map_or("", |ollama| ollama.sha256.as_str()),
+                !cfg!(target_os = "macos") && nvidia_gpu()
+            ),
+            // Checking and cleaning up follow any change (but GPU libraries
+            // and Ollama, which checks itself).
             Step::Verify | Step::Cleanup => Step::ALL
                 .iter()
-                .filter(|step| !matches!(step, Step::Gpu | Step::Verify | Step::Cleanup))
+                .filter(|step| {
+                    !matches!(
+                        step,
+                        Step::Gpu | Step::Ollama | Step::Verify | Step::Cleanup
+                    )
+                })
                 .filter(|step| self.applies(**step))
                 .map(|step| self.fingerprint(*step))
                 .collect::<Vec<_>>()
@@ -448,6 +533,7 @@ pub fn pending_steps(paths: &Paths, bundle: &Bundle) -> Vec<Step> {
         }
         Step::MlxEnv => paths.venv_python(&paths.mlx_venv()).exists(),
         Step::Aligner => paths.mfa_executable().is_file(),
+        Step::Ollama => paths.ollama_executable().is_file(),
         _ => true,
     };
     Step::ALL

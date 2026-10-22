@@ -618,7 +618,6 @@ def _configuration(
     planner_model: str,
     planner_base_url: str | None,
     asr_python: Path,
-    planner_python: Path,
     mfa_prefix: Path,
     mfa_cache_root: Path,
     mfa_micromamba: Path,
@@ -646,7 +645,7 @@ def _configuration(
         "planner_model": planner_model,
         "planner_base_url": planner_base_url,
         "planner_api_key_env": args.planner_api_key_env,
-        "planner_local_files_only": bool(args.local_files_only),
+        "planner_think": args.planner_think,
         "planner": PLANNER_NAME,
         "planner_listens_to_audio": _planner_listens(args),
         "window_seconds": float(args.window_seconds),
@@ -669,7 +668,6 @@ def _configuration(
         "respiro_upstream_commit": RESPIRO_UPSTREAM_COMMIT,
         "respiro_checkpoint_sha256": RESPIRO_CHECKPOINT_SHA256,
         "respiro_cache_root": str(args.respiro_cache_root.expanduser().absolute()),
-        "planner_python": str(planner_python),
     }
 
 
@@ -735,7 +733,6 @@ def _planner_cli_arguments(
     args: argparse.Namespace,
     planner_model: str,
     planner_base_url: str | None,
-    planner_python: Path,
     env_file: Path,
 ) -> list[str]:
     values = [
@@ -743,8 +740,8 @@ def _planner_cli_arguments(
         args.planner_backend,
         "--planner-model",
         planner_model,
-        "--planner-python",
-        str(planner_python),
+        "--planner-think",
+        args.planner_think,
         "--max-output-tokens",
         str(args.max_output_tokens),
         "--env-file",
@@ -754,8 +751,6 @@ def _planner_cli_arguments(
         values.extend(["--planner-base-url", planner_base_url])
     if args.planner_api_key_env:
         values.extend(["--planner-api-key-env", args.planner_api_key_env])
-    if args.local_files_only:
-        values.append("--local-files-only")
     return values
 
 
@@ -848,7 +843,6 @@ def run_full_pipeline(
     pause_policy = "cuts" if output_kind == "video" else "semantic"
 
     asr_python = args.asr_python.absolute()
-    planner_python = args.planner_python.absolute()
     if not asr_python.is_file():
         raise FullPipelineError(f"ASR Python does not exist: {asr_python}")
     mfa_prefix, mfa_cache_root, mfa_micromamba = _validate_mfa_runtime(
@@ -858,14 +852,6 @@ def run_full_pipeline(
         micromamba=args.mfa_micromamba,
         num_jobs=args.mfa_num_jobs,
     )
-    if args.planner_backend in {"local", "qwen", "gemma"}:
-        if not planner_python.is_file() and asr_python.is_file():
-            planner_python = asr_python
-        if not planner_python.is_file():
-            raise FullPipelineError(
-                f"local planner Python does not exist: {planner_python}"
-            )
-
     env_file = args.env_file.absolute()
     planner_model = args.planner_model or default_model_for_backend(
         args.planner_backend
@@ -886,7 +872,6 @@ def run_full_pipeline(
         planner_model=planner_model,
         planner_base_url=planner_base_url,
         asr_python=asr_python,
-        planner_python=planner_python,
         mfa_prefix=mfa_prefix,
         mfa_cache_root=mfa_cache_root,
         mfa_micromamba=mfa_micromamba,
@@ -911,7 +896,7 @@ def run_full_pipeline(
             env_file=env_file,
             base_url=planner_base_url,
             api_key_env=args.planner_api_key_env,
-            local_python=planner_python,
+            model=planner_model,
         )
     except (OSError, RuntimeError, ValueError) as error:
         raise FullPipelineError(f"planner preflight failed: {error}") from None
@@ -1229,7 +1214,6 @@ def run_full_pipeline(
         args=args,
         planner_model=planner_model,
         planner_base_url=planner_runtime.base_url,
-        planner_python=planner_python,
         env_file=env_file,
     )
     listens_to_audio = _planner_listens(args)

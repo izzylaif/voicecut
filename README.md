@@ -148,8 +148,10 @@ launch of a downloaded copy shows a warning once:
 - **Linux** has no such step.
 
 Then VoiceCut shows what it needs and installs its engine with one click:
-Python, PyTorch, Whisper, the Montreal Forced Aligner and FFmpeg — about
-1.5 GB to download, once, and about 4 GB on disk (keep up to 7 GB free while
+Python, PyTorch, Whisper, the Montreal Forced Aligner, FFmpeg and — unless
+you have it already — [Ollama](https://ollama.com) for planners that run on
+your computer. That is about 1.7 GB to download on a Mac and 2.9 GB on
+Windows and Linux, once, and about 4–5 GB on disk (keep up to 9 GB free while
 it installs). The speech models, about 2 GB more, download the first time
 you run Voice Cut.
 
@@ -191,12 +193,21 @@ provider, and you can type any other model name.
 | **Gemini** | `gemini-3.1-pro-preview` | the transcript of each planning window and that window's audio | Recommended |
 | **OpenAI** | `gpt-5-mini` | the transcript of each planning window | Supported |
 | **DeepSeek** | `deepseek-v4-flash` | the transcript of each planning window | Supported |
-| **Local (MLX)** | Qwen or Gemma, on your Mac | nothing leaves the computer | Experimental, Apple Silicon only |
+| **Local (Ollama)** | Gemma 4 31B, on your computer | nothing leaves the computer | Supported; needs a fast computer |
 
 Gemini **hears audio**: it receives a compressed 16 kHz mono copy of each
 window, so it can hear stumbles and fix mis-heard words. Your original file
 and any video never leave the computer. Keys are added in **Settings**, each
 with a link to get one, and are sent only to their own provider.
+
+**Local** planners run open models on your Mac or PC through Ollama, on
+macOS, Windows and Linux alike, so nothing leaves the computer. The model list
+shows VoiceCut's recommendations first, then the other models your Ollama
+has; choose one and it downloads (15–25 GB for the recommended ones) with its
+progress. Any other model of the [Ollama library](https://ollama.com/library)
+can be typed in. **Settings › Local models** deletes models and sets, for
+each, whether it reasons before answering (slower, often more accurate). If
+you already use Ollama, VoiceCut uses yours and its models.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/settings-dark.webp">
@@ -273,8 +284,12 @@ plan, so you can always see why a cut was made.
   language in the toolbar. Conversations with overlapping speakers are not
   supported.
 - **Cloud planner:** the recommended planners need an internet connection and
-  an API key from their provider. The local MLX planners are experimental
-  and run only on Apple Silicon.
+  an API key from their provider.
+- **Local planner:** a recommended model needs 15–25 GB of disk and about as
+  much free memory, and it is slow without a fast GPU: each four-minute
+  window can take minutes, so a long recording can take hours. Local models
+  read the transcript only; Gemini, which also hears the audio, remains the
+  recommended planner.
 - **Judgement:** the planner is a language model and can occasionally choose
   the wrong take, and a cut inside tightly connected speech (no pause
   between a kept and a removed word) can sound abrupt. Listen to the edit
@@ -286,8 +301,8 @@ plan, so you can always see why a cut was made.
 - **Unsigned installers:** the first launch needs the steps above, and on
   macOS the "VoiceCut would like to access files in…" questions come back
   once after each update until builds are signed with a Developer ID.
-- **First launch** downloads about 1.5 GB, and the first Voice Cut about
-  2 GB more.
+- **First launch** downloads about 1.7 GB on a Mac and 2.9 GB on Windows and
+  Linux, and the first Voice Cut about 2 GB more (a local model 15–25 GB).
 
 ## Command line and development
 

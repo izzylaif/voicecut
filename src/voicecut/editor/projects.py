@@ -34,6 +34,7 @@ import soundfile as sf
 
 from .. import media
 from ..common import read_json, sha256_file
+from ..planner_backends import LEGACY_LOCAL_BACKENDS
 from . import peaks
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -47,6 +48,18 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "breath_cleanup": None,
 }
 IMPORTABLE_EXTENSIONS = media.AUDIO_INPUT_EXTENSIONS | media.VIDEO_INPUT_EXTENSIONS
+
+
+def current_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    """``settings`` saved by an earlier VoiceCut, in today's terms.
+
+    Its local planners ran MLX-LM models, which Ollama names differently: they
+    become Ollama with its default model.
+    """
+
+    if settings.get("planner_backend") in LEGACY_LOCAL_BACKENDS:
+        return {**settings, "planner_backend": "ollama", "planner_model": None}
+    return settings
 
 
 class ProjectError(RuntimeError):
@@ -295,6 +308,7 @@ class Project:
             settings.update(
                 {key: stored[key] for key in SETTINGS_KEYS if key in stored}
             )
+        settings = current_settings(settings)
         run = idle_run()
         if isinstance(record.get("run"), dict):
             run.update(record["run"])

@@ -36,6 +36,10 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 tauri-plugin-single-instance = "2"
 
+# Ollama's Linux release is a .tar.zst.
+[target.'cfg(target_os = "linux")'.dependencies]
+zstd = "0.13"
+
 [features]
 # A loopback control port for end-to-end tests (see src/automation.rs);
 # never part of a release build.

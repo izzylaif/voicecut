@@ -51,8 +51,6 @@ def _args(tmp_path: Path, source: Path):
             str(micromamba),
             "--mfa-num-jobs",
             "2",
-            "--planner-python",
-            sys.executable,
             "--planner-backend",
             "gemini",
             "--planner-model",
@@ -384,15 +382,18 @@ def test_public_parser_is_one_input_to_one_output(tmp_path: Path) -> None:
             "-o",
             "edited.flac",
             "--planner-backend",
-            "gemma",
+            "ollama",
             "--planner-model",
-            "mlx-community/custom-gemma",
+            "qwen3.6:27b",
+            "--planner-think",
+            "off",
         ]
     )
     assert parsed.input == source
     assert parsed.output == Path("edited.flac")
-    assert parsed.planner_backend == "gemma"
-    assert parsed.planner_model == "mlx-community/custom-gemma"
+    assert parsed.planner_backend == "ollama"
+    assert parsed.planner_model == "qwen3.6:27b"
+    assert parsed.planner_think == "off"
     assert parsed.planner_audio == "auto"
     assert parsed.alignment_backend == "mfa"
     assert parsed.debug_artifacts is False

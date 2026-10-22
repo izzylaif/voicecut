@@ -2,7 +2,8 @@
 //! a free port of the loopback interface.
 //!
 //! It runs as the root of its own process tree with the app's pid as
-//! `--parent-pid`, so it stops itself (and any Voice Cut run) if the app dies.
+//! `--parent-pid`, so it stops itself (and any Voice Cut run, and the Ollama
+//! it may have started for local planners) if the app dies.
 //! Stopping it asks it to cancel running jobs first, then ends the tree
 //! (SIGTERM to the process group and, after a grace period, SIGKILL; on
 //! Windows `taskkill /T`).
@@ -111,6 +112,10 @@ impl Engine {
             .env("PYTHONUNBUFFERED", "1")
             .env("PYTHONUTF8", "1")
             .env("MAMBA_ROOT_PREFIX", paths.mamba_root())
+            // Where the editor's Ollama logs, and VoiceCut's own Ollama
+            // (the editor starts it when the system has none running).
+            .env("VOICECUT_OLLAMA_LOG", logs.join("ollama.log"))
+            .env("VOICECUT_OLLAMA_MODELS", paths.ollama_models())
             .env_remove("PYTHONPATH")
             .env_remove("PYTHONHOME")
             .env_remove("VIRTUAL_ENV")
@@ -118,6 +123,9 @@ impl Engine {
             .stdin(Stdio::null())
             .stdout(log.try_clone().map_err(|error| error.to_string())?)
             .stderr(log);
+        if paths.ollama_executable().is_file() {
+            command.env("VOICECUT_OLLAMA", paths.ollama_executable());
+        }
         process::detach(&mut command);
         let child = command
             .spawn()

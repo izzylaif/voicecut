@@ -4,7 +4,8 @@
 //! micromamba (checked against their SHA-256), CPython builds through uv, the
 //! Python environments from hashed lock files (on Intel Macs the main one over
 //! an explicit conda lock with PyTorch), the MFA environment from an explicit
-//! conda lock, Respiro-en, then a check that every part starts.
+//! conda lock, Respiro-en, Ollama's release (unless the system has an
+//! Ollama), then a check that every part starts.
 //! A step that finishes is recorded in `setup.json`; a failed or cancelled
 //! setup resumes at the step that did not finish.
 
@@ -22,7 +23,7 @@ use sha2::{Digest, Sha256};
 
 use crate::paths::Paths;
 use crate::process;
-use crate::runtime::{Bundle, Installed, Step};
+use crate::runtime::{self, Bundle, Installed, Step};
 
 const LOG_TAIL: usize = 14;
 const DOWNLOAD_ATTEMPTS: u32 = 3;
@@ -782,6 +783,77 @@ impl Run<'_> {
         Ok(())
     }
 
+    /// Ollama's release for this system, unpacked into `ollama/app`; models
+    /// download into `ollama/models` later, in the editor.  The CUDA
+    /// libraries of the Linux and Windows releases are left out without an
+    /// NVIDIA GPU.
+    fn ollama(&self) -> Result<(), String> {
+        let Some(ollama) = self.bundle.spec.ollama.as_ref() else {
+            return Ok(());
+        };
+        let paths = self.paths;
+        let name = ollama.url.rsplit('/').next().unwrap_or("ollama-archive");
+        let archive = paths.cache().join(name);
+        if file_sha256(&archive).as_deref() != Some(ollama.sha256.as_str()) {
+            self.download(&ollama.url, &ollama.sha256, &archive, (0.0, 0.75))?;
+        }
+        let target = paths.ollama_app();
+        let partial = target.with_extension("part");
+        if partial.exists() {
+            fs::remove_dir_all(&partial).map_err(|error| error.to_string())?;
+        }
+        let cuda = runtime::nvidia_gpu();
+        self.line(&format!(
+            "unpacking {name}{}",
+            if cuda {
+                ""
+            } else {
+                " (without its CUDA libraries)"
+            }
+        ));
+        unpack_ollama(
+            &archive,
+            &partial,
+            &|path: &Path| {
+                cuda || !path
+                    .components()
+                    .any(|part| part.as_os_str().to_string_lossy().starts_with("cuda_"))
+            },
+            &|fraction| self.fraction(0.75 + 0.2 * fraction),
+            &|| self.check(),
+        )?;
+        if target.exists() {
+            fs::remove_dir_all(&target).map_err(|error| error.to_string())?;
+        }
+        fs::rename(&partial, &target).map_err(|error| error.to_string())?;
+        fs::create_dir_all(paths.ollama_models()).map_err(|error| error.to_string())?;
+        // The archive is large; the cleanup step may not follow this one.
+        let _ = fs::remove_file(&archive);
+        let output = process::quiet(
+            Command::new(paths.ollama_executable())
+                .arg("--version")
+                .env_clear()
+                .envs(self.environment())
+                // Not a running Ollama of the user's: a closed port.
+                .env("OLLAMA_HOST", "127.0.0.1:9"),
+        )
+        .output()
+        .map_err(|error| format!("Cannot run Ollama: {error}"))?;
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        self.line(text.trim());
+        if !text.contains(&ollama.version) {
+            return Err(format!(
+                "Ollama did not start (expected version {}).",
+                ollama.version
+            ));
+        }
+        Ok(())
+    }
+
     /// CUDA and cuDNN for faster-whisper on an NVIDIA GPU (Linux, Windows).
     fn gpu(&self) -> Result<(), String> {
         let Some(lock) = self.bundle.spec.requirements.cuda.as_deref() else {
@@ -820,7 +892,7 @@ impl Run<'_> {
                 &mlx,
                 &[
                     "-c".as_ref(),
-                    "import mlx.core, mlx_lm, mlx_whisper, voicecut.transcribe_mlx".as_ref(),
+                    "import mlx.core, mlx_whisper, voicecut.transcribe_mlx".as_ref(),
                 ],
                 &[],
             )?;
@@ -884,6 +956,7 @@ impl Run<'_> {
             Step::Gpu => self.gpu(),
             Step::Aligner => self.aligner(),
             Step::Respiro => self.respiro(),
+            Step::Ollama => self.ollama(),
             Step::Verify => self.verify(),
             Step::Cleanup => self.cleanup(),
         }
@@ -1042,6 +1115,97 @@ fn extract_uv(archive: &Path, destination: &Path) -> Result<(), String> {
     Err("the uv download does not contain uv".into())
 }
 
+/// Counts the bytes read through it, for a progress fraction.
+#[cfg(not(windows))]
+struct Counting<R> {
+    inner: R,
+    read: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+#[cfg(not(windows))]
+impl<R: Read> Read for Counting<R> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let count = self.inner.read(buffer)?;
+        self.read.fetch_add(count as u64, Ordering::Relaxed);
+        Ok(count)
+    }
+}
+
+/// Unpack Ollama's release archive (`.tgz` on macOS, `.tar.zst` on Linux,
+/// `.zip` on Windows) into `destination`, leaving out the entries `keep`
+/// refuses.  No entry can leave `destination`.
+fn unpack_ollama(
+    archive: &Path,
+    destination: &Path,
+    keep: &dyn Fn(&Path) -> bool,
+    progress: &dyn Fn(f64),
+    check: &dyn Fn() -> Result<(), String>,
+) -> Result<(), String> {
+    fs::create_dir_all(destination).map_err(|error| error.to_string())?;
+    let file = File::open(archive).map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    {
+        let mut zip = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
+        let count = zip.len().max(1);
+        for index in 0..zip.len() {
+            check()?;
+            let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
+            let Some(relative) = entry.enclosed_name() else {
+                continue;
+            };
+            if !keep(&relative) {
+                continue;
+            }
+            let target = destination.join(&relative);
+            if entry.is_dir() {
+                fs::create_dir_all(&target).map_err(|error| error.to_string())?;
+            } else {
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+                }
+                let mut output = File::create(&target).map_err(|error| error.to_string())?;
+                std::io::copy(&mut entry, &mut output).map_err(|error| error.to_string())?;
+            }
+            progress((index + 1) as f64 / count as f64);
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let size = file
+            .metadata()
+            .map_err(|error| error.to_string())?
+            .len()
+            .max(1);
+        let read = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let reader = Counting {
+            inner: std::io::BufReader::new(file),
+            read: read.clone(),
+        };
+        #[cfg(target_os = "macos")]
+        let decoded = flate2::read::GzDecoder::new(reader);
+        #[cfg(not(target_os = "macos"))]
+        let decoded = zstd::stream::read::Decoder::new(reader)
+            .map_err(|error| format!("Cannot read the Ollama download: {error}"))?;
+        let mut entries = tar::Archive::new(decoded);
+        for entry in entries.entries().map_err(|error| error.to_string())? {
+            check()?;
+            let mut entry = entry.map_err(|error| error.to_string())?;
+            let relative = entry
+                .path()
+                .map_err(|error| error.to_string())?
+                .into_owned();
+            if keep(&relative) {
+                entry
+                    .unpack_in(destination)
+                    .map_err(|error| format!("Cannot unpack {}: {error}", relative.display()))?;
+            }
+            progress(read.load(Ordering::Relaxed) as f64 / size as f64);
+        }
+        Ok(())
+    }
+}
+
 fn copy_dir(source: &Path, destination: &Path) -> std::io::Result<()> {
     fs::create_dir_all(destination)?;
     for entry in fs::read_dir(source)? {
@@ -1109,4 +1273,117 @@ fn apply_patch(path: &Path, sha256: &str, remove: &str) -> Result<(), String> {
     let partial = path.with_extension("py.patched");
     fs::write(&partial, text.replace(remove, "")).map_err(|error| error.to_string())?;
     fs::rename(&partial, path).map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The program and a library of Ollama's release, and one of its CUDA
+    /// libraries, at their places in this system's archive.
+    const FILES: &[(&str, &[u8])] = if cfg!(windows) {
+        &[
+            ("ollama.exe", b"program"),
+            ("lib/ollama/ggml-base.dll", b"library"),
+            ("lib/ollama/cuda_v13/cublas.dll", b"cuda"),
+        ]
+    } else if cfg!(target_os = "macos") {
+        &[
+            ("ollama", b"program"),
+            ("libggml-base.0.27.0.dylib", b"library"),
+            ("cuda_v13/never-on-a-mac", b"cuda"),
+        ]
+    } else {
+        &[
+            ("bin/ollama", b"program"),
+            ("lib/ollama/libggml-base.so", b"library"),
+            ("lib/ollama/cuda_v13/libcublas.so", b"cuda"),
+        ]
+    };
+
+    #[cfg(not(windows))]
+    fn write_archive(path: &Path) {
+        let mut builder = tar::Builder::new(Vec::new());
+        for (name, data) in FILES {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(data.len() as u64);
+            header.set_mode(if name.ends_with("ollama") {
+                0o755
+            } else {
+                0o644
+            });
+            header.set_cksum();
+            builder.append_data(&mut header, name, *data).unwrap();
+        }
+        let mut link = tar::Header::new_gnu();
+        link.set_entry_type(tar::EntryType::Symlink);
+        link.set_size(0);
+        builder
+            .append_link(&mut link, "libggml-base.dylib", "libggml-base.0.27.0.dylib")
+            .unwrap();
+        let tar = builder.into_inner().unwrap();
+        #[cfg(target_os = "macos")]
+        {
+            let mut encoder =
+                flate2::write::GzEncoder::new(File::create(path).unwrap(), Default::default());
+            encoder.write_all(&tar).unwrap();
+            encoder.finish().unwrap();
+        }
+        #[cfg(not(target_os = "macos"))]
+        fs::write(path, zstd::encode_all(&tar[..], 3).unwrap()).unwrap();
+    }
+
+    #[cfg(windows)]
+    fn write_archive(path: &Path) {
+        let mut zip = zip::ZipWriter::new(File::create(path).unwrap());
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for (name, data) in FILES {
+            zip.start_file(*name, options).unwrap();
+            zip.write_all(data).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    #[test]
+    fn unpacks_ollama_leaving_out_what_it_is_told() {
+        let dir = std::env::temp_dir().join(format!("voicecut-unpack-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let archive = dir.join("ollama-archive");
+        write_archive(&archive);
+        let destination = dir.join("app");
+        let fractions = Mutex::new(Vec::new());
+        unpack_ollama(
+            &archive,
+            &destination,
+            &|path| !path.to_string_lossy().contains("cuda_"),
+            &|fraction| fractions.lock().unwrap().push(fraction),
+            &|| Ok(()),
+        )
+        .unwrap();
+        for (name, data) in FILES {
+            let unpacked = fs::read(destination.join(name));
+            if name.contains("cuda_") {
+                assert!(unpacked.is_err(), "{name} should be left out");
+            } else {
+                assert_eq!(unpacked.unwrap(), *data);
+            }
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let program = destination.join(FILES[0].0);
+            assert_ne!(
+                fs::metadata(program).unwrap().permissions().mode() & 0o111,
+                0
+            );
+            let link = fs::read_link(destination.join("libggml-base.dylib")).unwrap();
+            assert_eq!(link, PathBuf::from("libggml-base.0.27.0.dylib"));
+        }
+        let fractions = fractions.into_inner().unwrap();
+        assert!(fractions.windows(2).all(|pair| pair[0] <= pair[1]));
+        assert!(fractions.last().is_some_and(|last| *last > 0.9));
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }

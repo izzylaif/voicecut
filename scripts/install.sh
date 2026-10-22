@@ -198,10 +198,10 @@ echo "Installing VoiceCut audio, alignment, cloud-provider, and editor support..
 "${VENV_PYTHON}" -m pip install --upgrade pip setuptools wheel
 "${VENV_PYTHON}" -m pip install --editable ".[audio,cloud,editor]"
 
-# mlx-lm currently requires Transformers 5 / Hugging Face Hub 1.x, while
-# WhisperX requires Hugging Face Hub below 1. Keep that upstream conflict out
-# of the user-facing environment. VoiceCut automatically launches this helper.
-echo "Installing MLX Whisper and local-planner support..."
+# MLX packages follow newer Transformers and Hugging Face Hub releases than
+# WhisperX allows; keep them in their own environment. VoiceCut launches it
+# for transcription. (Local planners run through Ollama, installed apart.)
+echo "Installing MLX Whisper..."
 "${MLX_VENV_PYTHON}" -m pip install --upgrade pip setuptools wheel
 "${MLX_VENV_PYTHON}" -m pip install --editable ".[mlx]"
 
@@ -229,7 +229,7 @@ npm run build --prefix frontend
 "${VENV_DIR}/bin/voicecut" --help >/dev/null
 "${VENV_DIR}/bin/voicecut-editor" --help >/dev/null
 "${MLX_VENV_PYTHON}" -c \
-  'import mlx, mlx_lm, mlx_whisper, voicecut.transcribe_mlx'
+  'import mlx, mlx_whisper, voicecut.transcribe_mlx'
 
 echo
 echo "VoiceCut is installed."

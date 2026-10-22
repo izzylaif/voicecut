@@ -67,15 +67,13 @@ narration. It does not choose waveform samples or synthesize speech.
 | `gemini` | `gemini-3.1-pro-preview` | `GEMINI_API_KEY` | Cloud |
 | `openai` | `gpt-5-mini` | `OPENAI_API_KEY` | Cloud |
 | `deepseek` | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` | Cloud |
-| `qwen` | `mlx-community/Qwen3.5-9B-4bit` | None | Local convenience alias |
-| `gemma` | `mlx-community/gemma-3-12b-it-4bit` | None | Local convenience alias |
-| `local` | `mlx-community/Qwen3.5-9B-4bit` | None | Arbitrary MLX-LM-compatible model/path |
+| `ollama` | `gemma4:31b` (`gemma4:31b-mlx` on Apple Silicon with more than 32 GB) | None | On this computer, through Ollama |
 
-Local planner transport is implemented but its editing quality is
-experimental. A strong cloud model is currently the recommended option for
-reliable semantic selection. All backends must pass the same local range,
-ordering, commitment, and source-grounding validation; changing a model does
-not bypass those checks.
+A strong cloud model is the recommended option for reliable take selection.
+All backends must pass the same range, ordering, commitment, and
+source-grounding validation; changing a model does not bypass those checks.
+Answers whose geometry can be repaired without losing narration are repaired
+(see "Local configuration").
 
 ### Cloud configuration
 
@@ -128,33 +126,60 @@ command history.
 
 ### Local configuration
 
-The `qwen` and `gemma` aliases select their default MLX models:
+`ollama` runs the planner on this computer, on macOS, Windows and Linux alike,
+through [Ollama](https://ollama.com) and its HTTP API. VoiceCut uses the
+Ollama at `OLLAMA_HOST` (`127.0.0.1:11434` unless set) when one answers there;
+otherwise it starts the installed `ollama` (on `PATH`, or where Ollama's
+installers put it) for the run and stops it afterwards. The desktop app
+installs its own copy during setup when the system has none; see
+[desktop/README.md](../desktop/README.md#local-planners).
 
 ```bash
-voicecut input.wav --planner-backend qwen
-voicecut input.wav --planner-backend gemma
+ollama pull gemma4:31b           # 20.4 GB, once
+voicecut input.wav --planner-backend ollama
+voicecut input.wav --planner-backend ollama --planner-model qwen3.6:27b
 ```
 
-Choose another Hugging Face repository or a local model directory:
+Any model of the [Ollama library](https://ollama.com/library) or a GGUF on
+Hugging Face (`hf.co/<user>/<repo>:<quant>`) works. On Apple Silicon Ollama
+runs safetensors models through MLX (tags ending in `-mlx`; Ollama recommends
+more than 32 GB of memory for them) and GGUF models through llama.cpp on the
+GPU; on Windows and Linux it uses an NVIDIA GPU through CUDA when there is
+one. VoiceCut recommends:
 
-```bash
-voicecut input.wav \
-  --planner-backend local \
-  --planner-model mlx-community/Qwen3.5-27B-4bit
-```
+| Model | GGUF tag | MLX tag (Apple Silicon, > 32 GB) |
+| --- | --- | --- |
+| Gemma 4 31B (default) | `gemma4:31b`, 20.4 GB | `gemma4:31b-mlx`, 19.4 GB |
+| Gemma 4 26B-A4B | `gemma4:26b`, 18.7 GB | `gemma4:26b-mlx`, 18.3 GB |
+| Qwen 3.6 27B | `qwen3.6:27b`, 17.8 GB | `qwen3.6:27b-mlx`, 18.8 GB |
+| Qwen 3.6 35B-A3B | `qwen3.6:35b-a3b`, 22.6 GB | `qwen3.6:35b-mlx`, 23.6 GB |
+| gpt-oss 20B | `gpt-oss:20b`, 13.8 GB | — |
 
-After a model has been downloaded, prevent network access for model loading:
+Each request uses Ollama's structured outputs: the answer is constrained to
+the planner's JSON schema. A model that can reason does so before it answers
+unless `--planner-think off` is given (`on` asks for it, `auto`, the default,
+lets every model that can reason do so; in the editor it is a setting of each
+model). If the reasoning fills the request's output budget, the request is
+asked again without reasoning. Every request gets a context of at least
+32,768 tokens (more for a longer prompt, within the model's limit) and an
+explicit output budget, because Ollama otherwise keeps generating past a full
+context. Requests stream, so a long answer is never cut off: only a
+30-minute silence from Ollama (loading a large model and reading a long prompt
+on a CPU) ends one.
 
-```bash
-voicecut input.wav \
-  --planner-backend local \
-  --planner-model /path/to/model \
-  --local-files-only
-```
+Small models often get the geometry of an otherwise sensible answer wrong.
+The planner therefore repairs, generically, what cannot lose narration: items
+are put in source order, an item that overlaps the one before it starts after
+it, word IDs before the editable zone are cut off, and an item that reaches
+past the zone is left to the next window (cut at the end of the recording).
+A repair that would drop something the model meant to keep — a reversed
+range, an item entirely before the zone — makes the planner ask again; on the
+third and last attempt it is applied, so a plan fails only on an answer that
+is not JSON at all. The plan's `windows[].warnings` list every repair.
 
-Local models use Apple unified memory. Larger models can be much slower or
-exceed available memory. `--planner-python` selects the MLX helper interpreter;
-the installer configures it as `.venv-mlx/bin/python`.
+Local models need memory: a recommended model needs about its download size
+free, plus a few GB for the context. They are slow without a fast GPU — each
+four-minute window can take minutes — so a long recording can take hours.
 
 ## Privacy and data flow
 
@@ -168,7 +193,8 @@ hear stumbles and resolve mis-heard words; it never uploads the original file
 or any video. Use `--planner-audio off` to send text only. The provider's
 data-processing terms apply to everything submitted.
 
-With `local`, `qwen`, or `gemma`, transcript processing also remains local.
+With `ollama`, transcript processing also remains local: VoiceCut talks only
+to the Ollama on this computer (or the one `OLLAMA_HOST` names).
 
 VoiceCut filters unrelated provider credentials out of child-process
 environments. API keys are not written to run manifests. A configured endpoint
@@ -300,7 +326,7 @@ voicecut take.wav -o take_gemini.wav \
 
 voicecut take.wav -o take_gemma.wav \
   --work-dir .voicecut-cache/take-gemma \
-  --planner-backend gemma
+  --planner-backend ollama --planner-model gemma4:26b
 ```
 
 ## Breath cleanup and ambience
@@ -368,7 +394,6 @@ environment first:
 | `--asr whisper\|crisperwhisper` | Transcription engine (see *Transcription engine*) |
 | `--asr-python PATH` | Python containing MLX Whisper, optional CrisperWhisper, and the optional English CTC helper |
 | `--whisper-model NAME` | Override the MLX Whisper repository |
-| `--planner-python PATH` | Python used for local MLX language models |
 
 MFA identifies which stretch of the waveform belongs to which kept word; the
 waveform energy decides where each word physically starts and stops. If MFA is
@@ -418,11 +443,11 @@ accepted for compatibility and adds nothing. See
 | `--overwrite` | Replace an existing non-cached destination |
 | `--env-file PATH` | dotenv file; default `.env` |
 | `--language en\|ru` | Source language; default `en` |
-| `--planner-backend NAME` | `gemini`, `openai`, `deepseek`, `local`, `qwen`, or `gemma` |
-| `--planner-model NAME` | Provider model, Hugging Face repository, or local path |
+| `--planner-backend NAME` | `gemini`, `openai`, `deepseek`, or `ollama` |
+| `--planner-model NAME` | Provider model, or an Ollama model such as `qwen3.6:27b` |
 | `--planner-base-url URL` | OpenAI/DeepSeek endpoint override |
 | `--planner-api-key-env NAME` | Credential environment-variable name |
-| `--local-files-only` | Prevent local-model downloads |
+| `--planner-think auto\|on\|off` | Whether an Ollama model reasons before it answers; default `auto` |
 | `--window-seconds N` | Recording time decided per planner request |
 | `--lookahead-seconds N` | Undecided look-ahead shown to the planner |
 | `--planner-audio auto\|on\|off` | Whether the planner listens to each window |
@@ -437,5 +462,4 @@ accepted for compatibility and adds nothing. See
 | `--breath-threshold FLOAT` | Respiro-en frame threshold |
 | `--respiro-cache-root PATH` | Verified Respiro-en runtime cache |
 | `--asr-python PATH` | Advanced ASR helper runtime |
-| `--planner-python PATH` | Advanced local-planner runtime |
 | `--debug-artifacts` | Accepted for compatibility; no effect |

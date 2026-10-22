@@ -43,11 +43,11 @@ from ..common import read_json
 from ..language_profiles import SUPPORTED_LANGUAGE_CODES
 from ..planner_backends import (
     API_KEY_ENV_BY_BACKEND,
-    DEFAULT_LOCAL_PYTHON,
     DEFAULT_MODEL_BY_BACKEND,
     PLANNER_BACKENDS,
 )
 from . import ambience, documents, peaks, plan, proxy, settings
+from .local import LocalModelError, LocalModels
 from .export import EXPORT_STAGES, ExportError, check_destination, export_timeline
 from .jobs import STATUS_BY_EVENT, Job, JobRegistry, sse_stream
 from .projects import (
@@ -58,6 +58,7 @@ from .projects import (
     ProjectError,
     ProjectNotFound,
     ProjectStore,
+    current_settings,
     utc_now,
     write_json_atomic,
 )
@@ -126,15 +127,21 @@ class EditorService:
         self.jobs = JobRegistry()
         self.env_file = env_file
         self.keys = keys or settings.EnvFileKeys(env_file)
-        self.models = settings.ModelCatalog(env_file, keys=self.keys)
+        log = os.environ.get("VOICECUT_OLLAMA_LOG", "").strip()
+        self.local = LocalModels(
+            store.root, log_path=Path(log) if log else store.root / "ollama.log"
+        )
+        self.models = settings.ModelCatalog(env_file, keys=self.keys, local=self.local)
         self.preferences_path = store.root / "preferences.json"
         # The last Voice Cut settings chosen in the editor beat the CLI's.
         remembered = settings.load_preferences(self.preferences_path)
-        self.defaults = {
-            **DEFAULT_SETTINGS,
-            **defaults,
-            **{key: remembered[key] for key in SETTINGS_KEYS if key in remembered},
-        }
+        self.defaults = current_settings(
+            {
+                **DEFAULT_SETTINGS,
+                **defaults,
+                **{key: remembered[key] for key in SETTINGS_KEYS if key in remembered},
+            }
+        )
         store.defaults = dict(self.defaults)
         self._lock = threading.Lock()
         self._proposals: dict[str, tuple[Path, float, Proposal]] = {}
@@ -303,6 +310,12 @@ class EditorService:
                 process.wait(max(0.0, deadline - time.monotonic()))
             processes.terminate_tree(process, force=True)
 
+    def shutdown(self) -> None:
+        """Stop Voice Cut runs, downloads and the Ollama this editor started."""
+
+        self.stop_jobs()
+        self.local.stop()
+
     @staticmethod
     def _cancel(job: Job) -> None:
         """Ask a running Voice Cut to stop; its worker ends its stages."""
@@ -395,6 +408,7 @@ class EditorService:
                 chosen[key] = value.strip() if isinstance(value, str) else value
                 if chosen[key] in ("", None):
                     chosen[key] = None
+        chosen = current_settings(chosen)
         if chosen["language"] not in SUPPORTED_LANGUAGE_CODES:
             raise HTTPException(400, f"unsupported language {chosen['language']!r}")
         if chosen["planner_backend"] not in PLANNER_BACKENDS:
@@ -425,7 +439,8 @@ class EditorService:
         return chosen
 
     def check_planner(self, chosen: dict[str, Any]) -> None:
-        """Refuse to start a run that would fail for want of a key or runtime."""
+        """Refuse to start a run that would fail for want of a key, Ollama
+        or a downloaded model."""
 
         backend = chosen["planner_backend"]
         key_env = API_KEY_ENV_BY_BACKEND.get(backend)
@@ -436,17 +451,25 @@ class EditorService:
                 raise HTTPException(
                     400, f"Add your {label} API key in Settings ({key_env}) first"
                 )
-        elif not DEFAULT_LOCAL_PYTHON.is_file():
-            raise HTTPException(
-                400, "Local models need VoiceCut's MLX environment (.venv-mlx)"
-            )
+        elif backend == "ollama":
+            try:
+                self.local.ready(self.planner_model(chosen))
+            except LocalModelError as error:
+                raise HTTPException(400, str(error)) from error
+
+    @staticmethod
+    def planner_model(chosen: dict[str, Any]) -> str:
+        return str(
+            chosen["planner_model"]
+            or DEFAULT_MODEL_BY_BACKEND[chosen["planner_backend"]]
+        )
 
     # -- settings dialog --------------------------------------------------------------
     def settings_state(self) -> dict[str, Any]:
         return {
             "env_file": str(self.env_file),
             "key_store": {"kind": self.keys.kind, "location": self.keys.location},
-            "planners": settings.planners(self.keys),
+            "planners": settings.planners(self.keys, self.local),
             "default_models": dict(DEFAULT_MODEL_BY_BACKEND),
             "languages": list(SUPPORTED_LANGUAGE_CODES),
             "defaults": {key: self.defaults.get(key) for key in SETTINGS_KEYS},
@@ -482,6 +505,24 @@ class EditorService:
         except settings.SettingsError as error:
             raise HTTPException(404, str(error)) from error
 
+    def local_model_action(self, action: str, body: Any) -> dict[str, Any]:
+        """Download, stop downloading, delete or set up a local model."""
+
+        body = body if isinstance(body, dict) else {}
+        model = body.get("model")
+        try:
+            if action == "pull":
+                return self.local.pull(model)
+            if action == "cancel":
+                return self.local.cancel(model)
+            if action == "delete":
+                return self.local.delete(model)
+            if action == "think":
+                return self.local.set_think(model, body.get("think"))
+        except LocalModelError as error:
+            raise HTTPException(400, str(error)) from error
+        raise HTTPException(404, f"unknown action {action!r}")
+
     def pipeline_argv(self, project: Project, chosen: dict[str, Any]) -> list[str]:
         argv = [
             str(project.source_path),
@@ -497,6 +538,9 @@ class EditorService:
         ]
         if chosen["planner_model"]:
             argv += ["--planner-model", str(chosen["planner_model"])]
+        if chosen["planner_backend"] == "ollama":
+            think = self.local.think(self.planner_model(chosen))
+            argv += ["--planner-think", "on" if think else "off"]
         if chosen["breath_cleanup"]:
             argv += ["--breath-cleanup", str(chosen["breath_cleanup"])]
         return argv
@@ -508,6 +552,9 @@ class EditorService:
         kept anywhere else travels in the worker's environment.
         """
 
+        if chosen["planner_backend"] == "ollama":
+            # The server this editor found or started.
+            return {"OLLAMA_HOST": self.local.server.ensure()}
         key_env = API_KEY_ENV_BY_BACKEND.get(chosen["planner_backend"])
         if not key_env or self.keys.kind == "env_file":
             return {}
@@ -858,8 +905,9 @@ def create_app(
     @contextlib.asynccontextmanager
     async def lifespan(_: FastAPI):
         yield
-        # Quitting the editor stops Voice Cut instead of orphaning its worker.
-        await run_in_threadpool(service.stop_jobs)
+        # Quitting the editor stops Voice Cut instead of orphaning its worker,
+        # and the Ollama it started.
+        await run_in_threadpool(service.shutdown)
 
     app = FastAPI(title="VoiceCut editor", version=__version__, lifespan=lifespan)
     app.state.service = service
@@ -916,6 +964,11 @@ def create_app(
     @app.get("/api/planners/{backend}/models")
     def planner_models(backend: str, refresh: bool = False) -> dict[str, Any]:
         return service.list_models(backend, refresh)
+
+    @app.post("/api/local-models/{action}")
+    async def local_models(action: str, request: Request) -> dict[str, Any]:
+        body = await _json(request)
+        return await run_in_threadpool(lambda: service.local_model_action(action, body))
 
     @app.get("/api/projects")
     def list_projects() -> list[dict[str, Any]]:
@@ -1113,7 +1166,8 @@ def create_app(
 
         @app.post("/api/desktop/stop-jobs")
         def stop_all_jobs() -> dict[str, bool]:
-            service.stop_jobs()
+            # The app is about to stop the engine.
+            service.shutdown()
             return {"ok": True}
 
     @app.get("/api/jobs/{job_id}")

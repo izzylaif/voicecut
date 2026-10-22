@@ -74,10 +74,8 @@ inference optimized for Apple silicon. VoiceCut uses
 [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) to
 produce the primary transcript and approximate word anchors. Those anchors
 help locate alignment contexts, but MFA supplies the final phone coordinates.
-VoiceCut also uses [MLX LM](https://github.com/ml-explore/mlx-lm) when a user
-selects an optional local planner.
 
-- Pinned packages: MLX 0.32.0, MLX Whisper 0.4.3, and MLX LM 0.31.3
+- Pinned packages: MLX 0.32.0 and MLX Whisper 0.4.3
 - MLX license: [MIT](https://github.com/ml-explore/mlx/blob/main/LICENSE)
 - MLX Examples/Whisper license:
   [MIT](https://github.com/ml-explore/mlx-examples/blob/main/LICENSE)
@@ -91,6 +89,19 @@ checkpoint or local planner model may carry its own model card, license, and
 acceptable-use terms; users and distributors are responsible for reviewing
 them. OpenAI Whisper's code and released model weights are distributed under
 its [MIT license](https://github.com/openai/whisper/blob/main/LICENSE).
+
+### Ollama
+
+[Ollama](https://ollama.com) runs the planner models that run on the user's
+computer, through llama.cpp and, on Apple Silicon, MLX. VoiceCut talks to it
+over its HTTP API; the desktop app installs Ollama's own release (0.40.8,
+checked against its SHA-256) when the system has no Ollama. The models come
+from the [Ollama library](https://ollama.com/library) under their own
+licenses.
+
+- License: [MIT](https://github.com/ollama/ollama/blob/main/LICENSE); its
+  release archives include the licenses of the projects it bundles
+  (llama.cpp, MLX, and others)
 
 ### faster-whisper
 

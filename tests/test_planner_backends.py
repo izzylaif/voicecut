@@ -5,15 +5,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from voicecut.local_llm_worker import extract_final_json_object, render_chat_prompt
+from voicecut import ollama
 from voicecut.planner_backends import (
     DEFAULT_DEEPSEEK_BASE_URL,
     DEFAULT_DEEPSEEK_MODEL,
-    DEFAULT_GEMMA_MODEL,
+    DEFAULT_OLLAMA_MODEL,
     DEFAULT_OPENAI_BASE_URL,
-    DEFAULT_QWEN_MODEL,
-    LocalMLXPlannerBackend,
+    PLANNER_BACKENDS,
+    OllamaPlannerBackend,
     OpenAICompatiblePlannerBackend,
+    PermanentPlannerError,
     default_model_for_backend,
     preflight_planner_backend,
     resolve_planner_base_url,
@@ -126,41 +127,113 @@ def test_deepseek_uses_json_object_and_includes_schema_in_prompt() -> None:
     assert '"transitions"' in user_prompt
 
 
-def test_local_backend_accepts_qwen_gemma_or_arbitrary_hf_model(
-    tmp_path: Path,
-) -> None:
-    python = tmp_path / "mlx-python"
-    python.write_text("", encoding="utf-8")
+class FakeOllama:
+    """An OllamaClient that answers from a script."""
 
-    for model in (
-        DEFAULT_QWEN_MODEL,
-        DEFAULT_GEMMA_MODEL,
-        "organization/custom-mlx-model",
-    ):
-        backend = LocalMLXPlannerBackend(
-            python=python,
-            model=model,
-            max_output_tokens=123,
-            local_files_only=True,
-        )
-        assert backend.model == model
-        assert backend.command == [
-            str(python),
-            "-m",
-            "voicecut.local_llm_worker",
-            "--model",
-            model,
-            "--max-tokens",
-            "123",
-            "--local-files-only",
-        ]
+    def __init__(
+        self,
+        answers: list[ollama.ChatResult],
+        *,
+        capabilities: tuple[str, ...] = ("completion", "thinking"),
+        context: int | None = 40960,
+    ) -> None:
+        self.answers = answers
+        self.capabilities = capabilities
+        self.context = context
+        self.calls: list[dict[str, object]] = []
+
+    def show(self, model: str) -> dict[str, object]:
+        if model == "missing:1b":
+            raise ollama.OllamaError("model 'missing:1b' not found", status=404)
+        info = {"qwen3.context_length": self.context} if self.context else {}
+        return {"capabilities": list(self.capabilities), "model_info": info}
+
+    def chat(self, **kwargs: object) -> ollama.ChatResult:
+        self.calls.append(kwargs)
+        return self.answers.pop(0)
+
+
+def _answer(content: str, reason: str = "stop") -> ollama.ChatResult:
+    return ollama.ChatResult(
+        content=content,
+        thinking="",
+        done_reason=reason,
+        prompt_tokens=10,
+        output_tokens=10,
+    )
+
+
+def test_ollama_backend_constrains_the_answer_and_lets_the_model_reason() -> None:
+    client = FakeOllama([_answer('{"ok":true}')])
+    backend = OllamaPlannerBackend(
+        model="qwen3:0.6b",
+        max_output_tokens=65536,
+        client=client,  # type: ignore[arg-type]
+    )
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+    raw = backend.generate("classify this", response_schema=schema, request_id="w1")
+    assert raw == '{"ok":true}'
+    call = client.calls[0]
+    assert call["format"] == schema
+    assert call["think"] is True
+    assert call["model"] == "qwen3:0.6b"
+    options = call["options"]
+    assert options["num_ctx"] == ollama.CONTEXT_TOKENS  # type: ignore[index]
+    # An explicit budget: Ollama would otherwise generate past a full context.
+    assert 0 < options["num_predict"] < options["num_ctx"]  # type: ignore[index]
+
+
+def test_ollama_backend_answers_without_reasoning_when_reasoning_fills_the_budget() -> (
+    None
+):
+    client = FakeOllama([_answer("", "length"), _answer('{"ok":true}')])
+    backend = OllamaPlannerBackend(model="qwen3:0.6b", client=client)  # type: ignore[arg-type]
+    assert backend.generate("p", response_schema={}, request_id="w1") == '{"ok":true}'
+    assert [call["think"] for call in client.calls] == [True, False]
+
+
+def test_ollama_backend_follows_the_model_and_the_setting_on_reasoning() -> None:
+    plain = FakeOllama([_answer("{}")], capabilities=("completion",))
+    OllamaPlannerBackend(model="gemma3:4b", think=True, client=plain).generate(  # type: ignore[arg-type]
+        "p", response_schema={}, request_id="w"
+    )
+    # A model that cannot reason refuses the parameter.
+    assert plain.calls[0]["think"] is None
+    reasoning = FakeOllama([_answer("{}")])
+    OllamaPlannerBackend(model="qwen3:8b", think=False, client=reasoning).generate(  # type: ignore[arg-type]
+        "p", response_schema={}, request_id="w"
+    )
+    assert reasoning.calls[0]["think"] is False
+
+
+def test_ollama_context_grows_for_a_long_prompt_within_the_model() -> None:
+    backend = OllamaPlannerBackend(
+        model="qwen3:8b",
+        max_output_tokens=65536,
+        client=FakeOllama([], context=131072),  # type: ignore[arg-type]
+    )
+    options = backend.options("x" * 100_000)
+    assert options["num_ctx"] > ollama.CONTEXT_TOKENS
+    assert options["num_ctx"] % 8192 == 0
+    assert options["num_predict"] >= 8192
+    small = OllamaPlannerBackend(
+        model="qwen3:0.6b",
+        client=FakeOllama([], context=16384),  # type: ignore[arg-type]
+    )
+    assert small.options("x" * 100_000)["num_ctx"] == 16384
+
+
+def test_ollama_missing_model_is_not_retried() -> None:
+    backend = OllamaPlannerBackend(model="missing:1b", client=FakeOllama([]))  # type: ignore[arg-type]
+    with pytest.raises(PermanentPlannerError, match="ollama pull missing:1b"):
+        backend.generate("p", response_schema={}, request_id="w")
 
 
 def test_model_defaults_are_provider_specific() -> None:
-    assert default_model_for_backend("qwen") == DEFAULT_QWEN_MODEL
-    assert default_model_for_backend("local") == DEFAULT_QWEN_MODEL
-    assert default_model_for_backend("gemma") == DEFAULT_GEMMA_MODEL
+    assert default_model_for_backend("ollama") == DEFAULT_OLLAMA_MODEL
     assert default_model_for_backend("deepseek") == "deepseek-v4-flash"
+    for legacy in ("local", "qwen", "gemma"):
+        assert legacy not in PLANNER_BACKENDS
     with pytest.raises(ValueError, match="unsupported planner backend"):
         default_model_for_backend("unknown")
 
@@ -233,95 +306,42 @@ def test_cloud_preflight_reports_missing_key_before_work(
             env_file=tmp_path / "missing.env",
             base_url=None,
             api_key_env=None,
-            local_python=tmp_path / "unused-python",
         )
 
 
-def test_local_worker_uses_model_chat_template_and_disables_thinking() -> None:
-    calls: list[tuple[object, dict[str, object]]] = []
-
-    class Tokenizer:
-        def apply_chat_template(
-            self,
-            messages: object,
-            **kwargs: object,
-        ) -> str:
-            calls.append((messages, kwargs))
-            return "rendered"
-
-    assert (
-        render_chat_prompt(
-            Tokenizer(),
-            "prompt",
-            system_instruction="system",
+def test_ollama_preflight_says_what_to_install_or_download(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(ollama.OllamaClient, "version", lambda self, **_: None)
+    monkeypatch.setattr(ollama.OllamaServer, "installed", staticmethod(lambda: None))
+    with pytest.raises(RuntimeError, match="install it from"):
+        preflight_planner_backend(
+            provider="ollama",
+            env_file=tmp_path / "missing.env",
+            base_url=None,
+            api_key_env=None,
+            model="qwen3:8b",
         )
-        == "rendered"
+    monkeypatch.setattr(ollama.OllamaClient, "version", lambda self, **_: "0.40.8")
+    monkeypatch.setattr(
+        ollama.OllamaClient, "models", lambda self: [{"model": "qwen3:0.6b"}]
     )
-    messages, kwargs = calls[0]
-    assert messages == [
-        {"role": "system", "content": "system"},
-        {"role": "user", "content": "prompt"},
-    ]
-    assert kwargs["enable_thinking"] is False
-
-
-def test_local_worker_can_enable_qwen_thinking_and_extract_final_json() -> None:
-    calls: list[dict[str, object]] = []
-
-    class Tokenizer:
-        def apply_chat_template(
-            self,
-            messages: object,
-            **kwargs: object,
-        ) -> str:
-            del messages
-            calls.append(kwargs)
-            return "rendered"
-
-    render_chat_prompt(
-        Tokenizer(),
-        "prompt",
-        system_instruction="system",
-        enable_thinking=True,
-    )
-    assert calls[0]["enable_thinking"] is True
-    assert (
-        extract_final_json_object(
-            '<think>Compare the attempts first.</think>\n```json\n{"ok":true}\n```'
+    with pytest.raises(RuntimeError, match="ollama pull qwen3:8b"):
+        preflight_planner_backend(
+            provider="ollama",
+            env_file=tmp_path / "missing.env",
+            base_url=None,
+            api_key_env=None,
+            model="qwen3:8b",
         )
-        == '{"ok":true}'
+    configuration = preflight_planner_backend(
+        provider="ollama",
+        env_file=tmp_path / "missing.env",
+        base_url=None,
+        api_key_env=None,
+        model="qwen3:0.6b",
     )
-
-
-def test_local_worker_folds_system_instruction_for_gemma_templates() -> None:
-    calls: list[object] = []
-
-    class GemmaTokenizer:
-        def apply_chat_template(
-            self,
-            messages: object,
-            **kwargs: object,
-        ) -> str:
-            del kwargs
-            calls.append(messages)
-            if len(messages) > 1:  # type: ignore[arg-type]
-                raise ValueError("System role is not supported")
-            return "gemma-rendered"
-
-    assert (
-        render_chat_prompt(
-            GemmaTokenizer(),
-            "classify",
-            system_instruction="return JSON",
-        )
-        == "gemma-rendered"
-    )
-    assert calls[-1] == [
-        {
-            "role": "user",
-            "content": "return JSON\n\nclassify",
-        }
-    ]
+    assert configuration.api_key_env is None
 
 
 def test_take_planner_cli_exposes_provider_neutral_options(tmp_path: Path) -> None:
@@ -339,12 +359,12 @@ def test_take_planner_cli_exposes_provider_neutral_options(tmp_path: Path) -> No
             "https://example.test/v1",
             "--planner-api-key-env",
             "CUSTOM_KEY",
-            "--planner-python",
-            str(tmp_path / "python"),
+            "--planner-think",
+            "off",
         ]
     )
     assert args.planner_backend == "deepseek"
     assert args.planner_model == "deepseek-v4-flash"
     assert args.planner_base_url == "https://example.test/v1"
     assert args.planner_api_key_env == "CUSTOM_KEY"
-    assert args.planner_python == tmp_path / "python"
+    assert args.planner_think == "off"

@@ -37,9 +37,11 @@ import numpy as np
 from .common import read_json, sha256_file, write_json
 from .planner_backends import (
     MediaPart,
+    PermanentPlannerError,
     PlannerBackend,
     add_planner_backend_arguments,
     create_planner_backend,
+    think_setting,
 )
 
 PLANNER_NAME = "take_planner_v1"
@@ -388,6 +390,12 @@ def _line_start_at_or_before(lines: Sequence[Line], word_id: int) -> int:
     return lines[0].first_id
 
 
+def _source_text(words: Sequence[TranscriptWord] | None, first: int, last: int) -> str:
+    if words is None:
+        return ""
+    return " ".join(word.text for word in words[first : last + 1])
+
+
 def parse_window_response(
     raw: str,
     *,
@@ -397,8 +405,22 @@ def parse_window_response(
     final: bool,
     zone_lines: Sequence[Line],
     origin: str,
+    words: Sequence[TranscriptWord] | None = None,
+    strict: bool = True,
 ) -> WindowDecision:
-    """Validate one window response; repair only unambiguous details."""
+    """Validate one window response, repairing what has one reading.
+
+    Models below frontier size often get the geometry of an otherwise good
+    answer wrong.  Repairs that cannot lose narration this window owns are
+    always made: items are put in source order, an item overlapping the one
+    before it starts after it, words before the editable zone are cut off,
+    and an item reaching past the zone is left to the next window (cut at
+    the end of the recording).  Repairs that drop something the model meant
+    to keep -- a reversed range, an item entirely before the zone, a
+    malformed item -- reject the answer while ``strict``, so the model gets
+    another try; otherwise they are made too.  A changed item's text becomes
+    its source words'.
+    """
 
     try:
         value = json.loads(raw)
@@ -407,34 +429,36 @@ def parse_window_response(
     if not isinstance(value, dict) or not isinstance(value.get("keep"), list):
         raise WindowResponseError("response must be an object with a keep list")
     warnings: list[str] = []
-    items: list[KeptItem] = []
+
+    def lossy(message: str) -> None:
+        if strict:
+            raise WindowResponseError(message)
+        warnings.append(f"{message}; dropped")
+
+    candidates: list[KeptItem] = []
     for index, raw_item in enumerate(value["keep"]):
         if not isinstance(raw_item, dict):
-            raise WindowResponseError(f"keep[{index}] is not an object")
+            lossy(f"keep[{index}] is not an object")
+            continue
         first = raw_item.get("first_id")
         last = raw_item.get("last_id")
         if type(first) is not int or type(last) is not int:
-            raise WindowResponseError(f"keep[{index}] IDs must be integers")
+            lossy(f"keep[{index}] IDs must be integers")
+            continue
         if first > last:
-            raise WindowResponseError(
-                f"keep[{index}] has first_id {first} after last_id {last}"
-            )
-        if first < zone_first_id or last > zone_last_id:
-            raise WindowResponseError(
-                f"keep[{index}] range {first}-{last} leaves the editable IDs "
+            lossy(f"keep[{index}] has first_id {first} after last_id {last}")
+            continue
+        if last < zone_first_id:
+            lossy(
+                f"keep[{index}] range {first}-{last} precedes the editable IDs "
                 f"{zone_first_id}-{zone_last_id}"
             )
-        if items and first <= items[-1].last_id:
-            raise WindowResponseError(
-                f"keep[{index}] range {first}-{last} overlaps or precedes the "
-                f"previous item ending at {items[-1].last_id}; items must be "
-                "chronological and non-overlapping"
-            )
+            continue
         break_after = raw_item.get("break_after")
         if break_after not in BREAK_TYPES:
             warnings.append(f"keep[{index}] break_after {break_after!r} -> sentence")
             break_after = "sentence"
-        items.append(
+        candidates.append(
             KeptItem(
                 first_id=first,
                 last_id=last,
@@ -443,6 +467,50 @@ def parse_window_response(
                 origin=origin,
             )
         )
+    if [item.first_id for item in candidates] != sorted(
+        item.first_id for item in candidates
+    ):
+        warnings.append("items were not in source order; sorted")
+        candidates.sort(key=lambda item: (item.first_id, item.last_id))
+
+    items: list[KeptItem] = []
+    beyond_zone: list[KeptItem] = []
+    for item in candidates:
+        first, last = item.first_id, item.last_id
+        if final and first > zone_last_id:
+            warnings.append(f"item {first}-{last} lies after the editable IDs; dropped")
+            continue
+        if items and first <= items[-1].last_id:
+            first = items[-1].last_id + 1
+        first = max(first, zone_first_id)
+        if final:
+            last = min(last, zone_last_id)
+        if first > last:
+            warnings.append(
+                f"item {item.first_id}-{item.last_id} repeats words kept "
+                "before it; dropped"
+            )
+            continue
+        if (first, last) != (item.first_id, item.last_id):
+            warnings.append(
+                f"item {item.first_id}-{item.last_id} -> {first}-{last} "
+                "(overlap or IDs outside the editable zone)"
+            )
+            item = KeptItem(
+                first_id=first,
+                last_id=last,
+                text=_source_text(words, first, last) or item.text,
+                break_after=item.break_after,
+                origin=item.origin,
+            )
+        if item.first_id > zone_last_id:
+            beyond_zone.append(item)
+            continue
+        items.append(item)
+    warnings.extend(
+        f"item {item.first_id}-{item.last_id} lies in the look-ahead; dropped"
+        for item in beyond_zone
+    )
 
     drops: list[int] = []
     for number in value.get("drop_previous") or []:
@@ -458,13 +526,17 @@ def parse_window_response(
         resume = None
     else:
         if resume is not None and type(resume) is not int:
-            raise WindowResponseError("resume_from_id must be an integer or null")
+            warnings.append(f"resume_from_id {resume!r} is not an integer; ignored")
+            resume = None
+        if resume is not None and resume < zone_first_id:
+            warnings.append(f"resume_from_id {resume} precedes the zone; ignored")
+            resume = None
         if resume is None or resume > zone_last_id:
             resume = zone_last_id + 1
-        if resume < zone_first_id:
-            raise WindowResponseError(
-                f"resume_from_id {resume} precedes the editable IDs"
-            )
+        # A sentence that runs past the zone is decided with the look-ahead.
+        for item in items:
+            if item.last_id > zone_last_id:
+                resume = min(resume, item.first_id)
         if resume <= zone_last_id:
             resume = _line_start_at_or_before(zone_lines, resume)
         # An item cannot be kept now and re-decided later.
@@ -479,12 +551,29 @@ def parse_window_response(
             # No progress would loop forever.  A one-line zone is settled as
             # answered; a longer zone must decide at least its first lines.
             last_line_start = zone_lines[-1].first_id
-            if last_line_start > zone_first_id:
+            if last_line_start > zone_first_id and strict:
                 raise WindowResponseError(
                     "resume_from_id defers the whole window; decide at least "
                     f"everything before ID {last_line_start}"
                 )
+            if last_line_start > zone_first_id:
+                warnings.append("the answer deferred the whole window; kept it all")
             resume = zone_last_id + 1
+            items = [
+                KeptItem(
+                    first_id=item.first_id,
+                    last_id=min(item.last_id, zone_last_id),
+                    text=(
+                        item.text
+                        if item.last_id <= zone_last_id
+                        else _source_text(words, item.first_id, zone_last_id)
+                        or item.text
+                    ),
+                    break_after=item.break_after,
+                    origin=item.origin,
+                )
+                for item in items
+            ]
         else:
             items = settled
             warnings.extend(
@@ -506,6 +595,8 @@ def parse_review_response(
     zone_last_id: int,
     zone_lines: Sequence[Line],
     origin: str,
+    words: Sequence[TranscriptWord] | None = None,
+    strict: bool = True,
 ) -> WindowDecision:
     """A review re-decides a region that held kept narration: never empty."""
 
@@ -517,6 +608,8 @@ def parse_review_response(
         final=True,
         zone_lines=zone_lines,
         origin=origin,
+        words=words,
+        strict=strict,
     )
     if not decision.items:
         raise WindowResponseError(
@@ -595,8 +688,10 @@ def _generate(
                 prompt, response_schema=schema, request_id=request_id
             )
         except Exception as error:  # provider SDKs raise many types
-            if attempt == MAX_TRANSPORT_RETRIES or PERMANENT_ERROR_PATTERN.search(
-                f"{type(error).__name__}: {error}"
+            if (
+                attempt == MAX_TRANSPORT_RETRIES
+                or isinstance(error, PermanentPlannerError)
+                or PERMANENT_ERROR_PATTERN.search(f"{type(error).__name__}: {error}")
             ):
                 raise
             print(
@@ -885,7 +980,8 @@ class TakePlanner:
         for attempt in range(1, MAX_ATTEMPTS + 1):
             raw = self._cached_call(f"{name}_a{attempt}", request, media)
             try:
-                decision = parse(raw)
+                # The last try keeps what it can rather than end the plan.
+                decision = parse(raw, strict=attempt < MAX_ATTEMPTS)
             except WindowResponseError as error:
                 attempts.append({"attempt": attempt, "error": str(error)})
                 print(f"{name}: rejected response ({error})", file=sys.stderr)
@@ -986,6 +1082,7 @@ class TakePlanner:
                     final=final,
                     zone_lines=zone_lines,
                     origin=name,
+                    words=self.words,
                 ),
             )
             dropped = [previous[number - 1] for number in decision.drop_previous]
@@ -1015,6 +1112,8 @@ class TakePlanner:
                 print(f"  keep [{item.first_id}-{item.last_id}] {item.text}")
             for item in dropped:
                 print(f"  revoke [{item.first_id}-{item.last_id}] {item.text}")
+            for warning in decision.warnings:
+                print(f"  note: {warning}")
             if final or decision.resume_from_id is None:
                 break
             next_line = line_by_first_id.get(decision.resume_from_id)
@@ -1072,18 +1171,31 @@ class TakePlanner:
                 f"({'; '.join(region['reasons'])})",
                 flush=True,
             )
-            decision, attempts = self._decide(
-                name,
-                prompt,
-                media,
-                partial(
-                    parse_review_response,
-                    zone_first_id=editable[0],
-                    zone_last_id=editable[1],
-                    zone_lines=region_lines,
-                    origin=name,
-                ),
-            )
+            try:
+                decision, attempts = self._decide(
+                    name,
+                    prompt,
+                    media,
+                    partial(
+                        parse_review_response,
+                        zone_first_id=editable[0],
+                        zone_last_id=editable[1],
+                        zone_lines=region_lines,
+                        origin=name,
+                        words=self.words,
+                    ),
+                )
+            except TakePlanError as error:
+                # The windows decided this region already; a review that
+                # cannot answer leaves it as it is.
+                print(f"  {error}; the region stays as it was", file=sys.stderr)
+                decision = WindowDecision(
+                    items=list(current),
+                    drop_previous=[],
+                    resume_from_id=None,
+                    warnings=[f"review failed, region unchanged: {error}"],
+                )
+                attempts = [{"error": str(error)}]
             items[first_item : last_item + 1] = decision.items
             review_ledger.append(
                 {
@@ -1215,8 +1327,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         system_instruction=SYSTEM_INSTRUCTION,
         base_url=args.planner_base_url,
         api_key_env=args.planner_api_key_env,
-        local_python=args.planner_python.absolute(),
-        local_files_only=args.local_files_only,
+        think=think_setting(args.planner_think),
         gemini_temperature=None,
     )
     try:

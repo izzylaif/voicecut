@@ -5,9 +5,13 @@
 //!   runtime/          laid out like a VoiceCut checkout, so the Python code
 //!     src/voicecut/   finds everything where scripts/install.sh puts it:
 //!     .venv/          Python 3.12: editor, pipeline, WhisperX, planners
-//!     .venv-mlx/      Python 3.11: MLX Whisper, local planners
+//!     .venv-mlx/      Python 3.11: MLX Whisper
 //!     .mfa-env/       micromamba: Montreal Forced Aligner, FFmpeg
 //!     .voicecut-cache/runtime/   MFA models, Respiro-en
+//!   ollama/           VoiceCut's own Ollama, when the system has none:
+//!     app/            the program, from Ollama's release archive
+//!     models/         the local planner models downloaded in the editor
+//!     home/           its home directory (its key)
 //!   tools/            uv, micromamba
 //!   python/           the CPython builds the environments use
 //!   editor/           the engine's own directory (remembered settings)
@@ -19,8 +23,9 @@
 //!   preferences.json  appearance, playback speed
 //! ```
 //!
-//! Model weights download on first use into the usual Hugging Face cache
-//! (`~/.cache/huggingface`), shared with other tools.
+//! Whisper's weights download on first use into the usual Hugging Face cache
+//! (`~/.cache/huggingface`), shared with other tools; a user's own Ollama
+//! keeps its models where it always does.
 //!
 //! Linux uses `$XDG_DATA_HOME/voicecut` (`~/.local/share/voicecut`), Windows
 //! `%LOCALAPPDATA%\com.vectozavr.voicecut`, with the same layout (`Scripts\`
@@ -145,6 +150,26 @@ impl Paths {
         } else {
             vec![self.mfa_env().join("bin")]
         }
+    }
+    pub fn ollama(&self) -> PathBuf {
+        self.data.join("ollama")
+    }
+    /// Where setup unpacks Ollama's release archive.
+    pub fn ollama_app(&self) -> PathBuf {
+        self.ollama().join("app")
+    }
+    pub fn ollama_executable(&self) -> PathBuf {
+        let app = self.ollama_app();
+        if cfg!(windows) {
+            app.join("ollama.exe")
+        } else if cfg!(target_os = "macos") {
+            app.join("ollama")
+        } else {
+            app.join("bin").join("ollama")
+        }
+    }
+    pub fn ollama_models(&self) -> PathBuf {
+        self.ollama().join("models")
     }
     pub fn runtime_cache(&self) -> PathBuf {
         self.runtime().join(".voicecut-cache").join("runtime")

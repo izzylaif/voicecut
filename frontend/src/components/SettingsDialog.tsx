@@ -1,10 +1,24 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ExternalLink, KeyRound, Loader2, type LucideIcon, Monitor, Moon, Sun, X } from 'lucide-react';
+import {
+  Cpu,
+  Download,
+  ExternalLink,
+  KeyRound,
+  Loader2,
+  type LucideIcon,
+  Monitor,
+  Moon,
+  Sun,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { api, ApiError } from '../api';
 import { confirmAction, desktop } from '../desktop';
+import { localModelAction, pullText, sizeText, useLocalModels } from '../localModels';
 import { type Appearance, appearance, setAppearance, subscribe } from '../theme';
-import type { PlannerInfo, RunSettings, SettingsState } from '../types';
+import type { ModelInfo, PlannerInfo, RunSettings, SettingsState } from '../types';
 import { setAutomaticUpdates, useUpdate } from '../updates';
+import { downloadLocalModel, PullBar } from './VoiceCutControls';
 
 const APPEARANCE_OPTIONS: { value: Appearance; label: string; icon: LucideIcon }[] = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -14,7 +28,7 @@ const APPEARANCE_OPTIONS: { value: Appearance; label: string; icon: LucideIcon }
 
 /**
  * Settings: appearance, the desktop app's updates, API keys of the cloud
- * planners, and (in a project) Voice Cut options.
+ * planners, the local planner's models, and (in a project) Voice Cut options.
  */
 export function SettingsDialog({
   state,
@@ -75,6 +89,8 @@ export function SettingsDialog({
               <KeyRow key={planner.id} planner={planner} state={state} onState={onState} />
             ))}
         </section>
+
+        {state.planners.some((planner) => planner.id === 'ollama') && <LocalModelsSection />}
 
         {settings && onSettings && (
         <section className="settings-section">
@@ -237,4 +253,120 @@ function KeyRow({
       {message && <p className={message.tone === 'ok' ? 'ok-text small' : 'error-text small'}>{message.text}</p>}
     </div>
   );
+}
+
+/**
+ * The local planner: where Ollama runs, the models (download, delete) and
+ * whether each one reasons before it answers.
+ */
+function LocalModelsSection() {
+  const { list, error: actionError } = useLocalModels();
+  const [name, setName] = useState('');
+  const status = list?.ollama;
+  const models = (list?.models ?? []).filter((model) => model.recommended || model.downloaded || model.pull);
+
+  return (
+    <section className="settings-section">
+      <h3>Local models</h3>
+      <p className="muted small">
+        {status?.available
+          ? `${status.source === 'voicecut' ? `Ollama ${status.version ?? ''}, installed by VoiceCut,` : `Your Ollama ${status.version ?? ''} (${status.url})`}` +
+            ' runs these models on this computer; the recording never leaves it.'
+          : (list?.error?.message ?? 'Looking for Ollama…')}{' '}
+        A model that reasons first is slower and often more accurate.
+      </p>
+      {actionError && <p className="error-text small">{actionError}</p>}
+      <ul className="local-models">
+        {models.map((model) => (
+          <LocalModelRow key={model.id} model={model} usable={Boolean(status?.available)} />
+        ))}
+      </ul>
+      {status?.available && (
+        <form
+          className="key-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!name.trim()) return;
+            void downloadLocalModel(name.trim()).then((started) => started && setName(''));
+          }}
+        >
+          <input
+            value={name}
+            placeholder="Another model from ollama.com/library, e.g. qwen3:32b"
+            spellCheck={false}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <button type="submit" className="button" disabled={!name.trim() || /\s/.test(name.trim())}>
+            <Download size={14} /> Download
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function LocalModelRow({ model, usable }: { model: ModelInfo; usable: boolean }) {
+  const pulling = model.pull && !model.pull.done;
+  return (
+    <li className="local-model">
+      <div className="local-model-head">
+        <Cpu size={14} />
+        <strong>{model.label}</strong>
+        {model.label !== model.id && <code className="muted">{model.id}</code>}
+        {model.engine && <span className="badge">{model.engine}</span>}
+        {model.default && <span className="badge">default</span>}
+        <span className={`key-state${model.downloaded ? ' set' : ''}`}>{stateText(model)}</span>
+        <span className="local-model-actions">
+          {pulling ? (
+            <button type="button" className="button subtle" onClick={() => void localModelAction('cancel', model.id)}>
+              Stop
+            </button>
+          ) : model.downloaded ? (
+            <button
+              type="button"
+              className="icon-button"
+              title={`Delete ${model.id} from this computer`}
+              onClick={() =>
+                void confirmAction(`Delete ${model.id}${model.size_gb ? ` (${sizeText(model)})` : ''} from this computer?`, {
+                  ok: 'Delete',
+                }).then((ok) => ok && localModelAction('delete', model.id))
+              }
+            >
+              <Trash2 size={14} />
+            </button>
+          ) : (
+            usable && (
+              <button type="button" className="button" onClick={() => void downloadLocalModel(model)}>
+                <Download size={14} /> Download
+              </button>
+            )
+          )}
+          {model.pull?.error && !pulling && (
+            <button type="button" className="button subtle" onClick={() => void localModelAction('cancel', model.id)}>
+              Dismiss
+            </button>
+          )}
+        </span>
+      </div>
+      {pulling && <PullBar fraction={model.pull?.fraction ?? null} />}
+      {model.can_think !== false && (
+        <label className="checkbox small">
+          <input
+            type="checkbox"
+            checked={Boolean(model.think)}
+            disabled={!usable}
+            onChange={(event) => void localModelAction('think', model.id, { think: event.target.checked })}
+          />
+          Reason before answering
+        </label>
+      )}
+    </li>
+  );
+}
+
+function stateText(model: ModelInfo): string {
+  if (model.pull) return pullText(model);
+  const size = sizeText(model);
+  if (model.downloaded) return size ? `Downloaded · ${size}` : 'Downloaded';
+  return size ? `${size} download` : 'Not downloaded';
 }

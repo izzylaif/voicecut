@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, CircleHelp, Download, FileAudio, FileVideo, Settings, Sparkles } from 'lucide-react';
 import { api, followJob } from '../api';
 import { confirmAction, desktop, documentOpened, editText, invoke, onMenu } from '../desktop';
+import { findLocalModel } from '../localModels';
 import { EditorStore, errorText } from '../store';
 import { Timeline } from '../timeline/Timeline';
 import type { ProjectState, RunSettings, SettingsState } from '../types';
@@ -13,7 +14,7 @@ import { Transcript } from './Transcript';
 import { Transport } from './Transport';
 import { UpdateButton } from './UpdateButton';
 import { Viewer } from './Viewer';
-import { plannerOf, VoiceCutControls } from './VoiceCutControls';
+import { downloadLocalModel, modelOf, plannerOf, VoiceCutControls } from './VoiceCutControls';
 
 const mod = navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl+';
 
@@ -123,6 +124,12 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
     if (planner?.key_env && !planner.key?.set) {
       store.notify(`Add your ${planner.label} API key first`, 'error');
       setSettingsOpen(true);
+      return;
+    }
+    const local = planner?.id === 'ollama' ? findLocalModel(modelOf(settings, settingsState)) : undefined;
+    if (local && !local.downloaded) {
+      if (local.pull && !local.pull.done) store.notify(`${local.id} is still downloading`, 'error');
+      else void downloadLocalModel(local);
       return;
     }
     if (store.proposal && store.isEdited) {

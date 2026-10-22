@@ -16,8 +16,9 @@ VoiceCut (Tauri, ~10 MB)                    data directory (see above)
 ┌──────────────────────────────┐            ┌─────────────────────────────────────────┐
 │ menus, windows, dialogs,     │  spawns    │ runtime/  (a VoiceCut checkout's layout)│
 │ documents, first-run setup   ├───────────►│   .venv/…/voicecut-editor --desktop     │
-│                              │            │     └─ worker ─ pipeline ─ Whisper      │
-│ system webview ── editor ────┼─ HTTP ────►│   127.0.0.1:<port>           └─ MFA     │
+│                              │            │     ├─ worker ─ pipeline ─ Whisper      │
+│ system webview ── editor ────┼─ HTTP ────►│     │  127.0.0.1:<port>      └─ MFA     │
+│                              │            │     └─ ollama serve (local planners)    │
 └──────────────────────────────┘            └─────────────────────────────────────────┘
 ```
 
@@ -74,7 +75,7 @@ Setup does what `scripts/install.sh` does in a checkout, pinned and verified:
 4. `.venv` (editor, pipeline, PyTorch, WhisperX, planners) from the
    system's hashed lock; on Intel Macs, Linux and Windows it also holds
    faster-whisper and PyTorch for the CPU;
-5. Apple Silicon: `.venv-mlx` (MLX Whisper, local planners);
+5. Apple Silicon: `.venv-mlx` (MLX Whisper);
    Linux and Windows with an NVIDIA GPU (`nvidia-smi` finds one): the CUDA 12
    cuBLAS and cuDNN libraries faster-whisper needs, from
    `requirements-cuda-*.txt`;
@@ -82,14 +83,19 @@ Setup does what `scripts/install.sh` does in a checkout, pinned and verified:
    plus a one-line fix of MFA 3.4.1, which quotes tool paths containing a
    space and so cannot run from "Application Support" or `C:\Users\First Last`;
 7. Respiro-en (breath detection), checked against its SHA-256;
-8. a check that every part starts, and removal of the downloaded archives.
+8. Ollama's release for the system, checked against its SHA-256, unless the
+   system has an Ollama already (see "Local planners");
+9. a check that every part starts, and removal of the downloaded archives.
 
-About 0.8–1.6 GB is downloaded and 3.4–4.3 GB stays on disk (the CUDA
-libraries add about 1 GB). Each step records a fingerprint of its pins in
+About 1–1.7 GB is downloaded on a Mac and 2.8–2.9 GB on Linux and Windows,
+where Ollama's release carries CUDA libraries, and 3.6–4.7 GB stays on disk;
+next to an NVIDIA GPU the CUDA libraries for Whisper and for Ollama add about
+3.4 GB more. Each step records a fingerprint of its pins in
 `setup.json`: a failed or cancelled setup resumes at the step that did not
 finish ("Try Again"), and a new app version updates only what changed (a new
-VoiceCut source takes seconds). Model weights download on first use into
-`~/.cache/huggingface`, as with the command line. Logs are in the data
+VoiceCut source takes seconds). Whisper's weights download on first use into
+`~/.cache/huggingface`, as with the command line, and local planner models
+when they are chosen (see "Local planners"). Logs are in the data
 directory's `logs/`, and the appearance (System, Light, Dark) and playback
 speed in its `preferences.json`: the editor's page cannot keep them, since its
 address changes with the engine's port on every launch.
@@ -109,6 +115,41 @@ Access; Windows — Settings › Apps (tick "Delete the application data" to
 remove the engine too); `.deb` — remove the package; AppImage — delete the
 file, `~/.local/share/applications/voicecut-appimage.desktop` and
 `~/.local/share/mime/packages/voicecut.xml`.
+
+## Local planners
+
+Planners that run on the computer go through [Ollama](https://ollama.com) on
+every system (see [docs/configuration.md](../docs/configuration.md#local-configuration)
+for the planner side). Setup installs Ollama only when the system has none:
+an `ollama` on `PATH` or where Ollama's installers put it
+(`/Applications/Ollama.app`, `/usr/local/bin`, `%LOCALAPPDATA%\Programs\Ollama`),
+or one answering on `127.0.0.1:11434`, is used as it is, with the models it
+already has. Otherwise setup unpacks Ollama's release archive, pinned in
+`runtime.json` (`ollama-darwin.tgz`, universal, 175 MB;
+`ollama-linux-amd64.tar.zst`, 1.5 GB; `ollama-windows-amd64.zip`, 1.6 GB),
+into the data directory:
+
+```
+ollama/app/      the program (CUDA libraries only next to an NVIDIA GPU)
+ollama/models/   the models downloaded in the editor (OLLAMA_MODELS)
+ollama/home/     its home directory (Ollama's key), macOS and Linux
+```
+
+The engine starts Ollama when a local model is first needed (the planner's
+model list, a download, a Voice Cut): a running Ollama of the user's if there
+is one, else the installed one, else VoiceCut's own, as `ollama serve` on a
+free loopback port with `OLLAMA_CONTEXT_LENGTH=32768` and `OLLAMA_NO_CLOUD=1`
+(and `OLLAMA_MODELS` for VoiceCut's own). It is a child of the engine, so it
+stops with it; its log is `logs/ollama.log`.
+
+Models are not part of setup: the planner's model list in the toolbar shows
+VoiceCut's recommendations first (MLX tags on Apple Silicon with more than
+32 GB, GGUF elsewhere), then every other model Ollama has, and downloads one
+(15–25 GB for the recommended ones) with its progress when it is chosen; any
+other Ollama model can be typed in. **Settings › Local models** lists them
+too, deletes them, and sets for each model whether it reasons before
+answering (`local_models.json` in `editor/`). Voice Cut with a model that is
+not downloaded offers the download instead of starting.
 
 ## Whisper on Intel Macs, Linux and Windows
 
@@ -331,7 +372,12 @@ project:
 
 ```bash
 python3 desktop/tests/e2e.py --app path/to/the/test/build   # --full runs Voice Cut too
+python3 desktop/tests/e2e.py --app path/to/the/test/build --local qwen3:0.6b
 ```
+
+`--local MODEL` runs Voice Cut with the local planner instead of Gemini: the
+test downloads the (small) model through the editor's model list, checks its
+progress, and plans the example with it.
 
 ## Building
 
