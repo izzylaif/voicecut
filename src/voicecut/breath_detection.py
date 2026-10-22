@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import importlib.util
-import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import numpy as np
 
 from .common import sha256_file
 
-
-RESPIRO_UPSTREAM_REPOSITORY = "https://github.com/ydqmkkx/Respiro-en"
 RESPIRO_UPSTREAM_COMMIT = "70e01c60c2f582c41092730680f2894ab24d6467"
 RESPIRO_MODULES_SHA256 = (
     "f789e0986e3090d7df5f9f0f596d9e3601c6da514c3ac01a65920a493b840e46"
@@ -29,9 +27,6 @@ RESPIRO_SAMPLE_RATE = 16_000
 RESPIRO_FRAME_HOP_SAMPLES = 160
 RESPIRO_FRAME_HOP_MS = 10
 DEFAULT_BREATH_THRESHOLD = 0.5
-DEFAULT_BREATH_MIN_DURATION_MS = 80
-DEFAULT_BREATH_CONTEXT_MS = 750.0
-DEFAULT_BREATH_MAX_CROP_SECONDS = 30.0
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RESPIRO_CACHE_ROOT = (
@@ -211,353 +206,54 @@ def _validate_probabilities(probabilities: np.ndarray) -> np.ndarray:
     return values
 
 
-def merge_analysis_crops(
-    ranges: Sequence[tuple[int, int]],
-    *,
-    total_samples: int,
-    sample_rate: int,
-    context_ms: float = DEFAULT_BREATH_CONTEXT_MS,
-) -> list[tuple[int, int]]:
-    """Expand relevant regions once and merge overlaps before inference."""
-
-    if total_samples < 0 or sample_rate <= 0 or context_ms < 0.0:
-        raise ValueError("invalid breath-analysis crop geometry")
-    context = round(context_ms * sample_rate / 1000.0)
-    expanded: list[tuple[int, int]] = []
-    for raw_start, raw_end in ranges:
-        start = max(0, int(raw_start) - context)
-        end = min(total_samples, int(raw_end) + context)
-        if not 0 <= start < end <= total_samples:
-            continue
-        expanded.append((start, end))
-    merged: list[list[int]] = []
-    for start, end in sorted(expanded):
-        if not merged or start > merged[-1][1]:
-            merged.append([start, end])
-        else:
-            merged[-1][1] = max(merged[-1][1], end)
-    return [(start, end) for start, end in merged]
-
-
-def split_long_analysis_crops(
-    crops: Sequence[tuple[int, int]],
-    *,
-    sample_rate: int,
-    max_crop_seconds: float = DEFAULT_BREATH_MAX_CROP_SECONDS,
-    context_ms: float = DEFAULT_BREATH_CONTEXT_MS,
-) -> list[tuple[int, int]]:
-    """Bound Conformer memory while retaining context at every split."""
-
-    if sample_rate <= 0 or max_crop_seconds <= 0.0 or context_ms < 0.0:
-        raise ValueError("invalid breath-analysis chunk configuration")
-    maximum = round(max_crop_seconds * sample_rate)
-    overlap = round(2.0 * context_ms * sample_rate / 1000.0)
-    if maximum <= overlap:
-        raise ValueError("breath-analysis crop must exceed its split overlap")
-    chunks: list[tuple[int, int]] = []
-    for crop_start, crop_end in crops:
-        start = int(crop_start)
-        end = int(crop_end)
-        if end <= start:
-            continue
-        while end - start > maximum:
-            chunk_end = start + maximum
-            chunks.append((start, chunk_end))
-            start = chunk_end - overlap
-        chunks.append((start, end))
-    return chunks
-
-
-def _resample_mono(
+def breath_probabilities(
     mono: np.ndarray,
+    sample_rate: int,
     *,
-    source_sample_rate: int,
-) -> np.ndarray:
-    waveform = np.asarray(mono, dtype=np.float32)
-    if waveform.ndim != 1 or not len(waveform):
-        raise BreathDetectionError("breath-analysis crop is empty")
-    if source_sample_rate == RESPIRO_SAMPLE_RATE:
-        return np.array(waveform, dtype=np.float32, copy=True)
-
-    import torch
-    import torchaudio.functional as audio_functional
-
-    tensor = torch.from_numpy(np.ascontiguousarray(waveform))
-    resampled = audio_functional.resample(
-        tensor,
-        source_sample_rate,
-        RESPIRO_SAMPLE_RATE,
-    )
-    return resampled.detach().to("cpu").numpy().astype(np.float32, copy=False)
-
-
-def _event_frame_runs(
-    probabilities: np.ndarray,
-    *,
-    threshold: float,
-    minimum_duration_ms: int,
-) -> list[tuple[int, int]]:
-    minimum_frames = max(
-        1,
-        math.ceil(minimum_duration_ms / RESPIRO_FRAME_HOP_MS),
-    )
-    indices = np.flatnonzero(probabilities >= threshold)
-    if not len(indices):
-        return []
-    split_points = np.flatnonzero(np.diff(indices) != 1) + 1
-    return [
-        (int(run[0]), int(run[-1]) + 1)
-        for run in np.split(indices, split_points)
-        if len(run) >= minimum_frames
-    ]
-
-
-def _frame_to_canonical_offset(
-    frame_index: int,
-    *,
-    source_sample_rate: int,
-    round_up: bool,
-) -> int:
-    numerator = frame_index * source_sample_rate
-    denominator = 1000 // RESPIRO_FRAME_HOP_MS
-    if round_up:
-        return (numerator + denominator - 1) // denominator
-    return numerator // denominator
-
-
-def _events_for_crop(
-    *,
-    probabilities: np.ndarray,
-    crop_start_sample: int,
-    crop_end_sample: int,
-    source_sample_rate: int,
-    threshold: float,
-    minimum_duration_ms: int,
-    crop_id: str,
-) -> list[dict[str, Any]]:
-    events: list[dict[str, Any]] = []
-    for first_frame, end_frame in _event_frame_runs(
-        probabilities,
-        threshold=threshold,
-        minimum_duration_ms=minimum_duration_ms,
-    ):
-        start = crop_start_sample + _frame_to_canonical_offset(
-            first_frame,
-            source_sample_rate=source_sample_rate,
-            round_up=False,
-        )
-        end = crop_start_sample + _frame_to_canonical_offset(
-            end_frame,
-            source_sample_rate=source_sample_rate,
-            round_up=True,
-        )
-        start = max(crop_start_sample, min(crop_end_sample, start))
-        end = max(start, min(crop_end_sample, end))
-        if end <= start:
-            continue
-        selected = probabilities[first_frame:end_frame]
-        events.append(
-            {
-                "crop_id": crop_id,
-                "first_frame": first_frame,
-                "end_frame": end_frame,
-                "start_seconds": start / source_sample_rate,
-                "end_seconds": end / source_sample_rate,
-                "start_sample": start,
-                "end_sample": end,
-                "maximum_probability": float(np.max(selected)),
-                "mean_probability": float(np.mean(selected)),
-            }
-        )
-    return events
-
-
-def _deduplicate_events(events: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Merge threshold runs duplicated by bounded overlapping crops."""
-
-    merged: list[dict[str, Any]] = []
-    for raw in sorted(events, key=lambda item: int(item["start_sample"])):
-        event = dict(raw)
-        event["crop_ids"] = [str(event.pop("crop_id"))]
-        event["detection_fragments"] = [
-            {
-                "crop_id": event["crop_ids"][0],
-                "start_sample": int(event["start_sample"]),
-                "end_sample": int(event["end_sample"]),
-                "maximum_probability": float(event["maximum_probability"]),
-                "mean_probability": float(event["mean_probability"]),
-            }
-        ]
-        if not merged or int(event["start_sample"]) > int(merged[-1]["end_sample"]):
-            merged.append(event)
-            continue
-        previous = merged[-1]
-        previous_duration = int(previous["end_sample"]) - int(previous["start_sample"])
-        event_duration = int(event["end_sample"]) - int(event["start_sample"])
-        overlap_duration = max(
-            0,
-            min(int(previous["end_sample"]), int(event["end_sample"]))
-            - max(int(previous["start_sample"]), int(event["start_sample"])),
-        )
-        new_unique_duration = max(0, event_duration - overlap_duration)
-        total_weight = previous_duration + new_unique_duration
-        previous["start_sample"] = min(
-            int(previous["start_sample"]),
-            int(event["start_sample"]),
-        )
-        previous["end_sample"] = max(
-            int(previous["end_sample"]),
-            int(event["end_sample"]),
-        )
-        previous["start_seconds"] = min(
-            float(previous["start_seconds"]),
-            float(event["start_seconds"]),
-        )
-        previous["end_seconds"] = max(
-            float(previous["end_seconds"]),
-            float(event["end_seconds"]),
-        )
-        previous["maximum_probability"] = max(
-            float(previous["maximum_probability"]),
-            float(event["maximum_probability"]),
-        )
-        previous["mean_probability"] = (
-            float(previous["mean_probability"]) * previous_duration
-            + float(event["mean_probability"]) * new_unique_duration
-        ) / total_weight
-        previous["crop_ids"].extend(
-            crop_id
-            for crop_id in event["crop_ids"]
-            if crop_id not in previous["crop_ids"]
-        )
-        previous["detection_fragments"].extend(event["detection_fragments"])
-    return merged
-
-
-def analyze_breath_evidence(
-    *,
-    source_audio: np.ndarray,
-    source_sample_rate: int,
-    relevant_ranges: Sequence[tuple[int, int]],
-    threshold: float = DEFAULT_BREATH_THRESHOLD,
-    minimum_duration_ms: int = DEFAULT_BREATH_MIN_DURATION_MS,
-    context_ms: float = DEFAULT_BREATH_CONTEXT_MS,
-    max_crop_seconds: float = DEFAULT_BREATH_MAX_CROP_SECONDS,
     cache_root: Path = DEFAULT_RESPIRO_CACHE_ROOT,
     runtime: RespiroRuntime | None = None,
-    probability_provider: Callable[[np.ndarray], np.ndarray] | None = None,
-) -> dict[str, Any]:
-    """Analyze only expanded relevant crops and retain every frame probability."""
+) -> np.ndarray:
+    """Respiro-en breath probabilities for a whole recording on a 10 ms grid.
 
-    audio = np.asarray(source_audio, dtype=np.float32)
-    if audio.ndim == 1:
-        audio = audio[:, None]
-    if audio.ndim != 2 or not len(audio):
-        raise ValueError("source_audio must contain canonical audio frames")
-    if source_sample_rate <= 0:
-        raise ValueError("source_sample_rate must be positive")
-    if not 0.0 <= threshold <= 1.0:
-        raise ValueError("breath threshold must be inside [0, 1]")
-    if minimum_duration_ms <= 0:
-        raise ValueError("breath minimum duration must be positive")
+    The recording is analysed in 30 s chunks overlapping by 2 s; each chunk
+    contributes only away from its edges.  Frame ``k`` describes the
+    ``RESPIRO_FRAME_HOP_MS`` frame starting at ``k * 10 ms``.
+    """
 
-    crops = split_long_analysis_crops(
-        merge_analysis_crops(
-            relevant_ranges,
-            total_samples=len(audio),
-            sample_rate=source_sample_rate,
-            context_ms=context_ms,
-        ),
-        sample_rate=source_sample_rate,
-        max_crop_seconds=max_crop_seconds,
-        context_ms=context_ms,
-    )
-    base: dict[str, Any] = {
-        "schema_version": 1,
-        "backend": "respiro-en",
-        "upstream_repository": RESPIRO_UPSTREAM_REPOSITORY,
-        "upstream_commit": RESPIRO_UPSTREAM_COMMIT,
-        "modules_sha256": RESPIRO_MODULES_SHA256,
-        "checkpoint_sha256": RESPIRO_CHECKPOINT_SHA256,
-        "license_sha256": RESPIRO_LICENSE_SHA256,
-        "sample_rate": RESPIRO_SAMPLE_RATE,
-        "frame_hop_ms": RESPIRO_FRAME_HOP_MS,
-        "threshold": threshold,
-        "minimum_duration_ms": minimum_duration_ms,
-        "context_ms": context_ms,
-        "max_crop_seconds": max_crop_seconds,
-        "analysis_crops": [],
-        "events": [],
-    }
-    if not crops:
-        return {
-            **base,
-            "status": "no_relevant_regions",
-            "execution_device": None,
-        }
+    from math import gcd
 
-    if probability_provider is None:
-        active_runtime = runtime or load_respiro_runtime(cache_root=cache_root)
-        probability_provider = active_runtime.infer
-        execution_device = active_runtime.device_name
-    else:
-        execution_device = "injected_probability_provider"
+    from scipy.signal import resample_poly
 
-    mono = np.mean(audio, axis=1, dtype=np.float64).astype(np.float32)
-    crop_records: list[dict[str, Any]] = []
-    events: list[dict[str, Any]] = []
-    for crop_index, (crop_start, crop_end) in enumerate(crops):
-        crop_id = f"breath_crop_{crop_index:04d}"
-        waveform_16khz = _resample_mono(
-            mono[crop_start:crop_end],
-            source_sample_rate=source_sample_rate,
-        )
-        probabilities = _validate_probabilities(probability_provider(waveform_16khz))
-        expected_frames = len(waveform_16khz) // RESPIRO_FRAME_HOP_SAMPLES + 1
-        if len(probabilities) != expected_frames:
-            raise BreathDetectionError(
-                f"Respiro-en returned {len(probabilities)} frames for "
-                f"{len(waveform_16khz)} inference samples; expected "
-                f"{expected_frames}"
-            )
-        crop_records.append(
-            {
-                "crop_id": crop_id,
-                "source_start_sample": crop_start,
-                "source_end_sample": crop_end,
-                "source_start_seconds": crop_start / source_sample_rate,
-                "source_end_seconds": crop_end / source_sample_rate,
-                "inference_sample_count": len(waveform_16khz),
-                "frame_count": len(probabilities),
-                "frame_probabilities": [float(value) for value in probabilities],
-            }
-        )
-        events.extend(
-            _events_for_crop(
-                probabilities=probabilities,
-                crop_start_sample=crop_start,
-                crop_end_sample=crop_end,
-                source_sample_rate=source_sample_rate,
-                threshold=threshold,
-                minimum_duration_ms=minimum_duration_ms,
-                crop_id=crop_id,
-            )
-        )
-
-    return {
-        **base,
-        "status": "complete",
-        "execution_device": execution_device,
-        "analysis_crops": crop_records,
-        "events": _deduplicate_events(events),
-    }
+    runtime = runtime or load_respiro_runtime(cache_root=cache_root)
+    divisor = gcd(sample_rate, RESPIRO_SAMPLE_RATE)
+    audio = resample_poly(
+        mono, RESPIRO_SAMPLE_RATE // divisor, sample_rate // divisor
+    ).astype(np.float32)
+    hop = RESPIRO_FRAME_HOP_SAMPLES
+    chunk = 30 * RESPIRO_SAMPLE_RATE
+    overlap = 2 * RESPIRO_SAMPLE_RATE
+    total = len(audio) // hop + 1
+    result = np.zeros(total, np.float32)
+    start = 0
+    while start < len(audio):
+        end = min(len(audio), start + chunk)
+        piece = audio[start:end]
+        if len(piece) < hop * 4:
+            break
+        probabilities = runtime.infer(piece)
+        first = start // hop
+        keep_from = 0 if start == 0 else (overlap // 2) // hop
+        values = probabilities[keep_from:]
+        result[first + keep_from : first + keep_from + len(values)] = values[
+            : max(0, total - first - keep_from)
+        ]
+        if end >= len(audio):
+            break
+        start = end - overlap
+    return result
 
 
 __all__ = [
-    "BreathDetectionError",
-    "DEFAULT_BREATH_CONTEXT_MS",
-    "DEFAULT_BREATH_MIN_DURATION_MS",
-    "DEFAULT_BREATH_MAX_CROP_SECONDS",
     "DEFAULT_BREATH_THRESHOLD",
     "DEFAULT_RESPIRO_CACHE_ROOT",
     "RESPIRO_CHECKPOINT_SHA256",
@@ -566,10 +262,9 @@ __all__ = [
     "RESPIRO_MODULES_SHA256",
     "RESPIRO_SAMPLE_RATE",
     "RESPIRO_UPSTREAM_COMMIT",
+    "BreathDetectionError",
     "RespiroRuntime",
-    "analyze_breath_evidence",
+    "breath_probabilities",
     "load_respiro_runtime",
-    "merge_analysis_crops",
-    "split_long_analysis_crops",
     "verify_respiro_runtime",
 ]

@@ -20,8 +20,6 @@ class LanguageProfile:
     code: str
     display_name: str
     whisper_language: str
-    whisperx_language: str
-    whisperx_model: str | None
     mfa_model: str
     ctc_enrichment_supported: bool
     default_breath_cleanup: Literal["off", "replace"]
@@ -33,10 +31,6 @@ _LANGUAGE_PROFILES: Mapping[str, LanguageProfile] = MappingProxyType(
             code="en",
             display_name="English",
             whisper_language="en",
-            whisperx_language="en",
-            # Preserve WhisperX's existing documented English default instead
-            # of duplicating an implementation-owned model identifier here.
-            whisperx_model=None,
             mfa_model="english_us_arpa",
             ctc_enrichment_supported=True,
             default_breath_cleanup="replace",
@@ -45,15 +39,13 @@ _LANGUAGE_PROFILES: Mapping[str, LanguageProfile] = MappingProxyType(
             code="ru",
             display_name="Russian",
             whisper_language="ru",
-            whisperx_language="ru",
-            whisperx_model="jonatasgrosman/wav2vec2-large-xlsr-53-russian",
             mfa_model=(
                 "MontrealCorpusTools/russian_mfa"
                 "@88b81ae3eaf3bd8163bb3f7c43e1ae61478595af"
             ),
-            # The existing hidden-retry CTC enrichment and Respiro-en policy
-            # have not been validated for Russian.  Core transcription,
-            # planning, completeness alignment, and MFA remain available.
+            # The hidden-retry CTC enrichment and Respiro-en have not been
+            # validated for Russian.  Transcription, gap recovery, planning
+            # and MFA remain available.
             ctc_enrichment_supported=False,
             default_breath_cleanup="off",
         ),

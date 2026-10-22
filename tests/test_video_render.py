@@ -24,149 +24,80 @@ def _boundary_plan() -> dict[str, object]:
     return {
         "planner": "authoritative_single_pass_boundary_plan_v2",
         "status": "safe",
+        "pause_policy": "cuts",
         "source_sample_rate": 1000,
-        "expected_output_frame_count": 2000,
+        "expected_output_frame_count": 1500,
         "output_segments": [
             {
                 "segment_index": 0,
                 "kind": "source",
                 "source_interval_index": 0,
                 "source_start_sample": 1000,
-                "source_end_sample": 1500,
+                "source_end_sample": 2000,
                 "output_start_sample": 0,
-                "output_end_sample": 500,
+                "output_end_sample": 1000,
             },
             {
                 "segment_index": 1,
-                "kind": "room_tone",
-                "join_id": "internal_thought_pause",
-                "source_start_sample": 4000,
-                "source_end_sample": 4200,
-                "output_start_sample": 500,
-                "output_end_sample": 700,
-            },
-            {
-                "segment_index": 2,
-                "kind": "source",
-                "source_interval_index": 0,
-                "source_start_sample": 1500,
-                "source_end_sample": 2000,
-                "output_start_sample": 700,
-                "output_end_sample": 1200,
-            },
-            {
-                "segment_index": 3,
-                "kind": "room_tone",
-                "join_id": "source_join_0000",
-                "source_start_sample": 4200,
-                "source_end_sample": 4500,
-                "output_start_sample": 1200,
-                "output_end_sample": 1500,
-            },
-            {
-                "segment_index": 4,
                 "kind": "source",
                 "source_interval_index": 1,
                 "source_start_sample": 3000,
                 "source_end_sample": 3500,
-                "output_start_sample": 1500,
-                "output_end_sample": 2000,
+                "output_start_sample": 1000,
+                "output_end_sample": 1500,
             },
         ],
         "joins": [],
-        "final_boundary": {},
     }
 
 
-def test_visual_timeline_preserves_motion_and_freezes_only_inserted_time() -> None:
+def test_visual_timeline_joins_only_selected_source_motion() -> None:
     timeline, sample_rate, expected_frames = build_visual_timeline(_boundary_plan())
 
     assert sample_rate == 1000
-    assert expected_frames == 2000
+    assert expected_frames == 1500
     assert [
         (
             item.clip_index,
             item.source_start_sample,
             item.source_end_sample,
-            item.freeze_after_samples,
-            item.freeze_reason,
             item.output_start_sample,
             item.output_end_sample,
         )
         for item in timeline
     ] == [
-        (0, 1000, 1500, 200, "internal_thought_pause", 0, 700),
-        (0, 1500, 2000, 300, "source_join_0000", 700, 1500),
-        (1, 3000, 3500, 0, None, 1500, 2000),
+        (0, 1000, 2000, 0, 1000),
+        (1, 3000, 3500, 1000, 1500),
     ]
-    assert (
-        sum(
-            item.source_end_sample
-            - item.source_start_sample
-            + item.freeze_after_samples
-            for item in timeline
-        )
-        == expected_frames
+
+
+def test_visual_timeline_rejects_inserted_room_tone() -> None:
+    plan = _boundary_plan()
+    plan["output_segments"].insert(  # type: ignore[attr-defined]
+        1,
+        {
+            "segment_index": 1,
+            "kind": "room_tone",
+            "output_start_sample": 1000,
+            "output_end_sample": 1200,
+        },
     )
-
-
-def test_visual_timeline_accepts_previous_single_pass_manifest_version() -> None:
-    plan = _boundary_plan()
-    plan["planner"] = "authoritative_single_pass_boundary_plan_v1"
-
-    _, sample_rate, expected_frames = build_visual_timeline(plan)
-
-    assert sample_rate == 1000
-    assert expected_frames == 2000
-
-
-def test_video_cut_policy_rejects_inserted_frame_hold() -> None:
-    plan = _boundary_plan()
-    plan["pause_policy"] = "cuts"
 
     with pytest.raises(VideoRenderError, match="cannot contain.*room-tone"):
         build_visual_timeline(plan)
 
 
-def test_video_cut_policy_joins_only_selected_source_motion() -> None:
-    plan = {
-        "planner": "authoritative_single_pass_boundary_plan_v2",
-        "status": "safe",
-        "pause_policy": "cuts",
-        "source_sample_rate": 1000,
-        "expected_output_frame_count": 1000,
-        "output_segments": [
-            {
-                "segment_index": 0,
-                "kind": "source",
-                "source_interval_index": 0,
-                "source_start_sample": 1000,
-                "source_end_sample": 1500,
-                "output_start_sample": 0,
-                "output_end_sample": 500,
-            },
-            {
-                "segment_index": 1,
-                "kind": "source",
-                "source_interval_index": 1,
-                "source_start_sample": 3000,
-                "source_end_sample": 3500,
-                "output_start_sample": 500,
-                "output_end_sample": 1000,
-            },
-        ],
-    }
+def test_visual_timeline_rejects_unknown_planner() -> None:
+    plan = _boundary_plan()
+    plan["planner"] = "authoritative_single_pass_boundary_plan_v1"
 
-    timeline, _, expected_frames = build_visual_timeline(plan)
-
-    assert expected_frames == 1000
-    assert len(timeline) == 2
-    assert all(segment.freeze_after_samples == 0 for segment in timeline)
+    with pytest.raises(VideoRenderError, match="unsupported boundary plan planner"):
+        build_visual_timeline(plan)
 
 
 def test_visual_timeline_rejects_trace_that_disagrees_with_audio_timeline() -> None:
     manifest = _boundary_plan()
-    manifest["output_segments"][3]["output_start_sample"] = 1100  # type: ignore[index]
+    manifest["output_segments"][1]["output_start_sample"] = 1100  # type: ignore[index]
 
     with pytest.raises(VideoRenderError, match="discontinuous"):
         build_visual_timeline(manifest)
@@ -185,7 +116,7 @@ def test_final_manifest_seals_boundary_timeline_geometry(tmp_path: Path) -> None
         },
     )
     changed = _boundary_plan()
-    changed["expected_output_frame_count"] = 2100
+    changed["expected_output_frame_count"] = 1600
     write_json(boundary_path, changed)
 
     with pytest.raises(VideoRenderError, match="changed after audio rendering"):
@@ -244,10 +175,7 @@ def test_off_frame_many_cut_render_keeps_late_visual_segments(
             clip_index=index,
             source_start_sample=index * 300,
             source_end_sample=index * 300 + 150,
-            freeze_after_samples=0,
-            freeze_reason=None,
             output_start_sample=index * 150,
-            output_source_end_sample=(index + 1) * 150,
             output_end_sample=(index + 1) * 150,
         )
         for index in range(10)
@@ -317,7 +245,7 @@ def test_off_frame_many_cut_render_keeps_late_visual_segments(
     shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
     reason="FFmpeg is not installed",
 )
-def test_video_render_muxes_final_audio_and_holds_frame_for_internal_pause(
+def test_video_render_muxes_final_audio_with_selected_video(
     tmp_path: Path,
 ) -> None:
     ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
@@ -361,15 +289,15 @@ def test_video_render_muxes_final_audio_and_holds_frame_for_internal_pause(
         subtype="FLOAT",
     )
     boundary_path = tmp_path / "final_boundary_plan.json"
-    source_start = round(0.5 * sample_rate)
-    insertion = round(1.0 * sample_rate)
-    source_end = round(1.5 * sample_rate)
+    first_end = round(1.0 * sample_rate)
+    second_start = round(2.0 * sample_rate)
     expected_frames = round(1.5 * sample_rate)
     write_json(
         boundary_path,
         {
             "planner": "authoritative_single_pass_boundary_plan_v2",
             "status": "safe",
+            "pause_policy": "cuts",
             "source_sample_rate": sample_rate,
             "expected_output_frame_count": expected_frames,
             "output_segments": [
@@ -377,32 +305,24 @@ def test_video_render_muxes_final_audio_and_holds_frame_for_internal_pause(
                     "segment_index": 0,
                     "kind": "source",
                     "source_interval_index": 0,
-                    "source_start_sample": source_start,
-                    "source_end_sample": insertion,
+                    "source_start_sample": round(0.5 * sample_rate),
+                    "source_end_sample": first_end,
                     "output_start_sample": 0,
-                    "output_end_sample": insertion - source_start,
+                    "output_end_sample": first_end - round(0.5 * sample_rate),
                 },
                 {
                     "segment_index": 1,
-                    "kind": "room_tone",
-                    "join_id": "internal_thought_pause",
-                    "source_start_sample": 0,
-                    "source_end_sample": round(0.5 * sample_rate),
-                    "output_start_sample": insertion - source_start,
-                    "output_end_sample": round(1.0 * sample_rate),
-                },
-                {
-                    "segment_index": 2,
                     "kind": "source",
-                    "source_interval_index": 0,
-                    "source_start_sample": insertion,
-                    "source_end_sample": source_end,
-                    "output_start_sample": round(1.0 * sample_rate),
+                    "source_interval_index": 1,
+                    "source_start_sample": second_start,
+                    "source_end_sample": second_start
+                    + expected_frames
+                    - (first_end - round(0.5 * sample_rate)),
+                    "output_start_sample": first_end - round(0.5 * sample_rate),
                     "output_end_sample": expected_frames,
                 },
             ],
             "joins": [],
-            "final_boundary": {},
         },
     )
     final_manifest_path = tmp_path / "final_manifest.json"
@@ -435,9 +355,8 @@ def test_video_render_muxes_final_audio_and_holds_frame_for_internal_pause(
     assert not (tmp_path / "edited.video_render_manifest.json").exists()
     assert result.video_stream is not None
     assert result.duration_seconds == pytest.approx(1.5, abs=0.12)
-    assert manifest["semantic_frame_holds"] == 1
+    assert manifest["visual_source_segments"] == 2
     assert manifest["video_render_manifest"] == str(manifest_path.resolve())
-    assert manifest["semantic_frame_hold_duration_seconds"] == pytest.approx(0.5)
     aspect = subprocess.run(
         [
             shutil.which("ffprobe") or "ffprobe",

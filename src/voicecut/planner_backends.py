@@ -12,15 +12,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from dataclasses import dataclass
-from pathlib import Path
 import select
 import subprocess
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
-
-DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
 DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
 DEFAULT_QWEN_MODEL = "mlx-community/Qwen3.5-9B-4bit"
@@ -49,10 +49,6 @@ NARRATION_SYSTEM_INSTRUCTION = (
     "You are a precise source-grounded narration editor. "
     "Return only the structured JSON response requested by the schema."
 )
-PAUSE_SYSTEM_INSTRUCTION = (
-    "You classify narration transitions. Return only the exact JSON "
-    "structure requested; never edit or reproduce narration."
-)
 
 
 @dataclass(frozen=True)
@@ -62,6 +58,14 @@ class PlannerRuntimeConfiguration:
     provider: str
     base_url: str | None
     api_key_env: str | None
+
+
+@dataclass(frozen=True)
+class MediaPart:
+    """Inline media attached to a planner request (audio for listening)."""
+
+    data: bytes
+    mime_type: str
 
 
 class PlannerBackend(Protocol):
@@ -284,6 +288,7 @@ class GeminiPlannerBackend:
     """Google Gen AI structured-output transport."""
 
     backend_name = "gemini"
+    supports_audio = True
 
     def __init__(
         self,
@@ -292,6 +297,7 @@ class GeminiPlannerBackend:
         api_key: str,
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         system_instruction: str = NARRATION_SYSTEM_INSTRUCTION,
+        temperature: float | None = 0.0,
         client: Any | None = None,
         types_module: Any | None = None,
     ) -> None:
@@ -312,6 +318,7 @@ class GeminiPlannerBackend:
         self.model = model
         self.max_output_tokens = max_output_tokens
         self.system_instruction = system_instruction
+        self.temperature = temperature
         self._types = types_module
         self._client = client
 
@@ -324,6 +331,7 @@ class GeminiPlannerBackend:
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         system_instruction: str = NARRATION_SYSTEM_INSTRUCTION,
         api_key_env: str | None = None,
+        temperature: float | None = 0.0,
     ) -> "GeminiPlannerBackend":
         return cls(
             model=model,
@@ -334,6 +342,7 @@ class GeminiPlannerBackend:
             ),
             max_output_tokens=max_output_tokens,
             system_instruction=system_instruction,
+            temperature=temperature,
         )
 
     def generate(
@@ -342,13 +351,17 @@ class GeminiPlannerBackend:
         *,
         response_schema: dict[str, Any],
         request_id: str,
+        media: Sequence[MediaPart] = (),
     ) -> str:
         del request_id
         config_values: dict[str, Any] = {
             "system_instruction": self.system_instruction,
-            "temperature": 0.0,
             "max_output_tokens": self.max_output_tokens,
         }
+        # Gemini 3 models are tuned for their default temperature; zero can
+        # make long reasoning loop.  ``None`` keeps the provider default.
+        if self.temperature is not None:
+            config_values["temperature"] = self.temperature
         config_fields = getattr(
             self._types.GenerateContentConfig,
             "model_fields",
@@ -364,9 +377,20 @@ class GeminiPlannerBackend:
         else:
             config_values["response_mime_type"] = "application/json"
             config_values["response_json_schema"] = response_schema
+        contents: Any = prompt
+        if media:
+            contents = [
+                prompt,
+                *(
+                    self._types.Part.from_bytes(
+                        data=part.data, mime_type=part.mime_type
+                    )
+                    for part in media
+                ),
+            ]
         response = self._client.models.generate_content(
             model=self.model,
-            contents=prompt,
+            contents=contents,
             config=self._types.GenerateContentConfig(**config_values),
         )
         raw = response.text
@@ -625,6 +649,7 @@ def create_planner_backend(
     api_key_env: str | None = None,
     local_python: Path = DEFAULT_LOCAL_PYTHON,
     local_files_only: bool = False,
+    gemini_temperature: float | None = 0.0,
 ) -> PlannerBackend:
     """Create one planner transport from provider-neutral configuration."""
 
@@ -641,6 +666,7 @@ def create_planner_backend(
             max_output_tokens=max_output_tokens,
             system_instruction=system_instruction,
             api_key_env=api_key_env,
+            temperature=gemini_temperature,
         )
     if provider in {"openai", "deepseek"}:
         return OpenAICompatiblePlannerBackend(

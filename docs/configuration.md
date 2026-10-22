@@ -52,8 +52,7 @@ Keep an inspectable cache for a long run:
 voicecut interview.wav \
   -o interview_edited.wav \
   --work-dir .voicecut-cache/interview \
-  --planner-backend gemini \
-  --debug-artifacts
+  --planner-backend gemini
 ```
 
 An existing destination is never replaced unless `--overwrite` is supplied.
@@ -65,7 +64,7 @@ narration. It does not choose waveform samples or synthesize speech.
 
 | Backend | Default model | Credential | Status |
 | --- | --- | --- | --- |
-| `gemini` | `gemini-3.6-flash` | `GEMINI_API_KEY` | Cloud |
+| `gemini` | `gemini-3.1-pro-preview` | `GEMINI_API_KEY` | Cloud |
 | `openai` | `gpt-5-mini` | `OPENAI_API_KEY` | Cloud |
 | `deepseek` | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` | Cloud |
 | `qwen` | `mlx-community/Qwen3.5-9B-4bit` | None | Local convenience alias |
@@ -159,14 +158,15 @@ the installer configures it as `.venv-mlx/bin/python`.
 
 ## Privacy and data flow
 
-All audio decoding, waveform analysis, transcription, WhisperX completeness
-validation, MFA alignment, breath analysis, rendering, and publication happen
-locally.
+All audio decoding, waveform analysis, transcription, MFA alignment, breath
+analysis, rendering, and publication happen locally.
 
-With a cloud planner, VoiceCut sends transcript text, timestamped word IDs, and
-canonical thought text to the selected provider. It does **not** send the audio
-or video file. The provider's data-processing terms still apply to submitted
-text.
+With a cloud planner, VoiceCut sends the transcript of each planning window
+(word IDs and text) to the selected provider. With Gemini it also sends, by
+default, a compressed 16 kHz mono MP3 of exactly that window so the model can
+hear stumbles and resolve mis-heard words; it never uploads the original file
+or any video. Use `--planner-audio off` to send text only. The provider's
+data-processing terms apply to everything submitted.
 
 With `local`, `qwen`, or `gemma`, transcript processing also remains local.
 
@@ -181,7 +181,6 @@ may be recorded as non-secret configuration, so it must never contain a key.
 | Default | Yes | No; select explicitly |
 | MLX Whisper language | `en` | `ru` |
 | Hidden-retry CTC enrichment | Enabled; fail-soft optional evidence | Skipped by language policy |
-| WhisperX role | Retained-word completeness veto | Same role, with Russian model |
 | MFA model | `english_us_arpa` | Revision-pinned `MontrealCorpusTools/russian_mfa` |
 | Breath-cleanup default | `replace` | `off` |
 
@@ -236,8 +235,8 @@ Video is edited strictly from selected source-motion intervals:
 - retained speech keeps the corresponding pictures at normal speed;
 - removed speech removes the corresponding pictures;
 - source intervals are joined with direct visual cuts;
-- semantic pause classification is skipped;
-- no generated pause, frozen frame, or slow-motion hold is inserted;
+- pauses are built from original silence only: no ambience is inserted;
+- no frozen frame or slow-motion hold is inserted;
 - natural timing inside each continuous retained take remains;
 - the edited narration replaces the original audio track;
 - publication verifies output duration and audio/video synchronization.
@@ -313,79 +312,101 @@ voicecut input.wav --breath-cleanup replace
 voicecut input.wav --breath-cleanup off
 ```
 
-Available settings:
+- `replace` (English default) treats every non-speech sound inside a pause --
+  breaths, clicks, mouth noise -- as something to remove, and fills the pause
+  with clean ambience taken from the same recording. Respiro-en breath
+  probabilities also stop a word's head or tail from swallowing an adjacent
+  breath.
+- `off` (Russian default, because Respiro-en is not validated for Russian)
+  keeps the original content of every pause; long pauses are still shortened by
+  removing their middle.
 
-- `replace` runs the pinned Respiro-en detector and screens the verified clean
-  ambience bank. Detected breath content can be replaced only inside
-  MFA-confirmed non-speech.
-- `off` does not use unscreened source material for inserted pauses. Requested
-  ambience insertion is skipped rather than filled from an unverified
-  candidate; existing retained gaps remain untouched.
+`--breath-threshold` (default `0.5`) is the Respiro-en frame probability above
+which a frame counts as breath. `--respiro-cache-root` points to the
+hash-verified runtime. If the detector cannot run, cleaning continues on
+waveform energy alone and the manifest records `detector_failed_energy_only`.
 
-Detector controls:
-
-```bash
-voicecut input.wav \
-  --breath-cleanup replace \
-  --breath-threshold 0.5 \
-  --breath-min-duration-ms 80
-```
-
-The production defaults are `0.5` and `80` ms. These values control detection,
-not speech safety. MFA phone intervals remain protected at every threshold.
-The detector cannot move a cut, and a detection overlapping retained speech is
-left unchanged.
-
-`--respiro-cache-root` points to the hash-verified runtime. Detector failure is
-non-fatal: VoiceCut preserves valid source pause content, skips breath cleanup,
-records the failure, and never substitutes an RMS or VAD breath heuristic.
-
-## Semantic-planning controls
+## Take-selection controls
 
 | Option | Default | Purpose |
 | --- | --- | --- |
-| `--window-seconds` | `30.0` | New look-ahead added to each streaming planner request; never an edit boundary |
-| `--max-output-tokens` | `8192` | Maximum structured planner response size |
-| `--max-acoustic-retries` | `3` | Bounded planner reselections after weak-word or uncuttable-boundary evidence |
+| `--window-seconds` | `240` | Recording time decided per planner request; never an edit boundary |
+| `--lookahead-seconds` | `120` | Following recording time shown undecided, so later retakes are visible |
+| `--planner-audio` | `auto` | `auto`/`on`: Gemini also hears each window; `off`: text only |
+| `--max-output-tokens` | `65536` | Planner response limit, including model reasoning |
 
-Increasing the look-ahead changes planner context, not audio chunking. VoiceCut
-keeps the newest thought pending so a later complete retake can replace an
-earlier attempt.
+Every planner request is cached by its exact prompt and audio in
+`04_semantic_plan/calls/`, so an interrupted run resumes without paying for
+finished windows again.
+
+## Transcription engine
+
+`--asr whisper` (default) transcribes with MLX Whisper. Whisper tends to write
+a quick restart such as "In a tr- in a transformer" as a single "In a
+transformer", which leaves the planner nothing to cut. `--asr crisperwhisper`
+uses [CrisperWhisper 2.0](https://github.com/nyrahealth/CrisperWhisper), a
+verbatim Whisper fine-tune that keeps false starts, repetitions and fillers as
+separate timed words; the English hidden-retry CTC pass is then skipped because
+the transcript already contains those retries. It is slower (about 14 minutes
+per hour of audio on Apple silicon), and its model weights are released under a
+non-commercial research license, so it is opt-in. Install it into the MLX
+environment first:
+
+```bash
+.venv-mlx/bin/python -m pip install -e ".[mlx,crisperwhisper]"
+```
 
 ## Alignment and runtime controls
 
-MFA is the only production coordinate backend:
-
 | Option | Meaning |
 | --- | --- |
-| `--alignment-backend mfa` | Required production backend; currently the only choice |
+| `--alignment-backend mfa` | Word alignment backend; currently the only choice |
 | `--mfa-prefix PATH` | micromamba prefix containing MFA 3.4.1; defaults to `.mfa-env` |
 | `--mfa-cache-root PATH` | Persistent MFA model/cache root |
 | `--mfa-micromamba PATH` | micromamba executable |
 | `--mfa-num-jobs N` | Parallel jobs used by the batched MFA command; defaults to at most four CPUs |
-| `--alignment-python PATH` | Python containing WhisperX, used only for retained-word completeness validation |
-| `--asr-python PATH` | Python containing MLX Whisper and the optional English CTC helper |
+| `--asr whisper\|crisperwhisper` | Transcription engine (see *Transcription engine*) |
+| `--asr-python PATH` | Python containing MLX Whisper, optional CrisperWhisper, and the optional English CTC helper |
 | `--whisper-model NAME` | Override the MLX Whisper repository |
 | `--planner-python PATH` | Python used for local MLX language models |
 
-Whisper timestamps are approximate crop anchors. WhisperX coordinates are not
-used for final cuts. MFA word and phone intervals are authoritative; there is
-no automatic fallback to Whisper timestamps or another aligner.
+MFA identifies which stretch of the waveform belongs to which kept word; the
+waveform energy decides where each word physically starts and stops. If MFA is
+unavailable, Whisper word timing is refined by the same energy analysis and the
+run reports a warning.
+
+## Editor command
+
+`voicecut-editor` serves the browser editor and runs the Voice Cut button with
+the same pipeline and defaults as the CLI:
+
+```bash
+voicecut-editor                                   # open the editor
+voicecut-editor recording.mov                     # open with a file imported
+voicecut-editor --language ru --planner-backend gemini
+voicecut-editor --port 9000 --no-browser --projects-dir ~/voicecut-projects
+```
+
+| Option | Description |
+| --- | --- |
+| `INPUT` | Optional media file to import at startup |
+| `--host`, `--port` | Bind address; default `127.0.0.1:8765` |
+| `--no-browser` | Do not open a browser window |
+| `--projects-dir PATH` | Editor project storage; default `.voicecut-cache/editor` |
+| `--language`, `--planner-backend`, `--planner-model`, `--breath-cleanup` | Defaults for the Voice Cut button (changeable in the editor settings) |
+| `--env-file PATH` | dotenv file for planner credentials; default the repository `.env` |
+| `--dev` | Serve the API only, for use with the Vite dev server |
+
+See [Editor](editor.md) for the workflow and export semantics.
 
 ## Diagnostics
 
-`--debug-artifacts` requests extra plots and short diagnostic audio where the
-production components support them:
-
-```bash
-voicecut input.wav \
-  --work-dir .voicecut-cache/debug-input \
-  --debug-artifacts
-```
-
-Diagnostics never enter the production render chain and do not change the
-single-pass renderer. See [Troubleshooting](troubleshooting.md#inspect-a-run)
-for the most useful manifest files.
+Every run keeps its diagnostics in the work directory: the take-plan ledger
+(`04_semantic_plan/take_plan.json` with every window, revocation and review,
+plus the raw requests in `calls/`), the MFA batch, and
+`05_final/final_boundary_plan.json` with every join. `--debug-artifacts` is
+accepted for compatibility and adds nothing. See
+[Troubleshooting](troubleshooting.md#inspect-a-run) for the most useful files.
 
 ## Complete option summary
 
@@ -402,20 +423,19 @@ for the most useful manifest files.
 | `--planner-base-url URL` | OpenAI/DeepSeek endpoint override |
 | `--planner-api-key-env NAME` | Credential environment-variable name |
 | `--local-files-only` | Prevent local-model downloads |
-| `--window-seconds N` | Streaming semantic look-ahead increment |
-| `--max-output-tokens N` | Structured planner response limit |
-| `--max-acoustic-retries N` | Bounded acoustic reselection attempts |
+| `--window-seconds N` | Recording time decided per planner request |
+| `--lookahead-seconds N` | Undecided look-ahead shown to the planner |
+| `--planner-audio auto\|on\|off` | Whether the planner listens to each window |
+| `--max-output-tokens N` | Planner response limit |
 | `--whisper-model NAME` | MLX Whisper model override |
-| `--alignment-backend mfa` | Authoritative coordinate backend |
+| `--alignment-backend mfa` | Word alignment backend |
 | `--mfa-prefix PATH` | Pinned MFA environment |
 | `--mfa-cache-root PATH` | MFA model/cache root |
 | `--mfa-micromamba PATH` | micromamba executable |
 | `--mfa-num-jobs N` | MFA batch parallelism |
-| `--breath-cleanup off\|replace` | Breath and clean-ambience policy |
+| `--breath-cleanup off\|replace` | Pause-cleaning policy |
 | `--breath-threshold FLOAT` | Respiro-en frame threshold |
-| `--breath-min-duration-ms N` | Minimum breath event duration |
 | `--respiro-cache-root PATH` | Verified Respiro-en runtime cache |
 | `--asr-python PATH` | Advanced ASR helper runtime |
-| `--alignment-python PATH` | Advanced WhisperX completeness runtime |
 | `--planner-python PATH` | Advanced local-planner runtime |
-| `--debug-artifacts` | Optional diagnostics |
+| `--debug-artifacts` | Accepted for compatibility; no effect |

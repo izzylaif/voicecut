@@ -37,8 +37,6 @@ def _args(tmp_path: Path, source: Path):
             str(tmp_path / "work"),
             "--asr-python",
             sys.executable,
-            "--alignment-python",
-            sys.executable,
             "--alignment-backend",
             "mfa",
             "--mfa-prefix",
@@ -93,6 +91,21 @@ def _write_fake_ctc_enrichment(output_dir: Path, *, audio_sha256: str) -> None:
         },
     )
     write_json(output_dir / "ctc_enrichment_report.json", report)
+
+
+def _fake_gap_recovery(command: list[str]) -> None:
+    transcript_path = Path(command[command.index("--transcript") + 1])
+    output = Path(command[command.index("--output") + 1])
+    transcript = read_json(transcript_path)
+    transcript["gap_recovery"] = {
+        "status": "complete",
+        "strategy": "uncovered_speech_retranscription_v1",
+        "model": command[command.index("--model") + 1],
+        "input_transcript_sha256": sha256_file(transcript_path),
+        "regions": [],
+        "recovered_words": 0,
+    }
+    write_json(output, transcript)
 
 
 def test_full_pipeline_runs_every_stage_and_then_uses_cache(
@@ -177,7 +190,7 @@ def test_full_pipeline_runs_every_stage_and_then_uses_cache(
             environment["PYTHONPATH"]  # type: ignore[index]
         )
         module = command[command.index("-m") + 1]
-        if module in {"voicecut.streaming_narration", "voicecut.final_render"}:
+        if module == "voicecut.take_planner":
             assert environment["GEMINI_API_KEY"] == "selected-secret"  # type: ignore[index]
         else:
             assert "GEMINI_API_KEY" not in environment
@@ -200,24 +213,24 @@ def test_full_pipeline_runs_every_stage_and_then_uses_cache(
             assert read_json(ctc_checkpoint) == ctc_checkpoint_value
             output_dir = Path(command[command.index("--output-dir") + 1])
             _write_fake_ctc_enrichment(output_dir, audio_sha256=audio_sha)
-        elif module == "voicecut.streaming_narration":
+        elif module == "voicecut.gap_recovery":
+            _fake_gap_recovery(command)
+        elif module == "voicecut.take_planner":
             output_dir = Path(command[command.index("--output-dir") + 1])
             transcript = Path(command[command.index("--transcript") + 1])
             write_json(
-                output_dir / "streaming_plan.json",
+                output_dir / "take_plan.json",
                 {
                     "status": "complete",
+                    "planner": "take_planner_v1",
+                    "listened_to_audio": True,
                     "backend": "gemini",
                     "model": "gemini-3.6-flash",
                     "transcript": str(transcript.resolve()),
                     "transcript_sha256": sha256_file(transcript),
                 },
             )
-        elif module == "voicecut.final_render":
-            assert command[command.index("--alignment-python") + 1] == str(
-                Path(sys.executable).absolute()
-            )
-            assert command[command.index("--alignment-backend") + 1] == "mfa"
+        elif module == "voicecut.cut_render":
             assert command[command.index("--mfa-prefix") + 1] == str(
                 args.mfa_prefix.absolute()
             )
@@ -230,7 +243,6 @@ def test_full_pipeline_runs_every_stage_and_then_uses_cache(
             assert command[command.index("--mfa-num-jobs") + 1] == "2"
             assert command[command.index("--breath-cleanup") + 1] == "replace"
             assert command[command.index("--breath-threshold") + 1] == "0.5"
-            assert command[command.index("--breath-min-duration-ms") + 1] == "80"
             assert command[command.index("--pause-policy") + 1] == "semantic"
             output_dir = Path(command[command.index("--output-dir") + 1])
             output_dir.mkdir(parents=True)
@@ -243,28 +255,16 @@ def test_full_pipeline_runs_every_stage_and_then_uses_cache(
                 output_dir / "final_render_manifest.json",
                 {
                     "status": "complete",
-                    "renderer": "authoritative_single_pass_final_render_v3",
+                    "renderer": "cut_render_v1",
                     "alignment_backend": "mfa",
                     "mfa_version": "3.4.1",
                     "mfa_model": "english_us_arpa",
-                    "mfa_fine_tune": True,
                     "pause_policy": "semantic",
                     "breath_cleanup_mode": "replace",
                     "breath_threshold": 0.5,
-                    "breath_min_duration_ms": 80,
-                    "respiro_upstream_commit": (
-                        "70e01c60c2f582c41092730680f2894ab24d6467"
-                    ),
-                    "respiro_checkpoint_sha256": (
-                        "1f4a9b96f96645c480bf0e07b1e18cd68878ac0b4bb5dc920ad93f9b17df858a"
-                    ),
                     "source_audio_sha256": audio_sha,
-                    "streaming_plan": str(plan.resolve()),
-                    "streaming_plan_sha256": sha256_file(plan),
-                    "effective_streaming_plan": str(plan.resolve()),
-                    "effective_streaming_plan_sha256": sha256_file(plan),
-                    "pause_planner_backend": "gemini",
-                    "pause_planner_model": "gemini-3.6-flash",
+                    "take_plan": str(plan.resolve()),
+                    "take_plan_sha256": sha256_file(plan),
                     "final_cut_wav": str(final_cut.resolve()),
                     "final_cut_wav_sha256": sha256_file(final_cut),
                     "final_boundary_plan": str(boundary_plan.resolve()),
@@ -282,7 +282,7 @@ def test_full_pipeline_runs_every_stage_and_then_uses_cache(
         audio_publisher=fake_audio_publisher,
         planner_preflight=_fake_gemini_preflight,
     )
-    assert len(calls) == 5
+    assert len(calls) == 6
     assert publication_calls == 1
     assert read_json(transcription_checkpoint) == transcription_checkpoint_value
     assert read_json(ctc_checkpoint) == ctc_checkpoint_value
@@ -291,6 +291,7 @@ def test_full_pipeline_runs_every_stage_and_then_uses_cache(
         "analysis": "created",
         "transcription": "created",
         "hidden_retry_recovery": "created",
+        "gap_recovery": "created",
         "semantic_plan": "created",
         "final_render": "created",
         "publication": "created",
@@ -307,11 +308,9 @@ def test_full_pipeline_runs_every_stage_and_then_uses_cache(
     assert configuration["mfa_num_jobs"] == 2
     assert configuration["breath_cleanup"] == "replace"
     assert configuration["breath_threshold"] == 0.5
-    assert configuration["breath_min_duration_ms"] == 80
-    assert (
-        configuration["alignment_python_role"]
-        == "whisperx_retained_word_completeness_veto_only"
-    )
+    assert configuration["planner"] == "take_planner_v1"
+    assert configuration["planner_listens_to_audio"] is True
+    assert configuration["renderer"] == "cut_render_v1"
     assert created["output"] == str((tmp_path / "edited.mp3").absolute())
 
     def unexpected_runner(*_: object, **__: object) -> None:
@@ -390,7 +389,7 @@ def test_public_parser_is_one_input_to_one_output(tmp_path: Path) -> None:
     assert parsed.output == Path("edited.flac")
     assert parsed.planner_backend == "gemma"
     assert parsed.planner_model == "mlx-community/custom-gemma"
-    assert parsed.alignment_python == Path(sys.executable)
+    assert parsed.planner_audio == "auto"
     assert parsed.alignment_backend == "mfa"
     assert parsed.debug_artifacts is False
 
@@ -436,24 +435,29 @@ def test_russian_profile_bypasses_english_ctc_and_propagates_language(
                 Path(command[command.index("--output") + 1]),
                 {"audio_sha256": audio_sha, "language": "ru", "atoms": []},
             )
-        elif module == "voicecut.streaming_narration":
+        elif module == "voicecut.gap_recovery":
+            _fake_gap_recovery(command)
+        elif module == "voicecut.take_planner":
             assert command[command.index("--language") + 1] == "ru"
             transcript = Path(command[command.index("--transcript") + 1])
             assert transcript == (
-                args.work_dir / "02_transcription/source_transcript.json"
+                args.work_dir
+                / "03_gap_recovery/source_transcript_with_recovered_gaps.json"
             )
             output_dir = Path(command[command.index("--output-dir") + 1])
             write_json(
-                output_dir / "streaming_plan.json",
+                output_dir / "take_plan.json",
                 {
                     "status": "complete",
+                    "planner": "take_planner_v1",
+                    "listened_to_audio": True,
                     "backend": "gemini",
                     "model": "gemini-3.6-flash",
                     "transcript": str(transcript.resolve()),
                     "transcript_sha256": sha256_file(transcript),
                 },
             )
-        elif module == "voicecut.final_render":
+        elif module == "voicecut.cut_render":
             assert command[command.index("--language") + 1] == "ru"
             assert command[command.index("--breath-cleanup") + 1] == "off"
             output_dir = Path(command[command.index("--output-dir") + 1])
@@ -467,28 +471,16 @@ def test_russian_profile_bypasses_english_ctc_and_propagates_language(
                 output_dir / "final_render_manifest.json",
                 {
                     "status": "complete",
-                    "renderer": "authoritative_single_pass_final_render_v3",
+                    "renderer": "cut_render_v1",
                     "alignment_backend": "mfa",
                     "mfa_version": "3.4.1",
                     "mfa_model": russian_mfa_model,
-                    "mfa_fine_tune": True,
                     "pause_policy": "semantic",
                     "breath_cleanup_mode": "off",
                     "breath_threshold": 0.5,
-                    "breath_min_duration_ms": 80,
-                    "respiro_upstream_commit": (
-                        "70e01c60c2f582c41092730680f2894ab24d6467"
-                    ),
-                    "respiro_checkpoint_sha256": (
-                        "1f4a9b96f96645c480bf0e07b1e18cd68878ac0b4bb5dc920ad93f9b17df858a"
-                    ),
                     "source_audio_sha256": audio_sha,
-                    "streaming_plan": str(plan.resolve()),
-                    "streaming_plan_sha256": sha256_file(plan),
-                    "effective_streaming_plan": str(plan.resolve()),
-                    "effective_streaming_plan_sha256": sha256_file(plan),
-                    "pause_planner_backend": "gemini",
-                    "pause_planner_model": "gemini-3.6-flash",
+                    "take_plan": str(plan.resolve()),
+                    "take_plan_sha256": sha256_file(plan),
                     "final_cut_wav": str(final_cut.resolve()),
                     "final_cut_wav_sha256": sha256_file(final_cut),
                     "final_boundary_plan": str(boundary_plan.resolve()),
@@ -526,7 +518,7 @@ def test_russian_profile_bypasses_english_ctc_and_propagates_language(
     assert result["language"] == "ru"
     assert result["mfa_model"] == russian_mfa_model
     assert result["semantic_transcript"] == str(
-        args.work_dir / "02_transcription/source_transcript.json"
+        args.work_dir / "03_gap_recovery/source_transcript_with_recovered_gaps.json"
     )
     assert result["enriched_transcript"] is None
     assert result["ctc_enrichment_status"] == "skipped_unsupported_language"
@@ -541,7 +533,7 @@ def test_russian_profile_bypasses_english_ctc_and_propagates_language(
     configuration = read_json(args.work_dir / "pipeline_config.json")
     assert configuration["language"] == "ru"
     assert configuration["language_profile"]["mfa_model"] == russian_mfa_model
-    assert configuration["language_profile"]["whisperx_language"] == "ru"
+    assert configuration["language_profile"]["whisper_language"] == "ru"
     assert configuration["breath_cleanup"] == "off"
 
 
@@ -624,18 +616,25 @@ def test_optional_ctc_process_failure_completes_with_whisper_passthrough(
                 command,
                 stderr="RuntimeError: optional CTC runtime unavailable\n",
             )
-        if module == "voicecut.streaming_narration":
+        if module == "voicecut.gap_recovery":
+            _fake_gap_recovery(command)
+            return
+        if module == "voicecut.take_planner":
             transcript_path = Path(command[command.index("--transcript") + 1])
             transcript = read_json(transcript_path)
-            report = read_json(transcript_path.parent / "ctc_enrichment_report.json")
+            report = read_json(
+                args.work_dir / "03_ctc_enrichment/ctc_enrichment_report.json"
+            )
             assert transcript["engine"] == ("whisper_primary_ctc_degraded_passthrough")
             assert report["status"] == "degraded_whisper_primary_passthrough"
             assert transcript["atoms"][0]["words"][1]["word"] == "words"
             output_dir = Path(command[command.index("--output-dir") + 1])
             write_json(
-                output_dir / "streaming_plan.json",
+                output_dir / "take_plan.json",
                 {
                     "status": "complete",
+                    "planner": "take_planner_v1",
+                    "listened_to_audio": True,
                     "backend": "gemini",
                     "model": "gemini-3.6-flash",
                     "transcript": str(transcript_path.resolve()),
@@ -651,7 +650,7 @@ def test_optional_ctc_process_failure_completes_with_whisper_passthrough(
                 },
             )
             return
-        if module == "voicecut.final_render":
+        if module == "voicecut.cut_render":
             output_dir = Path(command[command.index("--output-dir") + 1])
             output_dir.mkdir(parents=True)
             final_cut = output_dir / "final_cut.wav"
@@ -663,32 +662,18 @@ def test_optional_ctc_process_failure_completes_with_whisper_passthrough(
                 output_dir / "final_render_manifest.json",
                 {
                     "status": "complete",
-                    "renderer": "authoritative_single_pass_final_render_v3",
+                    "renderer": "cut_render_v1",
                     "alignment_backend": "mfa",
                     "mfa_version": "3.4.1",
                     "mfa_model": "english_us_arpa",
-                    "mfa_fine_tune": True,
                     "pause_policy": "semantic",
                     "breath_cleanup_mode": "replace",
                     "breath_threshold": 0.5,
-                    "breath_min_duration_ms": 80,
-                    "respiro_upstream_commit": (
-                        "70e01c60c2f582c41092730680f2894ab24d6467"
-                    ),
-                    "respiro_checkpoint_sha256": (
-                        "1f4a9b96f96645c480bf0e07b1e18cd68878ac0b4bb5dc920ad93f9b17df858a"
-                    ),
                     "source_audio_sha256": audio_sha,
-                    "streaming_plan": str(plan.resolve()),
-                    "streaming_plan_sha256": sha256_file(plan),
-                    "effective_streaming_plan": str(plan.resolve()),
-                    "effective_streaming_plan_sha256": sha256_file(plan),
-                    "pause_planner_backend": "gemini",
-                    "pause_planner_model": "gemini-3.6-flash",
+                    "take_plan": str(plan.resolve()),
+                    "take_plan_sha256": sha256_file(plan),
                     "delivery_status": "complete_with_preserved_source_context",
-                    "semantic_planner_request_failure_count": 1,
-                    "semantic_planner_fallback_count": 1,
-                    "pause_degraded_batch_count": 1,
+                    "breath_cleanup_status": "detector_failed_energy_only",
                     "final_cut_wav": str(final_cut.resolve()),
                     "final_cut_wav_sha256": sha256_file(final_cut),
                     "final_boundary_plan": str(boundary_plan.resolve()),
@@ -724,8 +709,6 @@ def test_optional_ctc_process_failure_completes_with_whisper_passthrough(
     assert result["ctc_enrichment_status"] == ("degraded_whisper_primary_passthrough")
     assert result["stages"]["hidden_retry_recovery"] == "created_degraded"
     assert result["delivery_status"] == "complete_with_preserved_source_context"
-    assert result["semantic_fallback_windows"] == 1
-    assert result["pause_fallback_batches"] == 1
     assert result["pipeline_warnings"] == [
         {
             "stage": "hidden_retry_recovery",
@@ -742,19 +725,19 @@ def test_optional_ctc_process_failure_completes_with_whisper_passthrough(
             ),
         },
         {
-            "stage": "semantic_plan",
-            "status": "source_passthrough_used",
+            "stage": "final_render",
+            "status": "whisper_timing_fallback",
             "message": (
-                "The planner exhausted its bounded retries in 1 window(s); "
-                "exact source audio was preserved locally."
+                "MFA word alignment was unavailable; cuts used Whisper word "
+                "timing refined by the waveform."
             ),
         },
         {
-            "stage": "semantic_pause_plan",
-            "status": "deterministic_pause_fallback",
+            "stage": "final_render",
+            "status": "breath_detector_failed",
             "message": (
-                "Pause classification used deterministic rules for 1 failed "
-                "planner batch(es)."
+                "Respiro-en breath detection failed, so breaths were judged "
+                "by level only and some may remain; run scripts/install.sh."
             ),
         },
     ]
@@ -904,20 +887,24 @@ def test_full_pipeline_routes_video_input_to_video_publication(
         elif module == "voicecut.ctc_enrich":
             output_dir = Path(command[command.index("--output-dir") + 1])
             _write_fake_ctc_enrichment(output_dir, audio_sha256=audio_sha)
-        elif module == "voicecut.streaming_narration":
+        elif module == "voicecut.gap_recovery":
+            _fake_gap_recovery(command)
+        elif module == "voicecut.take_planner":
             output_dir = Path(command[command.index("--output-dir") + 1])
             transcript = Path(command[command.index("--transcript") + 1])
             write_json(
-                output_dir / "streaming_plan.json",
+                output_dir / "take_plan.json",
                 {
                     "status": "complete",
+                    "planner": "take_planner_v1",
+                    "listened_to_audio": True,
                     "backend": "gemini",
                     "model": "gemini-3.6-flash",
                     "transcript": str(transcript.resolve()),
                     "transcript_sha256": sha256_file(transcript),
                 },
             )
-        elif module == "voicecut.final_render":
+        elif module == "voicecut.cut_render":
             assert command[command.index("--pause-policy") + 1] == "cuts"
             output_dir = Path(command[command.index("--output-dir") + 1])
             output_dir.mkdir(parents=True)
@@ -930,28 +917,16 @@ def test_full_pipeline_routes_video_input_to_video_publication(
                 output_dir / "final_render_manifest.json",
                 {
                     "status": "complete",
-                    "renderer": "authoritative_single_pass_final_render_v3",
+                    "renderer": "cut_render_v1",
                     "alignment_backend": "mfa",
                     "mfa_version": "3.4.1",
                     "mfa_model": "english_us_arpa",
-                    "mfa_fine_tune": True,
                     "pause_policy": "cuts",
                     "breath_cleanup_mode": "replace",
                     "breath_threshold": 0.5,
-                    "breath_min_duration_ms": 80,
-                    "respiro_upstream_commit": (
-                        "70e01c60c2f582c41092730680f2894ab24d6467"
-                    ),
-                    "respiro_checkpoint_sha256": (
-                        "1f4a9b96f96645c480bf0e07b1e18cd68878ac0b4bb5dc920ad93f9b17df858a"
-                    ),
                     "source_audio_sha256": audio_sha,
-                    "streaming_plan": str(plan.resolve()),
-                    "streaming_plan_sha256": sha256_file(plan),
-                    "effective_streaming_plan": str(plan.resolve()),
-                    "effective_streaming_plan_sha256": sha256_file(plan),
-                    "pause_planner_backend": "deterministic_video_cuts",
-                    "pause_planner_model": None,
+                    "take_plan": str(plan.resolve()),
+                    "take_plan_sha256": sha256_file(plan),
                     "final_cut_wav": str(final_cut.resolve()),
                     "final_cut_wav_sha256": sha256_file(final_cut),
                     "final_boundary_plan": str(boundary_plan.resolve()),
@@ -998,7 +973,7 @@ def test_full_pipeline_routes_video_input_to_video_publication(
         planner_preflight=_fake_gemini_preflight,
     )
 
-    assert len(calls) == 5
+    assert len(calls) == 6
     assert video_calls == 1
     assert result["input_kind"] == "video"
     assert result["output_kind"] == "video"
@@ -1093,7 +1068,7 @@ def test_stage_failure_is_concise_and_endpoint_is_redacted(
             [
                 sys.executable,
                 "-m",
-                "voicecut.streaming_narration",
+                "voicecut.take_planner",
                 "--planner-base-url",
                 endpoint,
             ],
@@ -1144,3 +1119,214 @@ def test_work_directory_lock_rejects_a_concurrent_owner(tmp_path: Path) -> None:
 
     second = _WorkDirectoryLock(work_dir)
     second.close()
+
+
+def test_full_pipeline_reports_progress_callback_stage_sequence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source media")
+    args = _args(tmp_path, source)
+    monkeypatch.setenv("GEMINI_API_KEY", "selected-secret")
+
+    def fake_media_preparer(input_path: Path, output_dir: Path):
+        output_dir.mkdir(parents=True)
+        canonical = output_dir / "source_audio.wav"
+        canonical.write_bytes(b"canonical audio")
+        manifest = {
+            "status": "complete",
+            "source_media": str(input_path.resolve()),
+            "source_media_sha256": sha256_file(input_path),
+            "source_kind": "audio",
+            "canonical_audio": str(canonical.resolve()),
+            "canonical_audio_sha256": sha256_file(canonical),
+        }
+        write_json(output_dir / "media_input.json", manifest)
+        return manifest
+
+    def fake_audio_publisher(
+        final_wav: Path,
+        output_path: Path,
+        *,
+        manifest_path: Path,
+        overwrite: bool,
+    ):
+        output_path.write_bytes(b"published audio")
+        return {"status": "complete", "output_audio": str(output_path)}
+
+    def fake_runner(command: list[str], **kwargs: object) -> None:
+        module = command[command.index("-m") + 1]
+        audio = args.work_dir / "00_media/source_audio.wav"
+        audio_sha = sha256_file(audio)
+        if module == "voicecut.analyze":
+            output_dir = Path(command[command.index("--output-dir") + 1])
+            write_json(output_dir / "analysis.json", {"audio_sha256": audio_sha})
+        elif module == "voicecut.transcribe_mlx":
+            write_json(
+                Path(command[command.index("--output") + 1]),
+                {"audio_sha256": audio_sha},
+            )
+        elif module == "voicecut.ctc_enrich":
+            output_dir = Path(command[command.index("--output-dir") + 1])
+            _write_fake_ctc_enrichment(output_dir, audio_sha256=audio_sha)
+        elif module == "voicecut.gap_recovery":
+            _fake_gap_recovery(command)
+        elif module == "voicecut.take_planner":
+            output_dir = Path(command[command.index("--output-dir") + 1])
+            transcript = Path(command[command.index("--transcript") + 1])
+            write_json(
+                output_dir / "take_plan.json",
+                {
+                    "status": "complete",
+                    "planner": "take_planner_v1",
+                    "listened_to_audio": True,
+                    "backend": "gemini",
+                    "model": "gemini-3.6-flash",
+                    "transcript": str(transcript.resolve()),
+                    "transcript_sha256": sha256_file(transcript),
+                },
+            )
+        elif module == "voicecut.cut_render":
+            output_dir = Path(command[command.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True)
+            final_cut = output_dir / "final_cut.wav"
+            final_cut.write_bytes(b"rendered audio")
+            boundary_plan = output_dir / "final_boundary_plan.json"
+            write_json(boundary_plan, {"status": "safe"})
+            plan = Path(command[command.index("--plan") + 1])
+            write_json(
+                output_dir / "final_render_manifest.json",
+                {
+                    "status": "complete",
+                    "renderer": "cut_render_v1",
+                    "alignment_backend": "mfa",
+                    "mfa_version": "3.4.1",
+                    "mfa_model": "english_us_arpa",
+                    "pause_policy": "semantic",
+                    "breath_cleanup_mode": "replace",
+                    "breath_threshold": 0.5,
+                    "source_audio_sha256": audio_sha,
+                    "take_plan": str(plan.resolve()),
+                    "take_plan_sha256": sha256_file(plan),
+                    "final_cut_wav": str(final_cut.resolve()),
+                    "final_cut_wav_sha256": sha256_file(final_cut),
+                    "final_boundary_plan": str(boundary_plan.resolve()),
+                    "final_boundary_plan_sha256": sha256_file(boundary_plan),
+                    "duration_seconds": 1.25,
+                },
+            )
+        else:
+            raise AssertionError(command)
+
+    events: list[dict[str, object]] = []
+    run_full_pipeline(
+        args,
+        runner=fake_runner,
+        media_preparer=fake_media_preparer,
+        audio_publisher=fake_audio_publisher,
+        planner_preflight=_fake_gemini_preflight,
+        progress_callback=events.append,
+    )
+    stage_order = [
+        "preflight",
+        "media_input",
+        "analysis",
+        "transcription",
+        "hidden_retry_recovery",
+        "gap_recovery",
+        "semantic_plan",
+        "final_render",
+        "publication",
+    ]
+    assert [(event["stage"], event["status"]) for event in events] == [
+        pair
+        for stage in stage_order
+        for pair in ((stage, "started"), (stage, "completed"))
+    ]
+
+    events.clear()
+    run_full_pipeline(
+        args,
+        runner=fake_runner,
+        media_preparer=fake_media_preparer,
+        audio_publisher=fake_audio_publisher,
+        planner_preflight=_fake_gemini_preflight,
+        progress_callback=events.append,
+    )
+    assert [(event["stage"], event["status"]) for event in events] == [
+        ("preflight", "started"),
+        ("preflight", "completed"),
+        *((stage, "cached") for stage in stage_order[1:]),
+    ]
+
+    # Russian has no validated CTC enrichment: the stage is reported as skipped.
+    args.language = "ru"
+    args.work_dir = tmp_path / "work-ru"
+    args.breath_cleanup = None
+    events.clear()
+
+    def russian_runner(command: list[str], **kwargs: object) -> None:
+        if "voicecut.cut_render" in command:
+            assert command[command.index("--breath-cleanup") + 1] == "off"
+        fake_runner(command, **kwargs)
+
+    def russian_publisher(final_wav, output_path, *, manifest_path, overwrite):
+        return fake_audio_publisher(
+            final_wav,
+            output_path,
+            manifest_path=manifest_path,
+            overwrite=True,
+        )
+
+    args.overwrite = True
+    monkeypatch.setattr(
+        "voicecut.full_pipeline._render_is_current",
+        lambda *a, **k: a[0].is_file(),
+    )
+    run_full_pipeline(
+        args,
+        runner=russian_runner,
+        media_preparer=fake_media_preparer,
+        audio_publisher=russian_publisher,
+        planner_preflight=_fake_gemini_preflight,
+        progress_callback=events.append,
+    )
+    statuses = {event["stage"]: event["status"] for event in events}
+    assert statuses["hidden_retry_recovery"] == "skipped"
+    assert [e for e in events if e["stage"] == "hidden_retry_recovery"] == [
+        {"stage": "hidden_retry_recovery", "status": "skipped"}
+    ]
+
+    # Verbatim ASR already keeps hidden retries: CTC enrichment is skipped.
+    args.language = "en"
+    args.asr = "crisperwhisper"
+    args.work_dir = tmp_path / "work-verbatim"
+    args.breath_cleanup = None
+    events.clear()
+    modules: list[str] = []
+
+    def verbatim_runner(command: list[str], **kwargs: object) -> None:
+        module = command[command.index("-m") + 1]
+        modules.append(module)
+        if module == "voicecut.transcribe_mlx":
+            assert command[command.index("--engine") + 1] == "crisperwhisper"
+            assert command[command.index("--model") + 1] == (
+                "nyralabs/CrisperWhisper2.0_large"
+            )
+        fake_runner(command, **kwargs)
+
+    result = run_full_pipeline(
+        args,
+        runner=verbatim_runner,
+        media_preparer=fake_media_preparer,
+        audio_publisher=russian_publisher,
+        planner_preflight=_fake_gemini_preflight,
+        progress_callback=events.append,
+    )
+    assert "voicecut.ctc_enrich" not in modules
+    assert result["stages"]["hidden_retry_recovery"] == "skipped_verbatim_asr"
+    assert [e for e in events if e["stage"] == "hidden_retry_recovery"] == [
+        {"stage": "hidden_retry_recovery", "status": "skipped"}
+    ]
+    assert read_json(args.work_dir / "pipeline_config.json")["asr"] == "crisperwhisper"

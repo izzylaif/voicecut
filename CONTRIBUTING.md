@@ -12,8 +12,7 @@ VoiceCut currently supports Apple Silicon macOS with Python 3.11 or 3.12. The
 normal installer creates three repository-local runtimes without modifying
 your shell initialization:
 
-- `.venv` for the application, audio stack, WhisperX completeness veto, and
-  cloud planner SDKs;
+- `.venv` for the application, audio stack, and cloud planner SDKs;
 - `.venv-mlx` for MLX Whisper and optional local planners;
 - `.mfa-env` for the pinned MFA 3.4.1 command-line runtime.
 
@@ -36,9 +35,9 @@ runtime caches.
 Run the smallest relevant test module first. Examples:
 
 ```bash
-.venv/bin/python -m pytest -q tests/test_streaming_narration.py
+.venv/bin/python -m pytest -q tests/test_take_planner.py
 .venv/bin/python -m pytest -q tests/test_mfa_alignment.py
-.venv/bin/python -m pytest -q tests/test_final_render.py
+.venv/bin/python -m pytest -q tests/test_cut_render.py
 .venv/bin/python -m pytest -q tests/test_video_render.py
 ```
 
@@ -72,6 +71,21 @@ If formatting is the only failure, apply it deliberately and review the diff:
 
 Do not use a formatter or broad rewrite to alter unrelated files.
 
+Changes under `frontend/` (the browser editor) or `src/voicecut/editor/` must
+also pass the frontend checks:
+
+```bash
+cd frontend
+npm run typecheck
+npm test
+npm run build
+```
+
+The frontend tests run in Node and need no browser; the layout tests compare
+the browser's timeline arithmetic with cases computed by the Python exporter
+(`tests/test_editor_plan.py` regenerates them with `VOICECUT_WRITE_FIXTURES=1`).
+See [docs/editor.md](docs/editor.md) for the editor's architecture.
+
 ## Opt-in integration tests
 
 Normal CI must not download MFA models or Respiro-en weights. Two real-runtime
@@ -95,40 +109,24 @@ temporary corpora, plots, or generated audio.
 
 Changes to the audio path must preserve these invariants:
 
-1. The canonical source WAV remains untouched for semantic analysis, acoustic
-   evidence, and rendering.
-2. The semantic planner selects exact source word occurrences. It never
-   selects sample coordinates.
-3. WhisperX can veto a weak or incomplete retained occurrence, but its
-   timestamps are not production cut coordinates.
-4. MFA word and phone alignment is the sole authority for production source
-   endpoints. Whisper timestamps and waveform measurements are approximate
-   crop anchors or secondary evidence only.
-5. Semantic pauses and optional Respiro-en breath cleanup may operate only in
-   MFA-confirmed non-speech. Neither can move a resolved endpoint or modify a
-   retained phone.
-6. Every endpoint, pause, room-tone source, replacement, and permitted fade is
-   frozen in one authoritative `final_boundary_plan.json` before rendering.
-7. The renderer reads the canonical source and materializes that immutable
-   plan exactly once. A production renderer must never consume a WAV written
-   by another renderer.
-8. Retained speech stays sample-identical to the canonical source. Every output
-   sample must be traceable either to its canonical source coordinate or to
-   verified source room tone used for an insertion or replacement.
-9. An unresolved or invalid acoustic boundary must never fall back to a
-   Whisper timestamp, RMS minimum, zero crossing, midpoint, or guessed fade.
-   Use the existing conservative source-preservation behavior where it is
-   structurally safe; otherwise stop before rendering.
+1. The canonical source WAV remains untouched for analysis and rendering.
+2. The take planner selects source word ranges and pause classes. It never
+   selects sample coordinates, and its answers are validated structurally,
+   never by comparing its readable text with the ASR spelling.
+3. MFA identifies which stretch of the waveform belongs to which word; the
+   waveform energy decides where a word's sound starts and stops. A cut must
+   never land inside audible speech; only genuinely connected speech is cut at
+   the quietest point next to the phone boundary.
+4. Every pause of the output is normalized to its class, and non-speech sounds
+   inside pauses are replaced only by clean ambience from the same recording.
+5. The renderer reads the canonical source once. Retained speech samples are
+   copied unchanged except for the 4 ms fade at a dense boundary; every other
+   output sample is traceable to source silence or source ambience.
+6. Fixes must be general. Never tune thresholds, prompts or rules to the words
+   or timestamps of one recording.
 
-Do not add a post-render cleanup stage to solve a boundary problem. Prefer a
-pure evidence helper, a boundary-plan correction, or a stricter validation
-inside the existing plan-building path. Optional debug previews must remain
-outside the production dependency graph.
-
-A change affecting cuts, fades, pauses, or replacements should include a
-regression proving that retained MFA phones remain untouched, the boundary
-plan cannot change after it is frozen, and only one production WAV render is
-performed.
+A change affecting cuts, fades, or pauses should include a synthetic-waveform
+regression (see `tests/test_cut_render.py`).
 
 ## Tests, fixtures, and media
 

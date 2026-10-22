@@ -3,11 +3,19 @@
 
 This script intentionally runs each atom without previous-text conditioning.
 That prevents a whole-file decoder from silently normalizing away restarts.
+
+Two engines are available.  ``mlx-whisper`` (default) runs Whisper on MLX.
+``crisperwhisper`` runs CrisperWhisper 2.0, a verbatim Whisper fine-tune that
+keeps false starts, repetitions and fillers ("In a tr- in a transformer") as
+separate timed words; Whisper tends to merge such restarts into one word, which
+leaves the take planner nothing to cut.  CrisperWhisper's weights are released
+for non-commercial research use only.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import math
@@ -26,7 +34,10 @@ ARTIFACT_ROLES = (
     "source_independent",
     "final_independent",
 )
-ENGINE = "mlx-whisper"
+DEFAULT_MODELS = {
+    "mlx-whisper": "mlx-community/whisper-large-v3-turbo",
+    "crisperwhisper": "nyralabs/CrisperWhisper2.0_large",
+}
 SAMPLE_RATE = 16000
 SOURCE_ATOM_STRATEGY = "analysis_acoustic_atoms_v1"
 WHOLE_FILE_STRATEGY = "whole_file_v1"
@@ -85,6 +96,7 @@ def build_provenance(
     audio: Path,
     *,
     artifact_role: str | None,
+    engine: str,
     model: str,
     language: str,
     prompt: str | None,
@@ -95,7 +107,7 @@ def build_provenance(
         "audio": str(audio.resolve()),
         "audio_sha256": sha256_file(audio),
         "artifact_role": artifact_role,
-        "engine": ENGINE,
+        "engine": engine,
         "model": model,
         "language": language,
         "decode_config": decode_config,
@@ -237,7 +249,12 @@ def run_asr(
     language: str,
     word_timestamps: bool,
     prompt: str | None,
+    engine: str = "mlx-whisper",
 ) -> dict[str, Any]:
+    if engine == "crisperwhisper":
+        if prompt:
+            raise ValueError("CrisperWhisper does not take a decoding prompt")
+        return run_crisperwhisper(waveform, model=model, language=language)
     # Keep the optional MLX runtime out of module import so metadata and
     # checkpoint helpers can be tested in a regular Python environment.
     from mlx_whisper import transcribe as mlx_transcribe
@@ -257,6 +274,59 @@ def run_asr(
     )
 
 
+@functools.lru_cache(maxsize=1)
+def _crisperwhisper_model(model: str) -> Any:
+    try:
+        import torch
+        from crisperwhisper import CrisperWhisperModel
+    except ImportError as error:
+        raise RuntimeError(
+            "the crisperwhisper engine needs the crisperwhisper extra in the "
+            "ASR environment: .venv-mlx/bin/python -m pip install -e "
+            "'.[mlx,crisperwhisper]'"
+        ) from error
+    if torch.backends.mps.is_available():
+        device, compute_type = "mps", "float16"
+    else:
+        device, compute_type = "cpu", "float32"
+    return CrisperWhisperModel(
+        model, backend="transformers", device=device, compute_type=compute_type
+    )
+
+
+def run_crisperwhisper(
+    waveform: np.ndarray,
+    *,
+    model: str,
+    language: str,
+) -> dict[str, Any]:
+    """Verbatim transcription in the result shape ``serialize_result`` reads."""
+
+    result = _crisperwhisper_model(model).transcribe(
+        waveform,
+        sr=SAMPLE_RATE,
+        language=language,
+        mode="verbatim",
+        word_timestamps=True,
+    )
+    words = [
+        {"word": word.word, "start": word.start, "end": word.end}
+        for word in result.words or []
+    ]
+    return {
+        "text": result.text,
+        "language": result.language,
+        "segments": [
+            {
+                "start": 0.0,
+                "end": len(waveform) / SAMPLE_RATE,
+                "text": result.text,
+                "words": words,
+            }
+        ],
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--audio", type=Path, required=True)
@@ -269,9 +339,9 @@ def main() -> None:
         help="'source' transcribes the whole recording and every analysis atom.",
     )
     parser.add_argument(
-        "--model",
-        default="mlx-community/whisper-large-v3-turbo",
+        "--engine", choices=tuple(DEFAULT_MODELS), default="mlx-whisper"
     )
+    parser.add_argument("--model", help="default: the engine's standard model")
     parser.add_argument("--language", default="en")
     parser.add_argument("--prompt")
     parser.add_argument("--artifact-role", choices=ARTIFACT_ROLES)
@@ -284,6 +354,7 @@ def main() -> None:
         help="Continue from the atom checkpoint beside --output.",
     )
     args = parser.parse_args()
+    args.model = args.model or DEFAULT_MODELS[args.engine]
 
     decode_config = mlx_decode_config(
         mode=args.mode,
@@ -293,6 +364,7 @@ def main() -> None:
     provenance = build_provenance(
         args.audio,
         artifact_role=args.artifact_role,
+        engine=args.engine,
         model=args.model,
         language=args.language,
         prompt=args.prompt,
@@ -347,6 +419,7 @@ def main() -> None:
             language=args.language,
             word_timestamps=True,
             prompt=args.prompt,
+            engine=args.engine,
         )
         whole = serialize_result(
             raw_whole,
@@ -388,6 +461,7 @@ def main() -> None:
                     language=args.language,
                     word_timestamps=True,
                     prompt=args.prompt,
+                    engine=args.engine,
                 )
                 serialized = serialize_result(
                     raw,

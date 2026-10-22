@@ -1124,6 +1124,49 @@ def test_invoke_mfa_batch_uses_exact_flags_and_one_align_hf_call(
     )
 
 
+@pytest.mark.parametrize("cached", [False, True])
+def test_invoke_mfa_batch_aligns_offline_once_the_model_is_cached(
+    tmp_path: Path,
+    cached: bool,
+) -> None:
+    prefix = tmp_path / ".mfa-env"
+    prefix.mkdir()
+    cache_root = tmp_path / "mfa-cache"
+    if cached:
+        snapshot = (
+            cache_root
+            / "huggingface/hub/models--MontrealCorpusTools--english_us_arpa"
+            / "snapshots/abc"
+        )
+        snapshot.mkdir(parents=True)
+    paths = MFABatchPaths(
+        root=tmp_path / "mfa_alignment",
+        corpus=tmp_path / "mfa_alignment" / "corpus",
+        metadata=tmp_path / "mfa_alignment" / "metadata",
+        output=tmp_path / "mfa_alignment" / "output",
+        temporary=tmp_path / "mfa_alignment" / "temp",
+    )
+    for directory in (paths.corpus, paths.metadata, paths.output, paths.temporary):
+        directory.mkdir(parents=True, exist_ok=True)
+    environments: list[dict[str, str]] = []
+
+    def runner(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if "align_hf" in command:
+            environments.append(kwargs["env"])
+        stdout = "3.4.1\n" if command[-1] == "version" else "aligned\n"
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    invoke_mfa_batch(
+        paths=paths,
+        prefix=prefix,
+        cache_root=cache_root,
+        micromamba="mock-micromamba",
+        runner=runner,
+    )
+    assert len(environments) == 1
+    assert (environments[0].get("HF_HUB_OFFLINE") == "1") is cached
+
+
 def test_build_mfa_command_rejects_nonpositive_jobs(tmp_path: Path) -> None:
     paths = MFABatchPaths(
         root=tmp_path,

@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import pytest
 
 from voicecut.local_llm_worker import extract_final_json_object, render_chat_prompt
-from voicecut.final_render import build_parser as build_final_parser
 from voicecut.planner_backends import (
     DEFAULT_DEEPSEEK_BASE_URL,
     DEFAULT_DEEPSEEK_MODEL,
@@ -20,7 +19,7 @@ from voicecut.planner_backends import (
     resolve_planner_base_url,
     sanitize_planner_base_url,
 )
-from voicecut.streaming_narration import build_parser as build_streaming_parser
+from voicecut.take_planner import build_parser as build_take_parser
 
 
 class RecordingCompletions:
@@ -325,32 +324,11 @@ def test_local_worker_folds_system_instruction_for_gemma_templates() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    ("parser_factory", "mode_argument", "input_arguments"),
-    [
-        (
-            build_streaming_parser,
-            "--stream-plan",
-            ["--transcript", "words.json"],
-        ),
-        (
-            build_final_parser,
-            "--render-plan",
-            ["--audio", "audio.wav", "--plan", "plan.json"],
-        ),
-    ],
-)
-def test_planner_clis_expose_same_provider_neutral_options(
-    parser_factory: object,
-    mode_argument: str,
-    input_arguments: list[str],
-    tmp_path: Path,
-) -> None:
-    parser = parser_factory()  # type: ignore[operator]
-    args = parser.parse_args(
+def test_take_planner_cli_exposes_provider_neutral_options(tmp_path: Path) -> None:
+    args = build_take_parser().parse_args(
         [
-            mode_argument,
-            *input_arguments,
+            "--transcript",
+            "words.json",
             "--output-dir",
             str(tmp_path / "out"),
             "--planner-backend",

@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Any
 
 from .breath_detection import (
-    DEFAULT_BREATH_MIN_DURATION_MS,
     DEFAULT_BREATH_THRESHOLD,
     DEFAULT_RESPIRO_CACHE_ROOT,
     RESPIRO_CHECKPOINT_SHA256,
@@ -37,6 +36,8 @@ from .ctc_enrich import (
     SOURCE_DECODE_STRATEGY,
     write_passthrough_enrichment,
 )
+from .cut_render import RENDERER_NAME
+from .gap_recovery import STRATEGY as GAP_RECOVERY_STRATEGY
 from .language_profiles import (
     SUPPORTED_LANGUAGE_CODES,
     LanguageProfile,
@@ -58,24 +59,33 @@ from .mfa_alignment import (
 )
 from .planner_backends import (
     API_KEY_ENV_BY_BACKEND,
-    DEFAULT_MAX_OUTPUT_TOKENS,
     PlannerRuntimeConfiguration,
     add_planner_backend_arguments,
     default_model_for_backend,
     preflight_planner_backend,
     resolve_planner_base_url,
 )
+from .take_planner import (
+    DEFAULT_LOOKAHEAD_SECONDS,
+    DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
+    DEFAULT_WINDOW_SECONDS,
+    PLAN_FILENAME,
+    PLANNER_NAME,
+)
 from .video_render import render_edited_video
 
 PACKAGE_PARENT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_WHISPER_MODEL = "mlx-community/whisper-large-v3-turbo"
+CRISPERWHISPER_MODEL = "nyralabs/CrisperWhisper2.0_large"
+VERBATIM_ASR_SKIP_STATUS = "skipped_verbatim_asr"
 DEFAULT_ALIGNMENT_BACKEND = "mfa"
 MFA_FINE_TUNE = True
 DEFAULT_MFA_MICROMAMBA = Path("micromamba")
 DEFAULT_MFA_NUM_JOBS = max(1, min(os.cpu_count() or 1, 4))
-PIPELINE_SCHEMA_VERSION = 9
+PIPELINE_SCHEMA_VERSION = 10
 CTC_LANGUAGE_SKIP_STATUS = "skipped_unsupported_language"
+AUDIO_LISTENING_BACKENDS = frozenset({"gemini"})
 
 
 def _preferred_python(relative_path: str) -> Path:
@@ -84,7 +94,6 @@ def _preferred_python(relative_path: str) -> Path:
 
 
 DEFAULT_ASR_PYTHON = _preferred_python(".venv-mlx/bin/python")
-DEFAULT_ALIGNMENT_PYTHON = Path(sys.executable)
 
 
 class FullPipelineError(RuntimeError):
@@ -210,6 +219,25 @@ def _enrichment_artifacts_are_current(
     )
 
 
+def _gap_recovery_is_current(
+    path: Path,
+    *,
+    transcript_path: Path,
+    audio_sha256: str,
+    model: str,
+) -> bool:
+    value = _read_object(path)
+    report = value.get("gap_recovery") if value is not None else None
+    return (
+        isinstance(report, dict)
+        and value.get("audio_sha256") == audio_sha256
+        and report.get("status") == "complete"
+        and report.get("strategy") == GAP_RECOVERY_STRATEGY
+        and report.get("model") == model
+        and report.get("input_transcript_sha256") == sha256_file(transcript_path)
+    )
+
+
 def _ctc_language_skip_report_is_current(
     report_path: Path,
     *,
@@ -267,13 +295,16 @@ def _plan_is_current(
     transcript_path: Path,
     backend: str,
     model: str,
+    listens_to_audio: bool,
 ) -> bool:
     value = _read_object(path)
     return (
         value is not None
         and value.get("status") == "complete"
+        and value.get("planner") == PLANNER_NAME
         and value.get("backend") == backend
         and value.get("model") == model
+        and value.get("listened_to_audio") is listens_to_audio
         and value.get("transcript") == str(transcript_path.resolve())
         and value.get("transcript_sha256") == sha256_file(transcript_path)
     )
@@ -284,12 +315,9 @@ def _render_is_current(
     *,
     audio_sha256: str,
     plan_path: Path,
-    backend: str,
-    model: str,
     mfa_model: str,
     breath_cleanup: str,
     breath_threshold: float,
-    breath_min_duration_ms: int,
     pause_policy: str,
 ) -> bool:
     value = _read_object(manifest_path)
@@ -299,33 +327,18 @@ def _render_is_current(
     final_cut_sha = value.get("final_cut_wav_sha256")
     boundary_plan = value.get("final_boundary_plan")
     boundary_plan_sha = value.get("final_boundary_plan_sha256")
-    effective_plan = value.get("effective_streaming_plan")
-    effective_plan_sha = value.get("effective_streaming_plan_sha256")
     return (
         value.get("status") == "complete"
-        and value.get("renderer") == "authoritative_single_pass_final_render_v3"
+        and value.get("renderer") == RENDERER_NAME
         and value.get("alignment_backend") == DEFAULT_ALIGNMENT_BACKEND
         and value.get("mfa_version") == MFA_VERSION
         and value.get("mfa_model") == mfa_model
-        and value.get("mfa_fine_tune") is MFA_FINE_TUNE
         and value.get("breath_cleanup_mode") == breath_cleanup
         and value.get("breath_threshold") == breath_threshold
-        and value.get("breath_min_duration_ms") == breath_min_duration_ms
         and value.get("pause_policy") == pause_policy
-        and value.get("respiro_upstream_commit") == RESPIRO_UPSTREAM_COMMIT
-        and value.get("respiro_checkpoint_sha256") == RESPIRO_CHECKPOINT_SHA256
-        and (
-            breath_cleanup != "replace"
-            or value.get("breath_cleanup_status")
-            != "breath_cleanup_skipped_detector_failure"
-        )
         and value.get("source_audio_sha256") == audio_sha256
-        and value.get("streaming_plan") == str(plan_path.resolve())
-        and value.get("streaming_plan_sha256") == sha256_file(plan_path)
-        and value.get("pause_planner_backend")
-        == (backend if pause_policy == "semantic" else "deterministic_video_cuts")
-        and value.get("pause_planner_model")
-        == (model if pause_policy == "semantic" else None)
+        and value.get("take_plan") == str(plan_path.resolve())
+        and value.get("take_plan_sha256") == sha256_file(plan_path)
         and isinstance(final_cut, str)
         and Path(final_cut).is_file()
         and isinstance(final_cut_sha, str)
@@ -334,10 +347,6 @@ def _render_is_current(
         and Path(boundary_plan).is_file()
         and isinstance(boundary_plan_sha, str)
         and sha256_file(Path(boundary_plan)) == boundary_plan_sha
-        and isinstance(effective_plan, str)
-        and Path(effective_plan).is_file()
-        and isinstance(effective_plan_sha, str)
-        and sha256_file(Path(effective_plan)) == effective_plan_sha
     )
 
 
@@ -579,7 +588,6 @@ def _configuration(
     planner_model: str,
     planner_base_url: str | None,
     asr_python: Path,
-    alignment_python: Path,
     planner_python: Path,
     mfa_prefix: Path,
     mfa_cache_root: Path,
@@ -597,21 +605,23 @@ def _configuration(
             "code": language_profile.code,
             "display_name": language_profile.display_name,
             "whisper_language": language_profile.whisper_language,
-            "whisperx_language": language_profile.whisperx_language,
-            "whisperx_model": language_profile.whisperx_model,
             "mfa_model": language_profile.mfa_model,
             "ctc_enrichment_supported": (language_profile.ctc_enrichment_supported),
             "default_breath_cleanup": language_profile.default_breath_cleanup,
         },
+        "asr": args.asr,
         "whisper_model": args.whisper_model,
         "planner_backend": args.planner_backend,
         "planner_model": planner_model,
         "planner_base_url": planner_base_url,
         "planner_api_key_env": args.planner_api_key_env,
         "planner_local_files_only": bool(args.local_files_only),
+        "planner": PLANNER_NAME,
+        "planner_listens_to_audio": _planner_listens(args),
         "window_seconds": float(args.window_seconds),
+        "lookahead_seconds": float(args.lookahead_seconds),
         "max_output_tokens": int(args.max_output_tokens),
-        "max_acoustic_retries": int(args.max_acoustic_retries),
+        "renderer": RENDERER_NAME,
         "pause_policy": pause_policy,
         "debug_artifacts": bool(args.debug_artifacts),
         "asr_python": str(asr_python),
@@ -625,16 +635,24 @@ def _configuration(
         "mfa_num_jobs": int(args.mfa_num_jobs),
         "breath_cleanup": args.breath_cleanup,
         "breath_threshold": float(args.breath_threshold),
-        "breath_min_duration_ms": int(args.breath_min_duration_ms),
         "respiro_upstream_commit": RESPIRO_UPSTREAM_COMMIT,
         "respiro_checkpoint_sha256": RESPIRO_CHECKPOINT_SHA256,
         "respiro_cache_root": str(args.respiro_cache_root.expanduser().absolute()),
-        # WhisperX remains only as a retained-word completeness veto. It is
-        # not permitted to provide production source-sample coordinates.
-        "alignment_python": str(alignment_python),
-        "alignment_python_role": "whisperx_retained_word_completeness_veto_only",
         "planner_python": str(planner_python),
     }
+
+
+def _planner_listens(args: argparse.Namespace) -> bool:
+    """Whether the take planner receives the audio of each window."""
+
+    if args.planner_audio == "off":
+        return False
+    supported = args.planner_backend in AUDIO_LISTENING_BACKENDS
+    if args.planner_audio == "on" and not supported:
+        raise FullPipelineError(
+            f"--planner-audio on is not supported by {args.planner_backend}"
+        )
+    return supported
 
 
 def _resolve_work_dir(
@@ -729,6 +747,17 @@ def _publication_record(
     }
 
 
+def _notify_progress(
+    progress_callback: Callable[[dict[str, Any]], None] | None,
+    stage: str,
+    status: str,
+) -> None:
+    """Report one coarse stage transition to an optional observer."""
+
+    if progress_callback is not None:
+        progress_callback({"stage": stage, "status": status})
+
+
 def run_full_pipeline(
     args: argparse.Namespace,
     *,
@@ -739,9 +768,11 @@ def run_full_pipeline(
     planner_preflight: Callable[..., PlannerRuntimeConfiguration] = (
         preflight_planner_backend
     ),
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Run or resume the complete pipeline and return its provenance ledger."""
 
+    _notify_progress(progress_callback, "preflight", "started")
     input_path = args.input.resolve()
     if not input_path.is_file():
         raise FileNotFoundError(input_path)
@@ -772,23 +803,18 @@ def run_full_pipeline(
         args.breath_cleanup = language_profile.default_breath_cleanup
     if args.window_seconds <= 0:
         raise FullPipelineError("--window-seconds must be positive")
+    if args.lookahead_seconds < 0:
+        raise FullPipelineError("--lookahead-seconds must not be negative")
     if args.max_output_tokens <= 0:
         raise FullPipelineError("--max-output-tokens must be positive")
     if not 0.0 <= args.breath_threshold <= 1.0:
         raise FullPipelineError("--breath-threshold must be inside [0, 1]")
-    if args.breath_min_duration_ms <= 0:
-        raise FullPipelineError("--breath-min-duration-ms must be positive")
     pause_policy = "cuts" if output_kind == "video" else "semantic"
 
     asr_python = args.asr_python.absolute()
-    alignment_python = args.alignment_python.absolute()
     planner_python = args.planner_python.absolute()
     if not asr_python.is_file():
         raise FullPipelineError(f"ASR Python does not exist: {asr_python}")
-    if not alignment_python.is_file():
-        raise FullPipelineError(
-            f"WhisperX completeness-veto Python does not exist: {alignment_python}"
-        )
     mfa_prefix, mfa_cache_root, mfa_micromamba = _validate_mfa_runtime(
         backend=args.alignment_backend,
         prefix=args.mfa_prefix,
@@ -824,7 +850,6 @@ def run_full_pipeline(
         planner_model=planner_model,
         planner_base_url=planner_base_url,
         asr_python=asr_python,
-        alignment_python=alignment_python,
         planner_python=planner_python,
         mfa_prefix=mfa_prefix,
         mfa_cache_root=mfa_cache_root,
@@ -865,6 +890,7 @@ def run_full_pipeline(
     )
     stages: dict[str, str] = {}
     pipeline_warnings: list[dict[str, Any]] = []
+    _notify_progress(progress_callback, "preflight", "completed")
 
     media_dir = work_dir / "00_media"
     media_manifest_path = media_dir / "media_input.json"
@@ -876,8 +902,10 @@ def run_full_pipeline(
         media_manifest = _read_object(media_manifest_path)
         assert media_manifest is not None
         stages["media_input"] = "cached"
+        _notify_progress(progress_callback, "media_input", "cached")
     else:
         _reset_stage(media_dir, work_dir=work_dir)
+        _notify_progress(progress_callback, "media_input", "started")
         print("\n=== 00 MEDIA INPUT ===", flush=True)
         media_manifest = media_preparer(input_path, media_dir)
         if not _media_is_current(
@@ -889,6 +917,7 @@ def run_full_pipeline(
                 "media preparation did not produce a current canonical WAV"
             )
         stages["media_input"] = "created"
+        _notify_progress(progress_callback, "media_input", "completed")
 
     source_kind = media_manifest.get("source_kind")
     if source_kind not in {"audio", "video"}:
@@ -907,8 +936,10 @@ def run_full_pipeline(
     analysis_path = analysis_dir / "analysis.json"
     if _audio_artifact_is_current(analysis_path, audio_sha256):
         stages["analysis"] = "cached"
+        _notify_progress(progress_callback, "analysis", "cached")
     else:
         _reset_stage(analysis_dir, work_dir=work_dir)
+        _notify_progress(progress_callback, "analysis", "started")
         _run(
             "01 ANALYSIS",
             [
@@ -925,12 +956,15 @@ def run_full_pipeline(
         if not _audio_artifact_is_current(analysis_path, audio_sha256):
             raise FullPipelineError("analysis did not produce a current analysis.json")
         stages["analysis"] = "created"
+        _notify_progress(progress_callback, "analysis", "completed")
 
     transcript_dir = work_dir / "02_transcription"
     transcript_path = transcript_dir / "source_transcript.json"
     if _audio_artifact_is_current(transcript_path, audio_sha256):
         stages["transcription"] = "cached"
+        _notify_progress(progress_callback, "transcription", "cached")
     else:
+        _notify_progress(progress_callback, "transcription", "started")
         # ``transcribe_mlx`` checkpoints every completed atom beside the final
         # transcript.  Keep that checkpoint when a long run is resumed: the
         # worker validates its input identity before trusting it.  Deleting the
@@ -938,8 +972,12 @@ def run_full_pipeline(
         # interruption and forced hour-long recordings back to atom zero.
         transcript_dir.mkdir(parents=True, exist_ok=True)
         transcript_path.unlink(missing_ok=True)
+        if args.asr == "crisperwhisper":
+            engine, asr_model = "crisperwhisper", CRISPERWHISPER_MODEL
+        else:
+            engine, asr_model = "mlx-whisper", args.whisper_model
         _run(
-            "02 WHISPER TRANSCRIPTION",
+            "02 TRANSCRIPTION",
             [
                 str(asr_python),
                 "-m",
@@ -951,8 +989,10 @@ def run_full_pipeline(
                 "--mode",
                 "source",
                 "--skip-whole",
+                "--engine",
+                engine,
                 "--model",
-                args.whisper_model,
+                asr_model,
                 "--language",
                 language_profile.whisper_language,
                 "--artifact-role",
@@ -965,15 +1005,23 @@ def run_full_pipeline(
         )
         if not _audio_artifact_is_current(transcript_path, audio_sha256):
             raise FullPipelineError(
-                "Whisper did not produce a current source transcript"
+                "transcription did not produce a current source transcript"
             )
         stages["transcription"] = "created"
+        _notify_progress(progress_callback, "transcription", "completed")
 
     enrichment_dir = work_dir / "03_ctc_enrichment"
     enriched_path = enrichment_dir / "source_transcript_ctc_enriched.json"
     enrichment_report_path = enrichment_dir / "ctc_enrichment_report.json"
     semantic_transcript_path: Path
-    if not language_profile.ctc_enrichment_supported:
+    if args.asr == "crisperwhisper":
+        # A verbatim transcript already keeps the retries CTC enrichment
+        # recovers from Whisper's merged words.
+        semantic_transcript_path = transcript_path
+        stages["hidden_retry_recovery"] = VERBATIM_ASR_SKIP_STATUS
+        enrichment_status = VERBATIM_ASR_SKIP_STATUS
+        _notify_progress(progress_callback, "hidden_retry_recovery", "skipped")
+    elif not language_profile.ctc_enrichment_supported:
         semantic_transcript_path = transcript_path
         if _ctc_language_skip_report_is_current(
             enrichment_report_path,
@@ -994,6 +1042,7 @@ def run_full_pipeline(
             )
             stages["hidden_retry_recovery"] = "skipped_language_policy"
         enrichment_status = CTC_LANGUAGE_SKIP_STATUS
+        _notify_progress(progress_callback, "hidden_retry_recovery", "skipped")
     elif _enrichment_artifacts_are_current(
         enriched_path,
         enrichment_report_path,
@@ -1009,8 +1058,10 @@ def run_full_pipeline(
             in {PASSTHROUGH_STATUS, "complete_with_degraded_evidence"}
             else "cached"
         )
+        _notify_progress(progress_callback, "hidden_retry_recovery", "cached")
     else:
         semantic_transcript_path = enriched_path
+        _notify_progress(progress_callback, "hidden_retry_recovery", "started")
         # CTC is optional evidence, and its worker has a validated resumable
         # per-atom checkpoint.  Preserve that checkpoint across reruns.  If
         # the optional subprocess itself crashes, publish an explicitly
@@ -1070,6 +1121,7 @@ def run_full_pipeline(
             stages["hidden_retry_recovery"] = "created_with_skipped_atoms"
         else:
             stages["hidden_retry_recovery"] = "created"
+        _notify_progress(progress_callback, "hidden_retry_recovery", "completed")
 
     if enrichment_status in {
         PASSTHROUGH_STATUS,
@@ -1088,6 +1140,53 @@ def run_full_pipeline(
         pipeline_warnings.append(warning)
         print(f"warning: {warning['message']}", file=sys.stderr, flush=True)
 
+    # Whisper tends to skip text that repeats what it has just written, so a
+    # retake can be audible but missing from the transcript.  Transcribe every
+    # speech-level stretch no word covers, before the planner chooses takes.
+    gap_dir = work_dir / "03_gap_recovery"
+    gap_path = gap_dir / "source_transcript_with_recovered_gaps.json"
+    if _gap_recovery_is_current(
+        gap_path,
+        transcript_path=semantic_transcript_path,
+        audio_sha256=audio_sha256,
+        model=args.whisper_model,
+    ):
+        stages["gap_recovery"] = "cached"
+        _notify_progress(progress_callback, "gap_recovery", "cached")
+    else:
+        _notify_progress(progress_callback, "gap_recovery", "started")
+        _reset_stage(gap_dir, work_dir=work_dir)
+        gap_dir.mkdir(parents=True, exist_ok=True)
+        _run(
+            "03b UNTRANSCRIBED SPEECH RECOVERY",
+            [
+                str(asr_python),
+                "-m",
+                "voicecut.gap_recovery",
+                "--audio",
+                str(audio),
+                "--transcript",
+                str(semantic_transcript_path),
+                "--output",
+                str(gap_path),
+                "--model",
+                args.whisper_model,
+                "--language",
+                language_profile.whisper_language,
+            ],
+            runner=runner,
+        )
+        if not _gap_recovery_is_current(
+            gap_path,
+            transcript_path=semantic_transcript_path,
+            audio_sha256=audio_sha256,
+            model=args.whisper_model,
+        ):
+            raise FullPipelineError("gap recovery did not produce a current transcript")
+        stages["gap_recovery"] = "created"
+        _notify_progress(progress_callback, "gap_recovery", "completed")
+    semantic_transcript_path = gap_path
+
     planner_arguments = _planner_cli_arguments(
         args=args,
         planner_model=planner_model,
@@ -1095,34 +1194,46 @@ def run_full_pipeline(
         planner_python=planner_python,
         env_file=env_file,
     )
+    listens_to_audio = _planner_listens(args)
     plan_dir = work_dir / "04_semantic_plan"
-    plan_path = plan_dir / "streaming_plan.json"
+    plan_path = plan_dir / PLAN_FILENAME
     if _plan_is_current(
         plan_path,
         transcript_path=semantic_transcript_path,
         backend=args.planner_backend,
         model=planner_model,
+        listens_to_audio=listens_to_audio,
     ):
         stages["semantic_plan"] = "cached"
+        _notify_progress(progress_callback, "semantic_plan", "cached")
     else:
-        _reset_stage(plan_dir, work_dir=work_dir)
+        # Keep the per-request cache in ``calls/``: requests are keyed by their
+        # exact prompt and audio, so an interrupted long recording resumes
+        # without paying for finished windows again.
+        plan_dir.mkdir(parents=True, exist_ok=True)
+        plan_path.unlink(missing_ok=True)
+        _notify_progress(progress_callback, "semantic_plan", "started")
+        plan_command = [
+            sys.executable,
+            "-m",
+            "voicecut.take_planner",
+            "--transcript",
+            str(semantic_transcript_path),
+            "--output-dir",
+            str(plan_dir),
+            "--window-seconds",
+            str(args.window_seconds),
+            "--lookahead-seconds",
+            str(args.lookahead_seconds),
+            "--language",
+            language_profile.code,
+            *planner_arguments,
+        ]
+        if listens_to_audio:
+            plan_command.extend(["--audio", str(audio)])
         _run(
-            "04 STREAMING SEMANTIC PLAN",
-            [
-                sys.executable,
-                "-m",
-                "voicecut.streaming_narration",
-                "--stream-plan",
-                "--transcript",
-                str(semantic_transcript_path),
-                "--output-dir",
-                str(plan_dir),
-                "--window-seconds",
-                str(args.window_seconds),
-                "--language",
-                language_profile.code,
-                *planner_arguments,
-            ],
+            "04 TAKE SELECTION",
+            plan_command,
             runner=runner,
             planner_backend=planner_runtime.provider,
             planner_api_key_env=planner_runtime.api_key_env,
@@ -1132,11 +1243,11 @@ def run_full_pipeline(
             transcript_path=semantic_transcript_path,
             backend=args.planner_backend,
             model=planner_model,
+            listens_to_audio=listens_to_audio,
         ):
-            raise FullPipelineError(
-                "the semantic planner did not produce a valid grounded plan"
-            )
+            raise FullPipelineError("the take planner did not produce a valid plan")
         stages["semantic_plan"] = "created"
+        _notify_progress(progress_callback, "semantic_plan", "completed")
 
     final_dir = work_dir / "05_final"
     final_manifest_path = final_dir / "final_render_manifest.json"
@@ -1144,122 +1255,101 @@ def run_full_pipeline(
         final_manifest_path,
         audio_sha256=audio_sha256,
         plan_path=plan_path,
-        backend=args.planner_backend,
-        model=planner_model,
         mfa_model=language_profile.mfa_model,
         breath_cleanup=args.breath_cleanup,
         breath_threshold=args.breath_threshold,
-        breath_min_duration_ms=args.breath_min_duration_ms,
         pause_policy=pause_policy,
     ):
         stages["final_render"] = "cached"
+        _notify_progress(progress_callback, "final_render", "cached")
     else:
         _reset_stage(final_dir, work_dir=work_dir)
-        render_command = [
-            sys.executable,
-            "-m",
-            "voicecut.final_render",
-            "--render-plan",
-            "--audio",
-            str(audio),
-            "--plan",
-            str(plan_path),
-            "--output-dir",
-            str(final_dir),
-            "--alignment-python",
-            str(alignment_python),
-            "--alignment-backend",
-            args.alignment_backend,
-            "--language",
-            language_profile.code,
-            "--mfa-prefix",
-            str(mfa_prefix),
-            "--mfa-cache-root",
-            str(mfa_cache_root),
-            "--mfa-micromamba",
-            str(mfa_micromamba),
-            "--mfa-num-jobs",
-            str(args.mfa_num_jobs),
-            "--max-acoustic-retries",
-            str(args.max_acoustic_retries),
-            "--pause-policy",
-            pause_policy,
-            "--breath-cleanup",
-            args.breath_cleanup,
-            "--breath-threshold",
-            str(args.breath_threshold),
-            "--breath-min-duration-ms",
-            str(args.breath_min_duration_ms),
-            "--respiro-cache-root",
-            str(args.respiro_cache_root.expanduser().absolute()),
-            *planner_arguments,
-        ]
-        if args.debug_artifacts:
-            render_command.append("--debug-artifacts")
+        _notify_progress(progress_callback, "final_render", "started")
         _run(
-            "05 AUTHORITATIVE SINGLE-PASS RENDER",
-            render_command,
+            "05 RENDER",
+            [
+                sys.executable,
+                "-m",
+                "voicecut.cut_render",
+                "--audio",
+                str(audio),
+                "--plan",
+                str(plan_path),
+                "--output-dir",
+                str(final_dir),
+                "--language",
+                language_profile.code,
+                "--pause-policy",
+                pause_policy,
+                "--breath-cleanup",
+                args.breath_cleanup,
+                "--breath-threshold",
+                str(args.breath_threshold),
+                "--mfa-prefix",
+                str(mfa_prefix),
+                "--mfa-cache-root",
+                str(mfa_cache_root),
+                "--mfa-micromamba",
+                str(mfa_micromamba),
+                "--mfa-num-jobs",
+                str(args.mfa_num_jobs),
+                "--respiro-cache-root",
+                str(args.respiro_cache_root.expanduser().absolute()),
+            ],
             runner=runner,
-            planner_backend=planner_runtime.provider,
-            planner_api_key_env=planner_runtime.api_key_env,
         )
         if not _render_is_current(
             final_manifest_path,
             audio_sha256=audio_sha256,
             plan_path=plan_path,
-            backend=args.planner_backend,
-            model=planner_model,
             mfa_model=language_profile.mfa_model,
             breath_cleanup=args.breath_cleanup,
             breath_threshold=args.breath_threshold,
-            breath_min_duration_ms=args.breath_min_duration_ms,
             pause_policy=pause_policy,
         ):
             raise FullPipelineError(
                 "the final renderer did not produce a validated final cut"
             )
         stages["final_render"] = "created"
+        _notify_progress(progress_callback, "final_render", "completed")
 
     final_manifest = _read_object(final_manifest_path)
     if final_manifest is None:
         raise FullPipelineError("final render manifest is missing")
-    semantic_fallback_count = int(
-        final_manifest.get("semantic_planner_fallback_count", 0)
-    )
-    pause_fallback_count = int(final_manifest.get("pause_degraded_batch_count", 0))
-    delivery_status = str(final_manifest.get("delivery_status", "complete"))
-    if delivery_status == "complete_with_full_source_passthrough":
-        pipeline_warnings.append(
-            {
-                "stage": "final_render",
-                "status": delivery_status,
-                "message": (
-                    "No safe edited boundary plan could be completed. VoiceCut "
-                    "returned the complete canonical source instead of failing "
-                    "or guessing an acoustic cut."
-                ),
-            }
-        )
-    if semantic_fallback_count:
+    take_plan = _read_object(plan_path) or {}
+    suspects = take_plan.get("remaining_duplicate_suspects") or []
+    if suspects:
         pipeline_warnings.append(
             {
                 "stage": "semantic_plan",
-                "status": "source_passthrough_used",
+                "status": "possible_repetition",
                 "message": (
-                    "The planner exhausted its bounded retries in "
-                    f"{semantic_fallback_count} window(s); exact source audio "
-                    "was preserved locally."
+                    f"{len(suspects)} place(s) of the edit still look similar to "
+                    "an earlier sentence after the duplicate review; listen to "
+                    "them (see remaining_duplicate_suspects in the take plan)."
                 ),
             }
         )
-    if pause_fallback_count:
+    alignment = final_manifest.get("mfa_aligned_words", 0)
+    if not alignment:
         pipeline_warnings.append(
             {
-                "stage": "semantic_pause_plan",
-                "status": "deterministic_pause_fallback",
+                "stage": "final_render",
+                "status": "whisper_timing_fallback",
                 "message": (
-                    "Pause classification used deterministic rules for "
-                    f"{pause_fallback_count} failed planner batch(es)."
+                    "MFA word alignment was unavailable; cuts used Whisper word "
+                    "timing refined by the waveform."
+                ),
+            }
+        )
+    if final_manifest.get("breath_cleanup_status") == "detector_failed_energy_only":
+        pipeline_warnings.append(
+            {
+                "stage": "final_render",
+                "status": "breath_detector_failed",
+                "message": (
+                    "Respiro-en breath detection failed, so breaths were judged "
+                    "by level only and some may remain; run scripts/install.sh."
                 ),
             }
         )
@@ -1278,8 +1368,10 @@ def run_full_pipeline(
         publication = _read_object(publication_path)
         assert publication is not None
         stages["publication"] = "cached"
+        _notify_progress(progress_callback, "publication", "cached")
     else:
         _reset_stage(publication_dir, work_dir=work_dir)
+        _notify_progress(progress_callback, "publication", "started")
         publication_dir.mkdir(parents=True, exist_ok=True)
         if output_path.exists() and not args.overwrite:
             raise FileExistsError(
@@ -1313,6 +1405,7 @@ def run_full_pipeline(
         )
         write_json(publication_path, publication)
         stages["publication"] = "created"
+        _notify_progress(progress_callback, "publication", "completed")
 
     result = {
         "schema_version": PIPELINE_SCHEMA_VERSION,
@@ -1343,22 +1436,16 @@ def run_full_pipeline(
         ),
         "ctc_enrichment_report": str(enrichment_report_path),
         "ctc_enrichment_status": enrichment_status,
-        "streaming_plan": str(plan_path),
+        "take_plan": str(plan_path),
+        "planner_listened_to_audio": listens_to_audio,
         "render_manifest": str(final_manifest_path),
         "publication_manifest": str(publication_path),
         "final_cut_wav": str(final_wav),
         "duration_seconds": final_manifest["duration_seconds"],
         "delivery_status": final_manifest.get("delivery_status", "complete"),
-        "preserved_problem_intervals": (
-            len(
-                (final_manifest.get("delivery_fallback") or {}).get(
-                    "preserved_intervals", []
-                )
-            )
-            + semantic_fallback_count
-        ),
-        "semantic_fallback_windows": semantic_fallback_count,
-        "pause_fallback_batches": pause_fallback_count,
+        "source_duration_seconds": final_manifest.get("source_duration_seconds"),
+        "cuts": final_manifest.get("cuts"),
+        "pauses_normalized": final_manifest.get("pauses_normalized"),
         "pipeline_warnings": pipeline_warnings,
     }
     write_json(work_dir / "pipeline_run.json", result)
@@ -1405,22 +1492,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Python executable containing mlx-whisper.",
     )
     parser.add_argument(
-        "--alignment-python",
-        type=Path,
-        default=DEFAULT_ALIGNMENT_PYTHON,
-        help=(
-            "Python executable containing WhisperX for the retained-word "
-            "completeness veto only; it never supplies production cut "
-            "coordinates."
-        ),
-    )
-    parser.add_argument(
         "--alignment-backend",
         choices=(DEFAULT_ALIGNMENT_BACKEND,),
         default=DEFAULT_ALIGNMENT_BACKEND,
         help=(
-            "Production cut-coordinate backend. MFA is authoritative; "
-            "Whisper timestamps remain approximate crop anchors only."
+            "Word-alignment backend. MFA identifies kept words; the waveform "
+            "decides where speech physically starts and stops."
         ),
     )
     parser.add_argument(
@@ -1452,9 +1529,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("off", "replace"),
         default=None,
         help=(
-            "Respiro-en cleanup and ambience screening inside MFA-confirmed "
-            "non-speech. Defaults to replace for English and off for Russian; "
-            "an explicit selection overrides the language default."
+            "Replace breaths and other non-speech sounds inside pauses with "
+            "clean ambience from the same recording. Defaults to replace for "
+            "English and off for Russian; an explicit selection overrides the "
+            "language default."
         ),
     )
     parser.add_argument(
@@ -1464,16 +1542,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Respiro-en frame-probability threshold (default: 0.5).",
     )
     parser.add_argument(
-        "--breath-min-duration-ms",
-        type=int,
-        default=DEFAULT_BREATH_MIN_DURATION_MS,
-        help="Minimum consecutive breath-positive duration (default: 80 ms).",
-    )
-    parser.add_argument(
         "--respiro-cache-root",
         type=Path,
         default=DEFAULT_RESPIRO_CACHE_ROOT,
         help="Verified pinned Respiro-en runtime-model cache.",
+    )
+    parser.add_argument(
+        "--asr",
+        choices=("whisper", "crisperwhisper"),
+        default="whisper",
+        help=(
+            "Transcription engine. crisperwhisper (CrisperWhisper 2.0, "
+            "verbatim) keeps quick restarts such as 'In a tr- in a "
+            "transformer' as separate words, so they can be cut; its weights "
+            "are licensed for non-commercial research use only "
+            "(default: whisper)."
+        ),
     )
     parser.add_argument("--whisper-model", default=DEFAULT_WHISPER_MODEL)
     parser.add_argument(
@@ -1486,29 +1570,43 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--window-seconds",
         type=float,
-        default=30.0,
-        help="Streaming semantic look-ahead increment; never an edit boundary.",
+        default=DEFAULT_WINDOW_SECONDS,
+        help=(
+            "Recording time the take planner decides per request (default: "
+            f"{DEFAULT_WINDOW_SECONDS:.0f}); never an edit boundary."
+        ),
+    )
+    parser.add_argument(
+        "--lookahead-seconds",
+        type=float,
+        default=DEFAULT_LOOKAHEAD_SECONDS,
+        help=(
+            "Following recording time shown to the planner, undecided, so it "
+            f"can see later retakes (default: {DEFAULT_LOOKAHEAD_SECONDS:.0f})."
+        ),
+    )
+    parser.add_argument(
+        "--planner-audio",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help=(
+            "Let the planner listen to each window's audio (a compressed "
+            "16 kHz copy) to hear stumbles and resolve ASR errors. auto: on "
+            "for backends that accept audio (Gemini). off keeps the audio "
+            "local and sends only the transcript."
+        ),
     )
     parser.add_argument(
         "--max-output-tokens",
         type=int,
-        default=DEFAULT_MAX_OUTPUT_TOKENS,
-    )
-    parser.add_argument(
-        "--max-acoustic-retries",
-        type=int,
-        default=3,
-        help=(
-            "Maximum planner reselections after alignment finds an "
-            "uncuttable dense boundary or a weak retained-word occurrence."
-        ),
+        default=DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
     )
     parser.add_argument(
         "--debug-artifacts",
         action="store_true",
         help=(
-            "Request optional diagnostics without changing the single-pass "
-            "production render graph."
+            "Accepted for compatibility. Every run already keeps its full "
+            "diagnostics (take-plan ledger, MFA output, boundary plan)."
         ),
     )
     return parser
@@ -1517,12 +1615,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.max_acoustic_retries < 0:
-        parser.error("--max-acoustic-retries must be non-negative")
     if not 0.0 <= args.breath_threshold <= 1.0:
         parser.error("--breath-threshold must be inside [0, 1]")
-    if args.breath_min_duration_ms <= 0:
-        parser.error("--breath-min-duration-ms must be positive")
     try:
         result = run_full_pipeline(args)
     except (FullPipelineError, FileExistsError, FileNotFoundError) as error:
@@ -1531,24 +1625,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"output: {result['output']}")
     print(f"duration: {result['duration_seconds']:.3f} s")
     print(f"delivery status: {result['delivery_status']}")
-    acoustic_preserved = (
-        result["preserved_problem_intervals"] - result["semantic_fallback_windows"]
-    )
-    if acoustic_preserved:
-        print(
-            "warning: preserved original source context at "
-            f"{acoustic_preserved} unresolved cut(s)"
-        )
-    if result["semantic_fallback_windows"]:
-        print(
-            "warning: preserved exact source text in "
-            f"{result['semantic_fallback_windows']} failed planner window(s)"
-        )
-    if result["pause_fallback_batches"]:
-        print(
-            "warning: used deterministic pause classification for "
-            f"{result['pause_fallback_batches']} failed planner batch(es)"
-        )
+    for warning in result["pipeline_warnings"]:
+        print(f"warning: {warning['message']}")
     print(f"planner: {result['planner_backend']} / {result['planner_model']}")
     print(f"cache: {result['work_dir']}")
     print(json.dumps(result, ensure_ascii=False, indent=2))

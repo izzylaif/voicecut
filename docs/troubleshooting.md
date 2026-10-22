@@ -34,8 +34,7 @@ For a diagnosable run, use a dedicated work directory:
 ```bash
 voicecut input.wav \
   -o input_edited.wav \
-  --work-dir .voicecut-cache/input-debug \
-  --debug-artifacts
+  --work-dir .voicecut-cache/input-debug
 ```
 
 Do not manually edit files inside that directory.
@@ -73,8 +72,7 @@ MLX and alignment interpreters automatically. Repair the complete layout with:
 source .venv/bin/activate
 ```
 
-If you intentionally override `--asr-python`, `--alignment-python`, or
-`--planner-python`, confirm that the selected interpreter contains the required
+If you intentionally override `--asr-python` or `--planner-python`, confirm that the selected interpreter contains the required
 package. Remove the override before diagnosing the standard installation.
 
 ## Unsupported machine or Python version
@@ -160,33 +158,19 @@ downloads the revision-pinned Russian MFA bundle. This is expected. Later runs
 reuse the model cache selected by `--mfa-cache-root`.
 
 Changing the cache root causes a separate model download. Ensure the machine
-has network access and enough disk space.
+has network access and enough disk space. Once the model is cached, VoiceCut
+runs MFA with `HF_HUB_OFFLINE=1`: on slow or filtered networks MFA's Hugging
+Face checks could otherwise stall each run for many minutes.
 
 ### `mfa_word_mapping_failed` or alignment failure
 
-MFA maps local chronological transcript tokens to words and phones. VoiceCut
-refuses to use approximate Whisper timestamps when a required word cannot be
-mapped, a phone is missing, or geometry is invalid.
-
-The current pipeline first tries bounded semantic reselection and then
-conservative source preservation across the unsafe cut. Check:
-
-- `05_final/final_boundary_plan.json`;
-- `05_final/acoustic_retries/`;
-- `05_final/conservative_delivery_fallback/`;
-- `05_final/mfa_alignment/metadata/` and `output/`;
-- the final `delivery_status` printed by the CLI.
-
-A locally preserved result can be safe but under-edited. A structurally invalid
-global alignment can still fail closed. Do not work around the failure by
-clamping Whisper timestamps or editing boundary JSON.
-
-### Why there is no Whisper fallback
-
-Whisper timestamps are preliminary crop anchors and can overlap or cut off
-quiet final phones. WhisperX is a completeness veto, not a coordinate backend.
-MFA phone geometry is the sole coordinate authority. Falling back to an RMS
-minimum, midpoint, or Whisper timestamp would reintroduce clipped-word errors.
+MFA aligns every kept transcript line. A word it cannot map (an unusual token,
+a mis-heard acronym) keeps its Whisper timing for that word only; the waveform
+analysis still decides where its sound starts and stops, so a mapping failure
+does not clip the word. If MFA cannot run at all, the whole render falls back
+to Whisper timing and the run prints a `whisper_timing_fallback` warning. Check
+`05_final/mfa_alignment/metadata/` and `output/`, and the `alignment` record in
+`05_final/final_boundary_plan.json`.
 
 ## Russian-language runs
 
@@ -199,7 +183,6 @@ voicecut input_ru.wav --language ru
 Expected differences from English:
 
 - hidden-retry CTC is reported as `skipped_unsupported_language`;
-- the Russian WhisperX completeness model may download on first use;
 - the revision-pinned Russian MFA model may download on first use;
 - breath cleanup defaults to off because Respiro-en is not validated for
   Russian.
@@ -224,40 +207,26 @@ Do not replace the files manually. Provenance is documented in
 
 ### Detector failure warning
 
-Breath cleanup is optional. When detector loading or inference fails, VoiceCut
-keeps the otherwise valid MFA edit, preserves original gap content, records
-`breath_cleanup_skipped_detector_failure`, and continues. It does not substitute
-an RMS, VAD, or generic sound-event detector.
-
-To make the intended policy explicit while diagnosing:
-
-```bash
-voicecut input.wav --breath-cleanup off
-```
-
-With cleanup off, VoiceCut does not source inserted ambience from unscreened
-audio. Requested pause extensions may be skipped; existing retained gaps remain
-untouched.
+When the breath detector cannot load or run, VoiceCut keeps cleaning pauses by
+waveform energy alone and records `detector_failed_energy_only` as the
+`breath_cleanup_status` in `05_final/final_render_manifest.json`. A breath that
+touches a word without any silence in between may then stay attached to it.
 
 ### Breath remains in the result
 
-A detected event is intentionally left unchanged when it overlaps an MFA
-retained phone or when no verified clean ambience is available. Inspect the
-event status in `final_boundary_plan.json`. This protects final fricatives and
-speech at the cost of conservative cleanup.
+With `--breath-cleanup replace`, everything audible inside a pause other than a
+word's own head and tail is replaced by ambience. A breath can only remain when
+it is glued to a word -- no 20 ms of silence between them and below the
+Respiro-en threshold. Lower `--breath-threshold` (for example `0.35`) to treat
+weaker detections as breath, and inspect the join in
+`05_final/final_boundary_plan.json` (`left_tail`, `right_head`).
 
-With `--debug-artifacts`, event plots and excerpts are written below
-`05_final/breath_debug/`. Listen to the full result; a probability plot alone is
-not a quality judgment.
+### No clean ambience
 
-### `clean_ambience_unavailable`
-
-This status means no source candidate passed the clean-ambience requirements.
-VoiceCut does not use a breath-containing or transient candidate merely because
-it has low RMS, and it does not use digital zero as normal room tone.
-
-The affected pause may remain unchanged or receive no requested extension. The
-status is safer than introducing a repeated breath, click, or room-tone loop.
+If the recording has no stretch of at least 250 ms of clean room tone, the
+ambience bank is empty (`ambience.status` = `unavailable` in the boundary plan).
+Pauses are then built from the original silence next to each word only and can
+come out shorter than their target.
 
 ## Output already exists
 
@@ -316,61 +285,41 @@ prevents old output from being treated as current.
 
 ### Output appears unchanged
 
-Check the printed `delivery status` and `pipeline_run.json`.
-
-- `complete` means the accepted edit was rendered.
-- `complete_with_preserved_source_context` means one or more unsafe cuts were
-  removed by retaining nearby source audio. Small abandoned attempts may remain.
-- `complete_with_full_source_passthrough` means the original semantic plan
-  selected the full source and no safe internal cut plan could be completed;
-  VoiceCut returned the canonical source rather than guessing.
-- `complete_with_deterministic_pauses` means audio pause classification used a
-  deterministic local fallback for one or more failed batches.
-
-The CLI also reports preserved problem intervals and fallback counts. These are
-not cache bugs; they are explicit safe-delivery outcomes.
+Check `pipeline_run.json`: `cuts` and `pauses_normalized` count the edits, and
+`pipeline_warnings` lists anything unusual. `04_semantic_plan/take_plan.json`
+holds the reconstructed narration; compare it with what you expected.
 
 ## Long recordings and planner failures
 
-VoiceCut handles planner failures per streaming window. After one corrective
-retry, an invalid or unsupported response causes only that local source window
-to be preserved. Later windows continue through normal editing, and unresolved
-EOF text is preserved.
+The planner decides about four minutes per request. Each request is cached in
+`04_semantic_plan/calls/` under the exact prompt and audio, so rerunning the
+same command after an interruption or an API outage resumes at the first
+unfinished window. Transient API errors are retried with backoff; an answer
+that fails validation is retried with the error message, up to three attempts,
+after which the run stops with an error that names the window.
 
 Relevant artifacts:
 
-- `04_semantic_plan/iteration_*.json` for accepted decisions;
-- `04_semantic_plan/iteration_*_attempt_*.raw.*` for raw responses;
-- `04_semantic_plan/grounding_validation.json`;
-- `04_semantic_plan/streaming_plan.json` and its `fallbacks` list;
-- `05_final/final_render_manifest.json` for aggregate fallback counts.
-
-This policy is intended to produce a usable, possibly under-edited long result
-instead of discarding the entire edit because of one malformed local response.
-
-Initial transcript identity errors, duplicate IDs, and irreconcilable source
-grounding are structural failures and remain fatal.
+- `04_semantic_plan/take_plan.json`: kept items, `windows` (what each request
+  kept, revoked and deferred), `review` (regions re-decided after the duplicate
+  check) and `remaining_duplicate_suspects`;
+- `04_semantic_plan/calls/*.json`: prompts and raw answers.
 
 ## Awkward or clipped-sounding cuts
 
-Do not diagnose a clipped word from the waveform alone. Determine which layer
-made the decision:
+Find the join in `05_final/final_boundary_plan.json` (`joins`, in output
+order). Each records the two words, whether they were contiguous in the
+source, the pause class, the original and desired gap, how far the left word's
+tail and the right word's head were extended, and whether the boundary was
+`dense` (connected speech, cut at the quietest point with a 4 ms fade).
 
-1. `04_semantic_plan/streaming_plan.json` shows whether the complete source word
-   occurrence was selected.
-2. `04_semantic_plan/grounding_validation.json` shows whether canonical text is
-   supported inside that range.
-3. `05_final/completeness_worker_result.json` shows retained-word completeness
-   evidence.
-4. `05_final/mfa_alignment/metadata/mfa_alignment.json` shows MFA word/phone
-   mapping.
-5. `05_final/final_boundary_plan.json` shows the one final source sample
-   decision and protected phone spans.
-
-The renderer is prohibited from moving an MFA endpoint after the plan is
-frozen. A bad semantic occurrence, a weak-word veto, an MFA mapping failure,
-and a publication issue require different fixes; changing global padding can
-damage otherwise correct words.
+- A wrong take or a cut in the middle of a sentence is a planner decision:
+  check the item in `take_plan.json`.
+- A clipped word usually means the transcript or MFA put the word boundary in
+  the wrong place: check `words[*].alignment` (`mfa` or `whisper`) and the core
+  times in the boundary plan.
+- A pause that feels too long or short comes from the class the planner chose
+  for it (`break_after`).
 
 ## Video publication problems
 
@@ -413,21 +362,14 @@ an audio-only input.
 
 ## Inspect a run
 
-The most useful top-level files are:
-
 | File | What it answers |
 | --- | --- |
 | `pipeline_config.json` | Which exact input, models, language, and settings own this cache? |
-| `pipeline_run.json` | Which stages were created or reused, and what delivery warnings occurred? |
-| `04_semantic_plan/streaming_plan.json` | Which word occurrences did the planner keep? |
-| `04_semantic_plan/grounding_validation.json` | Did canonical text have source support? |
-| `05_final/pause_plan.json` | How were audio thought transitions classified? |
-| `05_final/final_boundary_plan.json` | Where are all final cuts, protected phones, pauses, and replacements? |
-| `05_final/final_render_manifest.json` | What was rendered, and with which delivery status? |
+| `pipeline_run.json` | Which stages were created or reused, and which warnings occurred? |
+| `04_semantic_plan/take_plan.json` | Which word ranges were kept, with which pause classes, and why? |
+| `05_final/final_boundary_plan.json` | Where is every cut, how long is every pause, where did ambience come from? |
+| `05_final/final_render_manifest.json` | What was rendered (duration, cut and pause counts, detector status)? |
 | `06_publication/publication.json` | Which final media file was validated and published? |
-
-Use `--debug-artifacts` before the run when probability plots and short audio
-diagnostics are needed. Debug output is never consumed by production.
 
 ## Reporting an issue
 

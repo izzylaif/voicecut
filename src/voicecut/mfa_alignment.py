@@ -738,6 +738,22 @@ def build_mfa_align_command(
     ]
 
 
+def _hf_model_is_cached(*, cache_root: Path, model_id: str) -> bool:
+    """Whether ``align_hf`` already downloaded ``model_id`` into the cache."""
+
+    repository = model_id.split("@", 1)[0]
+    if "/" not in repository:
+        repository = f"MontrealCorpusTools/{repository}"
+    snapshots = (
+        cache_root.resolve()
+        / "huggingface"
+        / "hub"
+        / f"models--{repository.replace('/', '--')}"
+        / "snapshots"
+    )
+    return snapshots.is_dir() and any(snapshots.iterdir())
+
+
 def invoke_mfa_batch(
     *,
     paths: MFABatchPaths,
@@ -765,6 +781,12 @@ def invoke_mfa_batch(
         model_id=model_id,
     )
     environment = _mfa_environment(cache_root=cache_root)
+    # ``align_hf`` asks the Hugging Face Hub about the model on every run.  On
+    # slow or filtered networks each of those checks can stall for minutes,
+    # turning a 30-second alignment into half an hour.  Once the model is in
+    # the local cache, align offline.
+    if _hf_model_is_cached(cache_root=cache_root, model_id=model_id):
+        environment["HF_HUB_OFFLINE"] = "1"
     result = _run_checked(command, environment=environment, runner=runner)
     record = {
         "schema_version": 1,
@@ -864,16 +886,6 @@ def _parse_intervals(
         )
         previous_end = max(previous_end, relative_end)
     return parsed
-
-
-def _normalized_output_token(label: str, *, language: str = "en") -> str:
-    tokens = normalize_mfa_token(label, language=language)
-    if len(tokens) != 1:
-        raise MFAAlignmentError(
-            "mfa_word_mapping_failed",
-            f"MFA returned a non-token word label: {label!r}",
-        )
-    return tokens[0]
 
 
 def _word_interval_has_non_silence_phone(

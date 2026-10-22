@@ -19,11 +19,12 @@ this narrative overview, are the authoritative dependency manifest.
 ### Montreal Forced Aligner
 
 [Montreal Forced Aligner (MFA)](https://github.com/MontrealCorpusTools/Montreal-Forced-Aligner)
-is the sole source of production word- and phone-level cut coordinates in
-VoiceCut. VoiceCut invokes the MFA 3.4.1 command-line interface in an isolated
-micromamba environment, resolves every boundary before rendering, and then
-slices the canonical source once. Whisper and waveform timestamps are not
-fallback cut coordinates.
+supplies the word- and phone-level coordinates VoiceCut cuts at. VoiceCut
+invokes the MFA 3.4.1 command-line interface in an isolated micromamba
+environment for every kept line; the renderer then moves each cut out of the
+word's audible decay or onset using the waveform, and renders the canonical
+source once. If MFA cannot align a line, its Whisper timings are used instead
+and the run reports a warning.
 
 - Software license: [MIT](https://github.com/MontrealCorpusTools/Montreal-Forced-Aligner/blob/main/LICENSE)
 - Documentation: [MFA 3.4.1 user guide](https://montreal-forced-aligner.readthedocs.io/en/v3.4.1/user_guide/)
@@ -40,11 +41,10 @@ license and the VoiceCut license.
 
 ### WhisperX
 
-[WhisperX](https://github.com/m-bain/whisperX) is used locally only for the
-retained-occurrence completeness veto. Its character coverage and edge scores
-can reject an incomplete or weak take before boundary planning. WhisperX does
-**not** supply final production cut coordinates; MFA remains authoritative for
-those coordinates.
+[WhisperX](https://github.com/m-bain/whisperX) is used locally only to load its
+language-specific torchaudio CTC model for English hidden-retry recovery: raw
+greedy CTC words expose retakes that Whisper's transcript leaves out. WhisperX
+does **not** supply cut coordinates; MFA remains authoritative for those.
 
 - Pinned package version: 3.8.6
 - License: [BSD 2-Clause](https://github.com/m-bain/whisperX/blob/main/LICENSE)
@@ -92,17 +92,31 @@ acceptable-use terms; users and distributors are responsible for reviewing
 them. OpenAI Whisper's code and released model weights are distributed under
 its [MIT license](https://github.com/openai/whisper/blob/main/LICENSE).
 
+### CrisperWhisper
+
+[CrisperWhisper](https://github.com/nyrahealth/CrisperWhisper) 2.0 is an
+optional verbatim transcription engine (`--asr crisperwhisper`). It keeps
+false starts, repetitions and fillers as separate words with their own
+timings, so the take planner can cut quick restarts that Whisper merges.
+
+- Pinned package: `crisperwhisper` 2.0.3 ([MIT](https://github.com/nyrahealth/CrisperWhisper/blob/main/LICENSE))
+- Model: [`nyralabs/CrisperWhisper2.0_large`](https://huggingface.co/nyralabs/CrisperWhisper2.0_large),
+  released under the Nyra Health Non-Commercial Research License; commercial
+  use requires a separate license from Nyra
+- Citation: Laurin Wagner, Bernhard Thallinger, and Mario Zusag,
+  “CrisperWhisper: Accurate Timestamps on Verbatim Speech Transcriptions,”
+  Interspeech 2024, [arXiv:2408.16589](https://arxiv.org/abs/2408.16589)
+
 ## Optional breath evidence
 
 ### Respiro-en
 
 [Respiro-en](https://github.com/ydqmkkx/Respiro-en) provides optional
-frame-wise English breath probabilities. VoiceCut uses those probabilities
-only to plan duration-preserving replacement inside MFA-confirmed non-speech
-and to screen room-tone candidates. Respiro-en cannot classify a sample as
-non-speech, move an MFA endpoint, or authorize modification of a retained
-phone. It is not validated for Russian, so Russian processing defaults to
-breath cleanup off.
+frame-wise English breath probabilities. VoiceCut uses them to recognise
+breaths in the pauses around words, so such a pause is rebuilt from verified
+clean room tone, and to keep breaths out of room-tone candidates. Respiro-en
+never moves a cut into a word MFA aligned. It is not validated for Russian, so
+Russian processing defaults to breath cleanup off.
 
 VoiceCut downloads `modules.py`, `respiro-en.pt`, and the upstream license from
 one immutable commit and verifies all three hashes before use. The checkpoint
@@ -144,6 +158,16 @@ Most upstream FFmpeg source is LGPL 2.1 or later, while optional components can
 make a particular build GPL or subject to other compatible licenses. Consult
 the [official FFmpeg license overview](https://github.com/FFmpeg/FFmpeg/blob/master/LICENSE.md)
 and the configuration of the binary you install or redistribute.
+
+## Interactive editor
+
+The VoiceCut Editor's timeline, preview player and video sync are VoiceCut's
+own code. The frontend uses [React](https://react.dev/) (MIT),
+[Vite](https://vitejs.dev/) (MIT), [Vitest](https://vitest.dev/) (MIT),
+[TypeScript](https://www.typescriptlang.org/) (Apache-2.0), and
+[Lucide](https://lucide.dev/) icons (ISC). The Python backend uses
+[FastAPI](https://fastapi.tiangolo.com/) (MIT) and
+[Uvicorn](https://www.uvicorn.org/) (BSD 3-Clause).
 
 ## Additional libraries and services
 

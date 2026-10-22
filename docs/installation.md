@@ -16,7 +16,7 @@ For the shortest path back to the product overview, see the
 - Python 3.11 or 3.12
 - Homebrew
 - Internet access for installation and first-time model downloads
-- Enough free disk space for Whisper, MFA, WhisperX, and optional planner
+- Enough free disk space for Whisper, MFA, and optional planner
   models; together these can require several gigabytes
 
 The installer checks for FFmpeg, FFprobe, and micromamba. When they are
@@ -58,18 +58,27 @@ environment. VoiceCut starts the other runtimes itself.
 voicecut --help
 ```
 
+The installer also prepares the browser editor: it installs the `editor`
+Python extra, ensures Node.js is available (through Homebrew when missing),
+installs the frontend dependencies in `frontend/`, and builds the bundle that
+`voicecut-editor` serves. See the [editor guide](editor.md).
+
+```bash
+voicecut-editor --help
+```
+
 ## Why there are three runtimes
 
 The separation is intentional:
 
 | Runtime | Purpose |
 | --- | --- |
-| `.venv` | CLI, audio analysis, WhisperX completeness checks, rendering, publication, and cloud SDKs |
-| `.venv-mlx` | MLX Whisper transcription and optional local MLX language models |
+| `.venv` | CLI, audio analysis, rendering, publication, and cloud SDKs |
+| `.venv-mlx` | MLX Whisper (and optional CrisperWhisper) transcription and optional local MLX language models |
 | `.mfa-env` | Montreal Forced Aligner 3.4.1 and its Conda/Kaldi dependencies |
 
-Current `mlx-lm` and WhisperX dependency requirements conflict around
-Transformers and Hugging Face Hub versions. Keeping MLX in a helper environment
+Current `mlx-lm` and the `.venv` audio stack (WhisperX, pyannote) require
+conflicting Transformers and Hugging Face Hub versions. Keeping MLX in a helper environment
 prevents one component from destabilizing the other. MFA is isolated because
 its supported distribution uses the Conda/Kaldi ecosystem; VoiceCut invokes
 the documented MFA CLI and does not import undocumented MFA Python internals.
@@ -118,11 +127,13 @@ The installer provisions software runtimes, but model weights are generally
 downloaded when a relevant feature first runs:
 
 - MLX Whisper downloads the selected transcription model;
+- `--asr crisperwhisper` downloads `nyralabs/CrisperWhisper2.0_large`
+  (about 3 GB; non-commercial research license);
 - English MFA downloads `english_us_arpa`;
 - Russian MFA downloads the revision-pinned
   `MontrealCorpusTools/russian_mfa` bundle;
-- Russian retained-word validation downloads
-  `jonatasgrosman/wav2vec2-large-xlsr-53-russian`;
+- English hidden-retry recovery downloads WhisperX's English CTC model;
+- Respiro-en downloads its pinned breath-detection checkpoint;
 - a local semantic planner downloads its selected Hugging Face model unless a
   local path or `--local-files-only` is used.
 
@@ -204,12 +215,14 @@ checks:
 
 ```bash
 source .venv/bin/activate
-python -m pip install -e ".[audio,cloud,dev]"
+python -m pip install -e ".[audio,cloud,editor,dev]"
 .venv-mlx/bin/python -m pip install -e ".[mlx]"
 
 pytest -q
 ruff check src tests
 ruff format --check src tests
+
+cd frontend && npm install && npm run typecheck && npm test && npm run build
 ```
 
 The real MFA and Respiro-en integration tests are opt-in because ordinary CI
