@@ -22,6 +22,15 @@
 # Needs: Rust (cargo), Node.js, resvg (cargo install resvg), uv.
 set -euo pipefail
 
+# A CI run without these secrets gets them empty; empty means not set (an
+# empty signing identity would replace the ad-hoc one).
+for name in APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_PATH \
+  APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD; do
+  if [[ -z "${!name:-}" ]]; then
+    unset "${name}"
+  fi
+done
+
 DESKTOP="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$(cd "${DESKTOP}/.." && pwd)"
 BUILD="${DESKTOP}/build"

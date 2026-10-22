@@ -236,15 +236,15 @@ _cancel_requested = threading.Event()
 def request_cancel() -> None:
     """Stop the run as SIGTERM does, also where there is no SIGTERM to send.
 
-    Windows cannot signal a process; there the stage's process tree is ended
-    first, so the main thread stops waiting for it, then the SIGTERM handler
-    runs in the main thread.
+    Windows cannot signal a process; there the SIGTERM handler is queued for
+    the main thread, then the stage's process tree is ended, so the main thread
+    stops waiting for it and runs the handler before anything else.
     """
 
     _cancel_requested.set()
     if processes.WINDOWS:
-        _registry.terminate()
         _thread.interrupt_main(signal.SIGTERM)
+        _registry.terminate()
     else:
         os.kill(os.getpid(), signal.SIGTERM)
 

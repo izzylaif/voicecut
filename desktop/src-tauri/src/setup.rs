@@ -584,11 +584,16 @@ impl Run<'_> {
         }
         self.fraction(0.05);
         let lock = self.bundle.file(requirements);
+        // The Linux lock takes PyTorch from its CPU index and everything else
+        // from PyPI; every package is checked against its hash, so take each
+        // from whichever index has the pinned version.
         self.uv(&[
             "pip".as_ref(),
             "sync".as_ref(),
             "--python".as_ref(),
             python.as_os_str(),
+            "--index-strategy".as_ref(),
+            "unsafe-best-match".as_ref(),
             "--require-hashes".as_ref(),
             "--compile-bytecode".as_ref(),
             lock.as_os_str(),
@@ -647,10 +652,20 @@ impl Run<'_> {
         let cache = paths.mfa_cache();
         fs::create_dir_all(cache.join("huggingface")).map_err(|error| error.to_string())?;
         let output = process::quiet(
+            // Not the `mfa` command: on Windows it is a launcher that cannot
+            // start Python from a path with a space (see voicecut/mfa_cli.py).
             Command::new(paths.micromamba())
                 .args(["run", "--prefix"])
                 .arg(&prefix)
-                .args(["mfa", "version"])
+                .arg("python")
+                .arg(
+                    paths
+                        .runtime()
+                        .join("src")
+                        .join("voicecut")
+                        .join("mfa_cli.py"),
+                )
+                .arg("version")
                 .env_clear()
                 .envs(self.environment())
                 .env("MFA_ROOT_DIR", &cache)
@@ -911,6 +926,8 @@ fn make_executable(path: &Path) -> Result<(), String> {
         fs::set_permissions(path, fs::Permissions::from_mode(0o755))
             .map_err(|error| error.to_string())?;
     }
+    #[cfg(not(unix))]
+    let _ = path;
     Ok(())
 }
 

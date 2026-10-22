@@ -9,7 +9,7 @@ import pytest
 import soundfile as sf
 
 from voicecut.common import sha256_file, write_json
-from voicecut.media import prepare_media_input, probe_media
+from voicecut.media import filter_script_arguments, prepare_media_input, probe_media
 from voicecut.video_render import (
     VisualTimelineSegment,
     VideoRenderError,
@@ -198,8 +198,7 @@ def test_off_frame_many_cut_render_keeps_late_visual_segments(
             "-y",
             "-i",
             str(source),
-            "-filter_complex_script",
-            str(filter_script),
+            *filter_script_arguments(ffmpeg, filter_script),
             "-map",
             "[vout]",
             "-c:v",

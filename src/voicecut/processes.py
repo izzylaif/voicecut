@@ -66,16 +66,20 @@ def _windows_wait_for_exit(pid: int) -> Callable[[], None] | None:
 
     import ctypes
 
-    synchronize = 0x00100000
+    synchronize, infinite = 0x00100000, 0xFFFFFFFF
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
     kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
     handle = kernel32.OpenProcess(synchronize, False, pid)
     if not handle:
         return None
 
     def wait() -> None:
-        kernel32.WaitForSingleObject(ctypes.c_void_p(handle), 0xFFFFFFFF)
-        kernel32.CloseHandle(ctypes.c_void_p(handle))
+        kernel32.WaitForSingleObject(handle, infinite)
+        kernel32.CloseHandle(handle)
 
     return wait
 

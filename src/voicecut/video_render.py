@@ -23,6 +23,7 @@ from .media import (
     _resolve_output_destination,
     _run,
     _tool_path,
+    filter_script_arguments,
     probe_media,
 )
 
@@ -435,10 +436,11 @@ def render_edited_video(
         ),
         encoding="utf-8",
     )
+    ffmpeg_path = _tool_path(ffmpeg)
     try:
         _run(
             [
-                _tool_path(ffmpeg),
+                ffmpeg_path,
                 "-nostdin",
                 "-hide_banner",
                 "-loglevel",
@@ -448,8 +450,7 @@ def render_edited_video(
                 str(source_video),
                 "-i",
                 str(final_audio),
-                "-filter_complex_script",
-                str(filter_script),
+                *filter_script_arguments(ffmpeg_path, filter_script),
                 "-map",
                 "[vout]",
                 "-map",

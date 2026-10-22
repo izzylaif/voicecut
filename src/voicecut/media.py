@@ -14,9 +14,11 @@ file, and validate the resulting stream before it replaces its destination.
 
 from __future__ import annotations
 
+import functools
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
@@ -159,6 +161,33 @@ def _tool_path(tool: str | Path) -> str:
             f"{value} is required but was not found on PATH; install FFmpeg"
         )
     return resolved
+
+
+@functools.cache
+def ffmpeg_major_version(ffmpeg: str) -> int | None:
+    """FFmpeg's major version; None for development builds and failures."""
+
+    try:
+        result = subprocess.run(
+            [ffmpeg, "-version"], capture_output=True, text=True, check=False
+        )
+    except OSError:
+        return None
+    match = re.match(r"ffmpeg version n?(\d+)\.", result.stdout or "")
+    return int(match.group(1)) if match else None
+
+
+def filter_script_arguments(ffmpeg: str, script: Path) -> list[str]:
+    """Arguments reading ``-filter_complex`` from ``script``.
+
+    FFmpeg 7 added ``-/filter_complex FILE`` and deprecated
+    ``-filter_complex_script``, which later releases removed.
+    """
+
+    major = ffmpeg_major_version(ffmpeg)
+    if major is not None and major < 7:
+        return ["-filter_complex_script", str(script)]
+    return ["-/filter_complex", str(script)]
 
 
 def _run(

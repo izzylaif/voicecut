@@ -31,6 +31,7 @@ from .common import read_json, sha256_file, write_json
 from .language_profiles import get_language_profile
 
 MFA_VERSION = "3.4.1"
+MFA_LAUNCHER = Path(__file__).with_name("mfa_cli.py")
 MFA_MODEL_ID = "english_us_arpa"
 MFA_SPEAKER = "narrator"
 MFA_PHONE_ROUNDING_TOLERANCE_SECONDS = 0.002
@@ -667,6 +668,19 @@ def _run_checked(
     return result
 
 
+def mfa_command(micromamba: str | Path, prefix: Path) -> list[str]:
+    """MFA's command line in its environment (see ``mfa_cli.py``)."""
+
+    return [
+        os.fspath(micromamba),
+        "run",
+        "-p",
+        str(prefix.resolve()),
+        "python",
+        str(MFA_LAUNCHER),
+    ]
+
+
 def verify_mfa_version(
     *,
     micromamba: str | Path = "micromamba",
@@ -683,7 +697,7 @@ def verify_mfa_version(
         )
     environment = _mfa_environment(cache_root=cache_root)
     result = _run_checked(
-        [os.fspath(micromamba), "run", "-p", str(prefix), "mfa", "version"],
+        [*mfa_command(micromamba, prefix), "version"],
         environment=environment,
         runner=runner,
     )
@@ -714,11 +728,7 @@ def build_mfa_align_command(
     if not model_id:
         raise ValueError("model_id must not be empty")
     return [
-        os.fspath(micromamba),
-        "run",
-        "-p",
-        str(prefix.resolve()),
-        "mfa",
+        *mfa_command(micromamba, prefix),
         "align_hf",
         str(paths.corpus.resolve()),
         model_id,

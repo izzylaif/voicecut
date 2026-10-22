@@ -244,8 +244,8 @@ def test_align_retries_only_missing_contexts_and_preserves_batch_success(
         if command[-1] == "version":
             return subprocess.CompletedProcess(command, 0, stdout="3.4.1\n", stderr="")
         align_calls.append(command)
-        corpus = Path(command[6]) / "narrator"
-        output = Path(command[8])
+        corpus = Path(command[7]) / "narrator"
+        output = Path(command[9])
         context_ids = sorted(path.stem for path in corpus.glob("*.lab"))
         if len(align_calls) == 1:
             assert context_ids == ["context_000", "context_001"]
@@ -310,8 +310,8 @@ def test_unnormalizable_word_in_one_context_does_not_poison_mfa_batch(
     def runner(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         if command[-1] == "version":
             return subprocess.CompletedProcess(command, 0, stdout="3.4.1\n", stderr="")
-        corpus = Path(command[6]) / "narrator"
-        output = Path(command[8])
+        corpus = Path(command[7]) / "narrator"
+        output = Path(command[9])
         context_ids = sorted(path.stem for path in corpus.glob("*.lab"))
         aligned_context_ids.append(context_ids)
         assert context_ids == ["context_valid"]
@@ -407,9 +407,9 @@ def test_alignment_recovery_excludes_impossible_optional_zero_anchor_run(
         if command[-1] == "version":
             return subprocess.CompletedProcess(command, 0, stdout="3.4.1\n", stderr="")
         align_calls += 1
-        corpus = Path(command[6]) / "narrator"
+        corpus = Path(command[7]) / "narrator"
         lab = corpus / "context_000.lab"
-        output = Path(command[8])
+        output = Path(command[9])
         if align_calls == 1:
             assert lab.read_text(encoding="utf-8").strip() == (
                 "keep phantom repeated tokens"
@@ -573,7 +573,7 @@ def test_russian_model_is_used_by_explicit_mfa_command(tmp_path: Path) -> None:
 
     command = build_mfa_align_command(paths=paths, model_id=profile.mfa_model)
 
-    assert command[7] == profile.mfa_model
+    assert command[command.index("align_hf") + 2] == profile.mfa_model
 
 
 def test_parse_russian_batch_validates_model_and_maps_cyrillic(
@@ -1089,12 +1089,12 @@ def test_invoke_mfa_batch_uses_exact_flags_and_one_align_hf_call(
         micromamba="mock-micromamba",
         num_jobs=3,
     )
-    assert align_calls[0][5:8] == [
+    assert align_calls[0][6:9] == [
         "align_hf",
         str(paths.corpus.resolve()),
         MFA_MODEL_ID,
     ]
-    assert align_calls[0][9:] == [
+    assert align_calls[0][10:] == [
         "--use_g2p",
         "--no_tokenization",
         "--fine_tune",

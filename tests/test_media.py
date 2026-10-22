@@ -172,7 +172,17 @@ def test_prepare_mp3_and_publish_common_audio_formats(tmp_path: Path) -> None:
     assert canonical.is_file()
     assert sf.info(canonical).subtype == "FLOAT"
 
-    for extension in (".wav", ".flac", ".m4a", ".ogg", ".opus", ".mp3"):
+    encoders = subprocess.run(
+        [shutil.which("ffmpeg") or "ffmpeg", "-hide_banner", "-encoders"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    extensions = [".wav", ".flac", ".m4a", ".opus", ".mp3"]
+    # Some FFmpeg builds (Homebrew's) leave out libvorbis; VoiceCut's has it.
+    if "libvorbis" in encoders:
+        extensions.append(".ogg")
+    for extension in extensions:
         output = tmp_path / f"published{extension}"
         manifest_path = (
             tmp_path / "publication" / f"{extension[1:]}.audio_manifest.json"

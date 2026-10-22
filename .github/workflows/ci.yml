@@ -62,7 +62,8 @@ jobs:
         run: |
           uv venv --python 3.12 .venv
           .github/scripts/run.sh "Install the lock" \
-            uv pip install --python .venv -r "desktop/runtime/${{ matrix.lock }}"
+            uv pip install --python .venv --index-strategy unsafe-best-match \
+            -r "desktop/runtime/${{ matrix.lock }}"
           uv pip install --python .venv --no-deps -e .
           uv pip install --python .venv "pytest>=8.4,<9" "httpx>=0.27,<1" "ruff>=0.12,<1"
 
