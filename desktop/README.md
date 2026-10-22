@@ -150,8 +150,9 @@ chosen; any other Ollama model can be typed in. Under the list, and in
 **Settings › Local models**, each model has its reasoning setting — off, on,
 or a level for models that take one (Ollama's `/api/show` says which) —
 starting from the recommendation's best (`local_models.json` in `editor/`).
-Both say the recommended models need about 32 GB of memory, and warn on a
-computer with less. Voice Cut with a model that is not downloaded offers the
+Both say the recommended models need about 32 GB of memory (and warn on a
+computer with less) and that planning takes longer than the recording on an
+M1 Max (about 1.5–2 hours per hour). Voice Cut with a model that is not downloaded offers the
 download instead of starting.
 
 ## Whisper on Intel Macs, Linux and Windows

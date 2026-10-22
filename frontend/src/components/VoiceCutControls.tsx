@@ -4,8 +4,8 @@ import { api } from '../api';
 import { confirmAction } from '../desktop';
 import {
   localModelAction,
-  memoryText,
   pullText,
+  memoryText,
   refreshLocalModels,
   sizeText,
   thinkText,
@@ -473,6 +473,7 @@ function LocalModelPicker({
               <ThinkControl model={current} />
             </div>
           )}
+          {list?.speed_note && <p className="speed-note">{list.speed_note}</p>}
           <p className="model-footnote">
             These run on this computer through Ollama and never send the recording anywhere. {memoryText(list)}
           </p>

@@ -276,6 +276,7 @@ function LocalModelsSection() {
         {memoryText(list)} Reasoning before answering makes a model slower; the recommended models start with the
         setting that planned best.
       </p>
+      {list?.speed_note && <p className="speed-note">{list.speed_note}</p>}
       {actionError && <p className="error-text small">{actionError}</p>}
       <ul className="local-models">
         {models.map((model) => (

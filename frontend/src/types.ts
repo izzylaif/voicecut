@@ -252,4 +252,6 @@ export interface ModelList {
   ollama?: OllamaStatus;
   /** This computer's memory and what a recommended local model needs. */
   memory?: { gb: number | null; needed_gb: number };
+  /** How long local planning takes. */
+  speed_note?: string;
 }

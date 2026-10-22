@@ -131,7 +131,7 @@ redacts validated endpoints from subprocess error output.
 The `ollama` planner needs [Ollama](https://ollama.com/download): running
 (`ollama serve`, or the Ollama app) or installed, in which case VoiceCut
 starts it for the run. `OLLAMA_HOST` selects another server. The model must be
-downloaded first (`ollama pull gemma4:31b`, or Download in the editor's model
+downloaded first (`ollama pull gemma4:31b-it-qat`, or Download in the editor's model
 list); the error names it. "requires more system memory" means the model does
 not fit: choose a smaller one. In the desktop app, Ollama's log is
 `logs/ollama.log` in the data directory.

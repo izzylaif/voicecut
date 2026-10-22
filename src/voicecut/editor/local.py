@@ -214,6 +214,7 @@ class LocalModels:
                 "gb": local_models.memory_gb(),
                 "needed_gb": local_models.MEMORY_NEEDED_GB,
             },
+            "speed_note": local_models.SPEED_NOTE,
         }
 
     def _think_choices(

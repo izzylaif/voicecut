@@ -79,7 +79,7 @@ Choose the planner and its model:
 ```bash
 voicecut recording.wav --planner-backend openai
 voicecut recording.wav --planner-backend gemini --planner-model gemini-3.8-flash
-voicecut recording.wav --planner-backend ollama --planner-model gemma4:31b
+voicecut recording.wav --planner-backend ollama --planner-model gemma4:31b-it-qat
 
 # Send Gemini the transcript only, without the audio of each window.
 voicecut recording.wav --planner-audio off
@@ -90,7 +90,7 @@ voicecut recording.wav --planner-audio off
 | `gemini` | `gemini-3.1-pro-preview` | `GEMINI_API_KEY` |
 | `openai` | `gpt-5-mini` | `OPENAI_API_KEY` |
 | `deepseek` | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` |
-| `ollama` | `gemma4:31b` (its MLX version on Apple Silicon with more than 32 GB) | none: a model downloaded into [Ollama](https://ollama.com) |
+| `ollama` | `gemma4:31b-it-qat` (`gemma4:31b-mlx` on Apple Silicon with more than 32 GB) | none: a model downloaded into [Ollama](https://ollama.com) |
 
 `ollama` runs the planner on this computer through an installed or running
 Ollama (`ollama pull <model>` first). [Configuration](configuration.md)

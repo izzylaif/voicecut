@@ -24,6 +24,11 @@ MLX_MIN_MEMORY_GB = 32
 # What a model good enough for the take planner needs (about 30B parameters
 # at 4 bits, its context, and the rest of the computer).
 MEMORY_NEEDED_GB = 32
+# What planning on this computer costs in time, measured above.
+SPEED_NOTE = (
+    "Planning on the computer is slow: on an M1 Max it takes longer than the "
+    "recording (an hour of narration plans in about 1.5-2 hours)."
+)
 THINK_LEVELS = ("low", "medium", "high")
 # False, True, or one of THINK_LEVELS.
 Think = bool | str
@@ -47,11 +52,16 @@ class Recommendation:
 # and Qwen 3.8 27B next (0.90 reasoning at "low"; without reasoning its
 # reviews broke the answer's format).  Every model of 14B parameters or less
 # scored 0.57-0.65, Qwen 3.6 35B-A3B 0.76 and Qwen 3.5 122B-A10B 0.78.
+# Quantized, Gemma 4 31B kept its edit: on 12 minutes of that narration the
+# MLX tag (NVFP4) differed from the full model in 10 of 1668 words and the
+# QAT GGUF (Q4_0) in 65, while two runs of the full model differed in 60.
+# Both read the prompt at about 50 and answered at about 30 tokens/s on an
+# M1 Max: planning took longer than the recording (SPEED_NOTE).
 RECOMMENDED: tuple[Recommendation, ...] = (
     Recommendation(
         label="Gemma 4 31B",
-        gguf="gemma4:31b",
-        gguf_gb=20.4,
+        gguf="gemma4:31b-it-qat",
+        gguf_gb=18.9,
         mlx="gemma4:31b-mlx",
         mlx_gb=19.4,
         think=False,

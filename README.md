@@ -288,10 +288,10 @@ plan, so you can always see why a cut was made.
 - **Cloud planner:** the recommended planners need an internet connection and
   an API key from their provider.
 - **Local planner:** it needs about 32 GB of memory and 20 GB of disk: models
-  small enough for less (14B parameters or fewer) choose takes far worse. It
-  is slow without a fast GPU — each four-minute window can take minutes, so a
-  long recording can take hours. Local models read the transcript only;
-  Gemini, which also hears the audio, remains the recommended planner.
+  small enough for less (14B parameters or fewer) choose takes far worse. And
+  it takes longer than the recording itself: on an M1 Max an hour of
+  narration plans in about 1.5–2 hours. Local models read the transcript
+  only; Gemini, which also hears the audio, remains the recommended planner.
 - **Judgement:** the planner is a language model and can occasionally choose
   the wrong take, and a cut inside tightly connected speech (no pause
   between a kept and a removed word) can sound abrupt. Listen to the edit

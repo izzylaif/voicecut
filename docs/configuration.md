@@ -67,7 +67,7 @@ narration. It does not choose waveform samples or synthesize speech.
 | `gemini` | `gemini-3.1-pro-preview` | `GEMINI_API_KEY` | Cloud |
 | `openai` | `gpt-5-mini` | `OPENAI_API_KEY` | Cloud |
 | `deepseek` | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` | Cloud |
-| `ollama` | `gemma4:31b` (`gemma4:31b-mlx` on Apple Silicon with more than 32 GB) | None | On this computer, through Ollama |
+| `ollama` | `gemma4:31b-it-qat` (`gemma4:31b-mlx` on Apple Silicon with more than 32 GB) | None | On this computer, through Ollama |
 
 A strong cloud model is the recommended option for reliable take selection.
 All backends must pass the same range, ordering, commitment, and
@@ -135,7 +135,7 @@ installs its own copy during setup when the system has none; see
 [desktop/README.md](../desktop/README.md#local-planners).
 
 ```bash
-ollama pull gemma4:31b           # 20.4 GB, once
+ollama pull gemma4:31b-it-qat    # 18.9 GB, once
 voicecut input.wav --planner-backend ollama --planner-think off
 voicecut input.wav --planner-backend ollama --planner-model qwen3.8:27b \
   --planner-think low
@@ -150,7 +150,7 @@ one. VoiceCut recommends two models:
 
 | Model | Reasoning | GGUF tag | MLX tag (Apple Silicon, > 32 GB) |
 | --- | --- | --- | --- |
-| Gemma 4 31B (default) | off | `gemma4:31b`, 20.4 GB | `gemma4:31b-mlx`, 19.4 GB |
+| Gemma 4 31B (default) | off | `gemma4:31b-it-qat`, 18.9 GB | `gemma4:31b-mlx`, 19.4 GB |
 | Qwen 3.8 27B | low | `qwen3.8:27b`, 17.7 GB | `qwen3.8:27b-mlx`, 18.2 GB |
 
 They come from a comparison on a 64-minute narration, text only, scored by
@@ -162,6 +162,15 @@ slower); without reasoning its reviews broke the answer's format. Every model
 of 14B parameters or less scored 0.57–0.65 and left 39–79 repeats, Qwen 3.6
 35B-A3B 0.76 and Qwen 3.5 122B-A10B 0.78. A usable local planner therefore
 needs a model of about 30B parameters and about 32 GB of memory.
+
+Quantized, Gemma 4 31B keeps its edit. On the first 12 minutes of the same
+narration, against the full-precision model (through OpenRouter, run twice):
+`gemma4:31b-mlx` (NVFP4, MLX) chose differently in 10 of 1,668 words and
+`gemma4:31b-it-qat` (Q4_0 with quantization-aware training, llama.cpp) in
+65, while the two full-precision runs differed from each other in 60; F1
+against Gemini was 0.95 and 0.93. Both answered in valid JSON every time.
+`gemma4:31b` (Q4_K_M, with a draft model for speculative decoding) was not
+measured, so the QAT tag is the default off Apple Silicon.
 
 Each request uses Ollama's structured outputs: the answer is constrained to
 the planner's JSON schema. `--planner-think` sets how a model reasons before
@@ -193,8 +202,11 @@ gets no usable answer leaves its region as the windows decided it. The plan's
 do not make their choices good (see the recommendations above).
 
 Local models need memory: a recommended model needs about 32 GB in all (its
-download size, a few GB for the context, and the rest of the computer). They are slow without a fast GPU — each
-four-minute window can take minutes — so a long recording can take hours.
+download size, a few GB for the context, and the rest of the computer). And
+they are slow: on an M1 Max both Gemma 4 31B versions read the prompt at
+about 50 tokens/s and answered at about 30, so 14 minutes of narration
+planned in 22–23 minutes, and an hour plans in about 1.5–2 hours. The editor
+says so next to the local models.
 
 ## Privacy and data flow
 
@@ -459,7 +471,7 @@ accepted for compatibility and adds nothing. See
 | `--env-file PATH` | dotenv file; default `.env` |
 | `--language en\|ru` | Source language; default `en` |
 | `--planner-backend NAME` | `gemini`, `openai`, `deepseek`, or `ollama` |
-| `--planner-model NAME` | Provider model, or an Ollama model such as `gemma4:31b` |
+| `--planner-model NAME` | Provider model, or an Ollama model such as `gemma4:31b-it-qat` |
 | `--planner-base-url URL` | OpenAI/DeepSeek endpoint override |
 | `--planner-api-key-env NAME` | Credential environment-variable name |
 | `--planner-think auto\|on\|off\|low\|medium\|high` | How an Ollama model reasons before it answers; default `auto` |
