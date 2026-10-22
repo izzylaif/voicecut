@@ -823,9 +823,33 @@ select:focus {
   padding: 0;
 }
 
+/* An open log takes the whole side panel; the transcript returns when it closes. */
+.run-panel.log-open {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  max-height: none;
+}
+
+.run-panel.log-open ~ * {
+  display: none;
+}
+
+.run-panel.log-open > * {
+  flex: none;
+}
+
+.run-panel.log-open .log-toggle {
+  align-self: flex-start;
+}
+
+.run-panel.log-open .log {
+  flex: 1 1 auto;
+}
+
 .log {
   margin: 0;
-  max-height: 200px;
+  min-height: 160px;
   overflow: auto;
   font-size: 10.5px;
   line-height: 1.35;

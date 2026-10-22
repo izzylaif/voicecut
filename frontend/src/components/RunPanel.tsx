@@ -70,6 +70,13 @@ export function reduceProgress(progress: JobProgress, event: JobEvent): JobProgr
   }
 }
 
+/** The stage to show beside an open log: the running one, else the failed or the last one. */
+export function focusStage(progress: JobProgress): string {
+  const ids = PIPELINE_STAGES.map(({ id }) => id);
+  const having = (status: StageStatus) => ids.find((id) => progress.stages[id]?.status === status);
+  return having('started') ?? having('failed') ?? [...ids].reverse().find((id) => progress.stages[id]) ?? ids[0]!;
+}
+
 function useNow(active: boolean): number {
   const [now, setNow] = useState(() => Date.now() / 1000);
   useEffect(() => {
@@ -121,7 +128,7 @@ export function RunPanel({
           : 'Voice Cut failed';
 
   return (
-    <section className={`run-panel run-${progress.status}`} aria-live="polite">
+    <section className={`run-panel run-${progress.status}${showLog ? ' log-open' : ''}`} aria-live="polite">
       <header>
         <div>
           <h2>{title}</h2>
@@ -138,7 +145,8 @@ export function RunPanel({
         )}
       </header>
       <ol className="stages">
-        {PIPELINE_STAGES.map(({ id, label }) => {
+        {/* An open log needs the room: only the stage that matters stays. */}
+        {(showLog ? PIPELINE_STAGES.filter(({ id }) => id === focusStage(progress)) : PIPELINE_STAGES).map(({ id, label }) => {
           const stage = progress.stages[id];
           const seconds =
             stage?.started !== undefined ? (stage.finished ?? now) - stage.started : undefined;
@@ -166,9 +174,12 @@ export function RunPanel({
         </button>
       )}
       <button type="button" className="log-toggle" onClick={() => setShowLog((value) => !value)}>
-        {showLog ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Log ({progress.logs.length} lines)
+        {showLog ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Log ({progress.logs.length}{' '}
+        {progress.logs.length === 1 ? 'line' : 'lines'})
       </button>
-      {showLog && <pre className="log">{progress.logs.slice(-200).join('\n')}</pre>}
+      {showLog && (
+        <pre className="log">{progress.logs.length ? progress.logs.slice(-200).join('\n') : 'Nothing logged yet.'}</pre>
+      )}
     </section>
   );
 }
