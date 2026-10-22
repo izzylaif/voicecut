@@ -123,8 +123,9 @@ export const api = {
   saveSettings: (id: string, settings: RunSettings) =>
     call<RunSettings>(`${project(id)}/settings`, json('PUT', settings)),
 
-  runVoiceCut: (id: string, settings: Partial<RunSettings>) =>
-    call<{ job_id: string }>(`${project(id)}/voicecut`, json('POST', settings)),
+  /** Voice Cut edits the parts of the recording that `timeline` keeps. */
+  runVoiceCut: (id: string, settings: Partial<RunSettings>, timeline: WireTimeline) =>
+    call<{ job_id: string }>(`${project(id)}/voicecut`, json('POST', { ...settings, timeline })),
   cancelVoiceCut: (id: string) => call<{ status: string }>(`${project(id)}/cancel`, { method: 'POST' }),
   prepare: (id: string) => call<{ job_id: string | null }>(`${project(id)}/prepare`, { method: 'POST' }),
 

@@ -842,7 +842,11 @@ def run_full_pipeline(
         raise FullPipelineError("--max-output-tokens must be positive")
     if not 0.0 <= args.breath_threshold <= 1.0:
         raise FullPipelineError("--breath-threshold must be inside [0, 1]")
-    pause_policy = "cuts" if output_kind == "video" else "semantic"
+    pause_policy = getattr(args, "pause_policy", None) or (
+        "cuts" if output_kind == "video" else "semantic"
+    )
+    if output_kind == "video" and pause_policy != "cuts":
+        raise FullPipelineError("a video output cuts its pauses: --pause-policy cuts")
 
     asr_python = args.asr_python.absolute()
     if not asr_python.is_file():
@@ -1558,6 +1562,17 @@ def build_parser() -> argparse.ArgumentParser:
             "clean ambience from the same recording. Defaults to replace for "
             "English and off for Russian; an explicit selection overrides the "
             "language default."
+        ),
+    )
+    parser.add_argument(
+        "--pause-policy",
+        choices=("cuts", "semantic"),
+        default=None,
+        help=(
+            "How joins sound: cuts (a video's: the cut, no inserted room tone) "
+            "or semantic (pauses sized by meaning, filled with room tone). "
+            "Defaults to cuts for a video output and semantic for audio; the "
+            "editor asks for cuts when it edits a WAV excerpt of a video."
         ),
     )
     parser.add_argument(

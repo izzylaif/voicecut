@@ -1357,3 +1357,33 @@ def test_only_gemini_models_hear_the_audio(tmp_path: Path) -> None:
     assert listens("--planner-backend", "deepseek") is False
     with pytest.raises(FullPipelineError, match="gemma-4-31b-it"):
         listens("--planner-model", "gemma-4-31b-it", "--planner-audio", "on")
+
+
+def test_the_pause_policy_can_be_chosen_for_an_audio_output(tmp_path: Path) -> None:
+    """The editor edits a WAV excerpt of a video with a video's cuts."""
+
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source media")
+    args = _args(tmp_path, source)
+    assert args.pause_policy is None
+    args.pause_policy = "cuts"
+
+    class Stop(Exception):
+        pass
+
+    def stop(*_: object, **__: object):
+        raise Stop
+
+    with pytest.raises(Stop):
+        run_full_pipeline(
+            args, media_preparer=stop, planner_preflight=_fake_gemini_preflight
+        )
+    assert (
+        read_json(tmp_path / "work" / "pipeline_config.json")["pause_policy"] == "cuts"
+    )
+
+    args = _args(tmp_path, source)
+    args.output = tmp_path / "edited.mp4"
+    args.pause_policy = "semantic"
+    with pytest.raises(FullPipelineError, match="--pause-policy cuts"):
+        run_full_pipeline(args, media_preparer=stop)

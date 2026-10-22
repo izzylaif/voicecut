@@ -91,6 +91,9 @@ class Proposal:
     lead: RoomTone | None
     tail: RoomTone | None
     words: tuple[dict[str, Any], ...] = field(default=(), repr=False)
+    #: The parts of the recording this run edited (:mod:`.scope`); ``None``
+    #: for the whole recording.
+    scope: tuple[tuple[int, int], ...] | None = None
 
     # -- lookups -----------------------------------------------------------
     def interval_starting_at(self, sample: int) -> int | None:
@@ -302,6 +305,16 @@ def load_proposal(plan_path: Path) -> Proposal:
         )
     if isinstance(raw_joins, list) and len(raw_joins) != len(joins):
         raise TimelineError("boundary plan joins do not match its intervals")
+    scope = None
+    if isinstance(plan.get("editor_scope"), dict):
+        parts = plan["editor_scope"].get("ranges")
+        if not isinstance(parts, list) or not parts:
+            raise TimelineError("boundary plan has no edited parts")
+        scope = tuple(
+            (_int(start, "part start"), _int(end, "part end")) for start, end in parts
+        )
+        if any(not 0 <= start < end <= source_frames for start, end in scope):
+            raise TimelineError("an edited part leaves the media")
     return Proposal(
         plan_path=plan_path,
         plan_sha256=sha256_file(plan_path),
@@ -320,6 +333,7 @@ def load_proposal(plan_path: Path) -> Proposal:
         lead=lead,
         tail=tail,
         words=_words(plan, sample_rate),
+        scope=scope,
     )
 
 

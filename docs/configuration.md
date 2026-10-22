@@ -502,6 +502,7 @@ accepted for compatibility and adds nothing. See
 | `--mfa-micromamba PATH` | micromamba executable |
 | `--mfa-num-jobs N` | MFA batch parallelism |
 | `--breath-cleanup off\|replace` | Pause-cleaning policy |
+| `--pause-policy cuts\|semantic` | Cut joins as in a video, or size pauses and fill them with room tone (default: by the output) |
 | `--breath-threshold FLOAT` | Respiro-en frame threshold |
 | `--respiro-cache-root PATH` | Verified Respiro-en runtime cache |
 | `--asr-python PATH` | Advanced ASR helper runtime |

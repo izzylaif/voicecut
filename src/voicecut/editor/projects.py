@@ -7,6 +7,8 @@
   media/                  canonical WAV + media_input.json, waveform peaks,
                           video proxy and filmstrip sheets
   voicecut/               the pipeline's own output and work directory
+    parts/                a run of only the parts on the timeline: their
+                          excerpt WAV, its run, the plan mapped back
   timeline.json           the user's edit (autosaved)
   exports/<export_id>/    editor plans and manifests of finished exports
 ```
@@ -110,6 +112,8 @@ def idle_run() -> dict[str, Any]:
         "job_id": None,
         "work_dir": None,
         "output": None,
+        "plan": None,
+        "scope": None,
         "error": None,
         "warnings": [],
         "started_at": None,
@@ -172,6 +176,12 @@ class Project:
         return self.voicecut_dir / edited_name(self.source_path)
 
     @property
+    def excerpt_dir(self) -> Path:
+        """Voice Cut's runs of only the parts on the timeline (:mod:`.scope`)."""
+
+        return self.voicecut_dir / "parts"
+
+    @property
     def timeline_path(self) -> Path:
         return self.root / "timeline.json"
 
@@ -188,9 +198,15 @@ class Project:
         """VoiceCut's sealed plan of the last successful run, if any.
 
         ``work_dir`` changes only when a run completes, so a later run that
-        fails or is cancelled keeps the previous result editable.
+        fails or is cancelled keeps the previous result editable.  A run of
+        only the parts on the timeline (:mod:`.scope`) keeps its plan mapped
+        onto the recording in ``plan``.
         """
 
+        mapped = self.run.get("plan")
+        if mapped:
+            path = Path(mapped)
+            return path if path.is_file() else None
         work_dir = self.run.get("work_dir")
         if not work_dir:
             return None

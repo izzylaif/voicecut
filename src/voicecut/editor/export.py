@@ -125,7 +125,9 @@ def export_timeline(
 
     original = project.pipeline_output
     if (
-        matches_proposal(timeline, proposal)
+        # A run of parts of the recording rendered its excerpt, not the media.
+        not project.run.get("plan")
+        and matches_proposal(timeline, proposal)
         and original.is_file()
         and original.suffix.lower() == destination.suffix.lower()
     ):

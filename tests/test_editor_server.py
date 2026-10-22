@@ -356,3 +356,142 @@ def test_upload_import_and_spa_fallback(client: TestClient, tmp_path: Path) -> N
     assert client.get("/").text.startswith("<!doctype html>")
     assert client.get("/some/client/route").text.startswith("<!doctype html>")
     assert client.get("/api/does-not-exist").status_code == 404
+
+
+def test_voicecut_edits_only_what_is_left_on_the_timeline(
+    app, client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    audio = source_audio()
+    source = write_wav(tmp_path / "talk.wav", audio)
+    state = client.post("/api/projects/import", json={"path": str(source)}).json()
+    project_id = state["id"]
+    store = app.state.service.store
+    script = tmp_path / "fake_worker.py"
+    script.write_text(FAKE_WORKER, encoding="utf-8")
+    requests: list[list[str]] = []
+
+    def spawn(request_path: Path) -> subprocess.Popen[str]:
+        """Run VoiceCut's renderer on whatever media the request names."""
+
+        argv = json.loads(request_path.read_text(encoding="utf-8"))["argv"]
+        requests.append(argv)
+        media = Path(argv[0])
+        work = media.parent / ".voicecut-cache" / f"run-{len(requests)}"
+        wav = work / "00_media" / "source_audio.wav"
+        wav.parent.mkdir(parents=True)
+        wav.write_bytes(media.read_bytes())
+        render_voicecut(work, wav, monkeypatch=monkeypatch)
+        Path(f"{media}.work").write_text(str(work), encoding="utf-8")
+        return subprocess.Popen(
+            [sys.executable, str(script), str(request_path)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+
+    monkeypatch.setattr(server, "spawn_worker", spawn)
+
+    # The user splits the recording and deletes 1.95 s..2.30 s.
+    cut_start, cut_end = int(1.95 * SAMPLE_RATE), int(2.30 * SAMPLE_RATE)
+    trimmed = {
+        "schema_version": 3,
+        "proposal_sha256": None,
+        "items": [
+            {
+                "kind": "clip",
+                "id": "a",
+                "source_start_sample": 0,
+                "source_end_sample": cut_start,
+                "start_origin": "source",
+                "end_origin": "manual",
+            },
+            {
+                "kind": "clip",
+                "id": "b",
+                "source_start_sample": cut_end,
+                "source_end_sample": FRAMES,
+                "start_origin": "manual",
+                "end_origin": "source",
+            },
+        ],
+    }
+    job = client.post(
+        f"/api/projects/{project_id}/voicecut",
+        json={"language": "en", "timeline": trimmed},
+    ).json()
+    assert _wait(client, job["job_id"])["status"] == "complete"
+    events = _events(client, job["job_id"])
+    assert events[0]["line"] == (
+        "Voice Cut edits what is left on the timeline: 0:06 of the 0:06 "
+        "recording, in 2 parts."
+    )
+    argv = requests[-1]
+    excerpt = Path(argv[0])
+    project: Project = store.get(project_id)
+    assert excerpt.parent == project.excerpt_dir
+    assert argv[argv.index("--pause-policy") + 1] == "semantic"
+    assert Path(argv[argv.index("-o") + 1]).parent == project.excerpt_dir
+    kept = np.concatenate([audio[:cut_start], audio[cut_end:]])
+    assert np.array_equal(sf.read(excerpt, dtype="float32", always_2d=True)[0], kept)
+
+    state = client.get(f"/api/projects/{project_id}").json()
+    run = state["run"]
+    assert run["scope"] == [[0, cut_start], [cut_end, FRAMES]]
+    assert run["plan"] == str(project.excerpt_dir / "final_boundary_plan.json")
+    proposal = state["proposal"]
+    assert proposal["source_frames"] == FRAMES
+    for segment in proposal["segments"]:
+        assert segment["end"] <= cut_start or segment["start"] >= cut_end
+    # The recording's audio stays the project's own.
+    assert sf.read(project.canonical_wav, dtype="float32", always_2d=True)[0].shape == (
+        FRAMES,
+        audio.shape[1],
+    )
+
+    # VoiceCut's edit of the parts plays from the recording and exports.
+    items = load_proposal(Path(run["plan"])).timeline_items()
+    timeline = {
+        "schema_version": 3,
+        "proposal_sha256": proposal["plan_sha256"],
+        "items": items,
+    }
+    saved = client.put(f"/api/projects/{project_id}/timeline", json=timeline).json()
+    preview = _render(client, project_id, saved["revision"], saved["output_frames"])
+    destination = tmp_path / "exports" / "talk_edited.wav"
+    destination.parent.mkdir()
+    started = client.post(
+        f"/api/projects/{project_id}/export",
+        json={
+            "timeline": timeline,
+            "destination": str(destination),
+            "overwrite": False,
+        },
+    ).json()
+    assert _wait(client, started["job_id"])["status"] == "complete"
+    exported, _ = sf.read(destination, dtype="float32", always_2d=True)
+    assert len(exported) == len(preview) and np.max(np.abs(exported - preview)) < 2e-6
+
+    # Run again on the untouched result: the same parts, the same excerpt.
+    job = client.post(
+        f"/api/projects/{project_id}/voicecut",
+        json={"language": "en", "timeline": timeline},
+    ).json()
+    assert _wait(client, job["job_id"])["status"] == "complete"
+    assert requests[-1][0] == str(excerpt)
+
+    # Everything back on the timeline: the recording itself is edited.
+    state = client.get(f"/api/projects/{project_id}").json()
+    whole = {
+        "schema_version": 3,
+        "proposal_sha256": state["proposal"]["plan_sha256"],
+        "items": [{**state["source_items"][0], "start_origin": "source"}],
+    }
+    job = client.post(
+        f"/api/projects/{project_id}/voicecut",
+        json={"language": "en", "timeline": whole},
+    ).json()
+    assert _wait(client, job["job_id"])["status"] == "complete"
+    assert requests[-1][0] == str(source) and "--pause-policy" not in requests[-1]
+    run = client.get(f"/api/projects/{project_id}").json()["run"]
+    assert run["plan"] is None and run["scope"] is None

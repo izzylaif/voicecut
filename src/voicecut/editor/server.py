@@ -14,6 +14,7 @@ stops every running Voice Cut.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import ipaddress
 import json
 import os
@@ -28,6 +29,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
+import soundfile as sf
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import (
     FileResponse,
@@ -46,7 +48,7 @@ from ..planner_backends import (
     DEFAULT_MODEL_BY_BACKEND,
     PLANNER_BACKENDS,
 )
-from . import ambience, documents, peaks, plan, proxy, settings
+from . import ambience, documents, peaks, plan, proxy, scope, settings
 from .local import LocalModelError, LocalModels
 from .export import EXPORT_STAGES, ExportError, check_destination, export_timeline
 from .jobs import STATUS_BY_EVENT, Job, JobRegistry, sse_stream
@@ -59,12 +61,14 @@ from .projects import (
     ProjectNotFound,
     ProjectStore,
     current_settings,
+    safe_name,
     utc_now,
     write_json_atomic,
 )
 from .timeline import (
     Proposal,
     TimelineError,
+    clips_and_gaps,
     full_source_items,
     load_proposal,
     timeline_revision,
@@ -75,6 +79,16 @@ from .worker import STDIN_CONTROL_ENV
 PREVIEW_CACHE_SIZE = 32
 MAX_RENDER_FRAMES = 1 << 20
 EXCLUSIVE_JOBS = frozenset({"voicecut", "export"})
+
+
+def _clock(seconds: float) -> str:
+    """``m:ss``, or ``h:mm:ss`` from an hour on."""
+
+    hours, rest = divmod(round(seconds), 3600)
+    minutes, whole = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{whole:02d}" if hours else f"{minutes}:{whole:02d}"
+
+
 PREPARE_STAGES = {
     "proxy": "Building the video preview",
     "filmstrip": "Making thumbnails",
@@ -523,11 +537,21 @@ class EditorService:
             raise HTTPException(400, str(error)) from error
         raise HTTPException(404, f"unknown action {action!r}")
 
-    def pipeline_argv(self, project: Project, chosen: dict[str, Any]) -> list[str]:
+    def pipeline_argv(
+        self,
+        project: Project,
+        chosen: dict[str, Any],
+        *,
+        media: Path | None = None,
+        output: Path | None = None,
+    ) -> list[str]:
+        """The pipeline's command line: of the source recording, or of an
+        excerpt of it (``media``) edited the way the project's media is."""
+
         argv = [
-            str(project.source_path),
+            str(media or project.source_path),
             "-o",
-            str(project.pipeline_output),
+            str(output or project.pipeline_output),
             "--overwrite",
             "--env-file",
             str(self.env_file),
@@ -545,7 +569,64 @@ class EditorService:
             ]
         if chosen["breath_cleanup"]:
             argv += ["--breath-cleanup", str(chosen["breath_cleanup"])]
+        if media is not None:
+            # A WAV excerpt of a video still gets a video's cuts.
+            policy = "cuts" if project.kind == "video" else "semantic"
+            argv += ["--pause-policy", policy]
         return argv
+
+    def voicecut_parts(
+        self, project: Project, body: dict[str, Any]
+    ) -> list[tuple[int, int]] | None:
+        """The parts of the recording Voice Cut edits (see :mod:`.scope`), from
+        the timeline in ``body`` or else the saved one; ``None`` for all of it."""
+
+        try:
+            proposal = self.proposal(project)
+        except (TimelineError, OSError, ValueError, KeyError):
+            proposal = None  # the editor shows the whole recording then
+        sample_rate, _, frames = project.audio_geometry()
+        if body.get("timeline") is not None:
+            try:
+                timeline = validate_timeline(
+                    body["timeline"],
+                    source_frames=frames,
+                    proposal=proposal,
+                    allow_pauses=project.kind != "video",
+                    sample_rate=sample_rate,
+                )
+            except TimelineError as error:
+                raise HTTPException(400, str(error)) from error
+        else:
+            timeline = self.saved_timeline(project, proposal) or {
+                "items": (
+                    proposal.timeline_items() if proposal else full_source_items(frames)
+                )
+            }
+        clips, _ = clips_and_gaps(timeline)
+        parts = scope.timeline_scope(clips, proposal, frames)
+        return None if parts == [(0, frames)] else parts
+
+    def excerpt_argv(
+        self, project: Project, chosen: dict[str, Any], parts: list[tuple[int, int]]
+    ) -> list[str]:
+        """Write the excerpt of ``parts``; the pipeline's command line for it."""
+
+        manifest = project.media_manifest()
+        key = json.dumps([manifest.get("canonical_audio_sha256"), parts])
+        name = f"{safe_name(project.source_path.stem)}-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
+        media = project.excerpt_dir / f"{name}.wav"
+        output = project.excerpt_dir / f"{name}_edited.wav"
+        if project.excerpt_dir.is_dir():
+            for stale in project.excerpt_dir.glob("*.wav"):
+                if stale not in (media, output):
+                    stale.unlink(missing_ok=True)
+        expected = sum(end - start for start, end in parts)
+        with contextlib.suppress(RuntimeError, OSError):
+            if sf.info(str(media)).frames == expected:
+                return self.pipeline_argv(project, chosen, media=media, output=output)
+        scope.write_excerpt(project.canonical_wav, parts, media)
+        return self.pipeline_argv(project, chosen, media=media, output=output)
 
     def worker_environment(self, chosen: dict[str, Any]) -> dict[str, str]:
         """The planner key for the worker, unless the pipeline reads it itself.
@@ -572,12 +653,36 @@ class EditorService:
                 f"The original recording {project.source_path.name} was moved or "
                 "deleted; locate it first",
             )
+        parts = self.voicecut_parts(project, body)
         with self._lock:
             if self.jobs.running(project.id, EXCLUSIVE_JOBS):
                 raise HTTPException(409, "Voice Cut or an export is already running")
             job = self.jobs.create("voicecut", project.id)
+        if parts is None:
+            argv = self.pipeline_argv(project, chosen)
+        else:
+            try:
+                argv = self.excerpt_argv(project, chosen, parts)
+            except (OSError, RuntimeError, scope.ScopeError) as error:
+                message = f"cannot prepare the parts on the timeline: {error}"
+                self._finish_voicecut(job, {"type": "error", "message": message})
+                raise HTTPException(500, message) from error
+            sample_rate, _, frames = project.audio_geometry()
+            kept = sum(end - start for start, end in parts)
+            job.append(
+                {
+                    "type": "log",
+                    "stream": "stdout",
+                    "line": (
+                        f"Voice Cut edits what is left on the timeline: "
+                        f"{_clock(kept / sample_rate)} of the "
+                        f"{_clock(frames / sample_rate)} recording, in "
+                        f"{len(parts)} part{'s' if len(parts) > 1 else ''}."
+                    ),
+                }
+            )
         request_path = project.jobs_dir / f"{job.id}.json"
-        write_json_atomic(request_path, {"argv": self.pipeline_argv(project, chosen)})
+        write_json_atomic(request_path, {"argv": argv})
 
         def running(current: Project) -> None:
             current.settings = chosen
@@ -604,11 +709,11 @@ class EditorService:
             )
             raise HTTPException(500, f"cannot start VoiceCut: {error}") from error
         threading.Thread(
-            target=self._supervise, args=(job,), daemon=True, name=job.id
+            target=self._supervise, args=(job, parts), daemon=True, name=job.id
         ).start()
         return job
 
-    def _supervise(self, job: Job) -> None:
+    def _supervise(self, job: Job, parts: list[tuple[int, int]] | None) -> None:
         process = job.process
         assert process is not None and process.stdout and process.stderr
         terminal: list[dict[str, Any]] = []
@@ -656,15 +761,44 @@ class EditorService:
                 "message": f"VoiceCut stopped with exit status {code}"
                 + (f": {detail}" if detail else ""),
             }
-        self._finish_voicecut(job, final)
+        self._finish_voicecut(job, final, parts)
 
-    def _finish_voicecut(self, job: Job, final: dict[str, Any]) -> None:
+    def _finish_voicecut(
+        self,
+        job: Job,
+        final: dict[str, Any],
+        parts: list[tuple[int, int]] | None = None,
+    ) -> None:
         """Record the run's outcome in its project, then end the job with
-        ``final``: whoever sees the job finished finds the project updated."""
+        ``final``: whoever sees the job finished finds the project updated.
+
+        A run of ``parts`` of the recording is complete once its plan is
+        mapped back onto the recording.
+        """
 
         status = STATUS_BY_EVENT[final["type"]]
         result = final.get("result")
         result = result if isinstance(result, dict) else {}
+        mapped: Path | None = None
+        if status == "complete" and parts is not None:
+            try:
+                mapped = self._map_parts_plan(
+                    self.store.get(job.project_id), result, parts
+                )
+            except ProjectNotFound:
+                pass
+            except (
+                scope.ScopeError,
+                OSError,
+                ValueError,
+                KeyError,
+                TypeError,
+            ) as error:
+                final = {
+                    "type": "error",
+                    "message": f"Voice Cut's edit cannot be placed on the recording: {error}",
+                }
+                status = "failed"
 
         def apply(project: Project) -> None:
             if project.run.get("job_id") != job.id:
@@ -675,6 +809,8 @@ class EditorService:
                     status="complete",
                     work_dir=result.get("work_dir"),
                     output=result.get("output"),
+                    plan=str(mapped) if mapped else None,
+                    scope=[list(part) for part in parts] if mapped and parts else None,
                     warnings=list(result.get("pipeline_warnings") or []),
                     error=None,
                 )
@@ -694,9 +830,34 @@ class EditorService:
         finally:
             job.append(final)
 
+    def _map_parts_plan(
+        self, project: Project, result: dict[str, Any], parts: list[tuple[int, int]]
+    ) -> Path:
+        """Map the plan of a run of ``parts`` onto the recording; its path."""
+
+        excerpt_plan = (
+            Path(str(result["work_dir"])) / "05_final" / "final_boundary_plan.json"
+        )
+        manifest = project.media_manifest()
+        sample_rate, _, frames = project.audio_geometry()
+        mapped = scope.map_plan(
+            read_json(excerpt_plan),
+            scope.ExcerptMap(parts),
+            excerpt_plan=excerpt_plan,
+            source_audio=Path(str(manifest["canonical_audio"])),
+            source_audio_sha256=str(manifest["canonical_audio_sha256"]),
+            source_frames=frames,
+            declick=plan.declick_samples(sample_rate),
+        )
+        path = project.excerpt_dir / "final_boundary_plan.json"
+        write_json_atomic(path, mapped)
+        return path
+
     def _adopt_canonical_audio(self, project: Project) -> None:
         """Make sure the editor's WAV is the one VoiceCut's plan indexes."""
 
+        if project.run.get("plan"):
+            return  # made from an excerpt of this very WAV
         try:
             proposal = self.proposal(project)
         except (TimelineError, OSError, ValueError, KeyError):

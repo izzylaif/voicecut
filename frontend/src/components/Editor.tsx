@@ -134,13 +134,13 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
     }
     if (store.proposal && store.isEdited) {
       const ok = await confirmAction(
-        'Running Voice Cut again replaces your manual edits with a new automatic edit. Continue?',
+        'Voice Cut edits the recording again, leaving out what you deleted. Your other manual edits are replaced with a new automatic edit. Continue?',
         { title: 'Voice Cut again?', ok: 'Voice Cut' },
       );
       if (!ok) return;
     }
     try {
-      const { job_id } = await api.runVoiceCut(store.id, settings);
+      const { job_id } = await api.runVoiceCut(store.id, settings, store.wireTimeline());
       followRun(job_id);
     } catch (error) {
       store.notify(`Cannot start Voice Cut: ${errorText(error)}`, 'error');

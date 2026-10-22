@@ -95,6 +95,13 @@ The choice is saved with the project and used for new projects too. If the
 planner's API key is missing or the provider rejects it, the model list says so
 and Voice Cut refuses to start until the key is added.
 
+Voice Cut edits what is on the timeline. Split the recording and delete what
+you do not want first, and only the parts that are left are transcribed,
+planned and cut; the panel's log says how much that is. After a Voice Cut,
+deleting a clip of its edit (or trimming one) and running it again leaves that
+out too, while everything Voice Cut itself had removed from those parts is
+decided again. Put the whole recording back on the timeline to edit all of it.
+
 The production pipeline runs in a worker process — exactly what
 `voicecut <file>` runs with those options — and its stages appear live in the
 side panel:
@@ -109,7 +116,8 @@ Each stage shows its duration (or *cached* / *skipped*); the pipeline's log is
 one click away, and failures are shown in the panel. **Cancel** stops the run.
 When it finishes, the timeline becomes Voice Cut's edit and the transcript
 appears. A run that fails or is cancelled keeps the previous result editable.
-Running Voice Cut again replaces manual edits (the editor asks first).
+Running Voice Cut again replaces the other manual edits (the editor asks
+first).
 
 **Settings** (the gear icon) holds the API keys of the cloud planners
 (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`) and the breath option.
@@ -243,8 +251,8 @@ FLAC, AAC or MP3; video projects also export MP4 or MOV. An existing file is
 replaced only if you tick *Replace the existing file*. The dialog shows the
 stages and, at the end, **Show in Finder** and **Download**.
 
-- An untouched Voice Cut edit is copied from VoiceCut's own published file when
-  the format matches.
+- An untouched Voice Cut edit of the whole recording is copied from VoiceCut's
+  own published file when the format matches.
 - Otherwise the edit is rendered once from the canonical WAV with VoiceCut's
   overlap-add renderer and published with VoiceCut's own publishers; video is
   cut from the original file with the same direct cuts as the CLI.
@@ -344,6 +352,15 @@ in Voice Cut's edit), so the converted edit sounds exactly as before.
   subprocess runner and writes JSON events (stages, log lines, result) that the
   server relays over Server-Sent Events. Clients replay events from any index,
   so a reloaded page picks the run up where it is.
+- **Parts of the recording.** When the timeline keeps less than the whole
+  recording, `scope.timeline_scope` works out which parts Voice Cut edits and
+  `scope.write_excerpt` writes them, in order, into one WAV, sample for sample
+  from the canonical WAV (`voicecut/parts/`). The pipeline edits that excerpt
+  (`--pause-policy cuts` for a video), and `scope.map_plan` maps its sealed
+  plan back onto the recording: intervals, fades, joins, room tone and words.
+  An interval running across the end of one part into the next becomes two
+  clips joined by a cut with the 2 ms declick fade, as a manual cut gets. The
+  mapped plan, with its parts in `editor_scope`, is the proposal from then on.
 - **Proposal.** `timeline.load_proposal` reads VoiceCut's sealed
   `05_final/final_boundary_plan.json` (planner
   `authoritative_single_pass_boundary_plan_v2`, renderer `cut_render_v1`) once
@@ -456,7 +473,7 @@ readable contrast). None of them download models or call planner APIs.
 - Pauses are for audio projects; video edits are direct cuts.
 - Manual cuts are not checked against the alignment.
 - Running Voice Cut again with other settings replaces the edit (undo history
-  starts over).
+  starts over); only what you deleted stays out.
 - Undo history lives in the browser tab; the saved edit survives reloads, the
   history does not.
 - The preview copy of a long 4K video takes a while to build (hardware

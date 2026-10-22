@@ -68,7 +68,11 @@ LAUNCHER_EXTENSION = ".vcproj"
 DOCUMENT_SCHEMA_VERSION = 1
 PROJECT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 # Files whose absolute paths are rebased when a document moves.
-REBASED_FILES = ("project.json", "media/media_input.json")
+REBASED_FILES = (
+    "project.json",
+    "media/media_input.json",
+    "voicecut/parts/final_boundary_plan.json",
+)
 
 
 def _clonefile(source: Path, destination: Path) -> bool:
