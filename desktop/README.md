@@ -94,6 +94,15 @@ directory's `logs/`, and the appearance (System, Light, Dark) and playback
 speed in its `preferences.json`: the editor's page cannot keep them, since its
 address changes with the engine's port on every launch.
 
+While it runs, setup keeps what it downloads in the data directory's `cache/`
+— except the conda packages on Windows, which go to
+`%USERPROFILE%\.voicecut-pkgs`: micromamba nests each package under its
+channel's URL, which puts the MFA lock's longest file 201 characters below
+the cache, and Windows refuses paths over 259 characters unless an
+administrator has enabled long paths; under
+`%LOCALAPPDATA%\com.vectozavr.voicecut\cache` that came to 263 characters
+even for a four-letter user name. Both are removed when setup finishes.
+
 To start over, quit VoiceCut and delete its data directory. To uninstall:
 macOS — also delete `VoiceCut.app` and the "VoiceCut" items in Keychain
 Access; Windows — Settings › Apps (tick "Delete the application data" to

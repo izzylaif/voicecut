@@ -352,7 +352,7 @@ impl Run<'_> {
             ("UV_PYTHON_INSTALL_DIR", paths.python_installs().into()),
             ("UV_PYTHON_PREFERENCE", "only-managed".into()),
             ("MAMBA_ROOT_PREFIX", paths.mamba_root().into()),
-            ("CONDA_PKGS_DIRS", paths.cache().join("pkgs").into()),
+            ("CONDA_PKGS_DIRS", paths.conda_packages().into()),
         ];
         environment.extend(
             entries
@@ -851,9 +851,13 @@ impl Run<'_> {
         if cache.exists() {
             fs::remove_dir_all(&cache).map_err(|error| error.to_string())?;
         }
-        let packages = self.paths.mamba_root().join("pkgs");
-        if packages.exists() {
-            let _ = fs::remove_dir_all(packages);
+        for packages in [
+            self.paths.conda_packages(),
+            self.paths.mamba_root().join("pkgs"),
+        ] {
+            if packages.exists() {
+                let _ = fs::remove_dir_all(packages);
+            }
         }
         Ok(())
     }

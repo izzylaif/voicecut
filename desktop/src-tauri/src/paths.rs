@@ -24,7 +24,8 @@
 //!
 //! Linux uses `$XDG_DATA_HOME/voicecut` (`~/.local/share/voicecut`), Windows
 //! `%LOCALAPPDATA%\com.vectozavr.voicecut`, with the same layout (`Scripts\`
-//! instead of `bin/` inside the environments).
+//! instead of `bin/` inside the environments), except that setup's conda
+//! packages go to `%USERPROFILE%\.voicecut-pkgs` there (see `conda_packages`).
 
 use std::path::{Path, PathBuf};
 
@@ -75,6 +76,25 @@ impl Paths {
     }
     pub fn mamba_root(&self) -> PathBuf {
         self.data.join("mamba")
+    }
+    /// micromamba's package cache during setup (removed afterwards).
+    ///
+    /// micromamba 2 keeps each package of an explicit lock under its URL
+    /// (`https\conda.anaconda.org\conda-forge\win-64\<package>\...`), and the
+    /// longest file of the MFA lock comes to 201 characters there. Windows
+    /// refuses paths over 259 characters unless long paths are enabled for
+    /// the whole machine, which needs an administrator: in
+    /// `%LOCALAPPDATA%\com.vectozavr.voicecut\cache\pkgs` that came to 263
+    /// characters even for a four-letter user name. So on Windows the cache is
+    /// a short folder in the user's profile, which leaves room for a 20-letter
+    /// user name.
+    pub fn conda_packages(&self) -> PathBuf {
+        if cfg!(windows) {
+            if let Some(profile) = std::env::var_os("USERPROFILE") {
+                return PathBuf::from(profile).join(".voicecut-pkgs");
+            }
+        }
+        self.cache().join("pkgs")
     }
     pub fn editor(&self) -> PathBuf {
         self.data.join("editor")
