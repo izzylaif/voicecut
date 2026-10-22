@@ -1149,6 +1149,8 @@ fn unpack_ollama(
         let count = zip.len().max(1);
         for index in 0..zip.len() {
             check()?;
+            // Also for the entries left out, so the bar reaches the end.
+            progress(index as f64 / count as f64);
             let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
             let Some(relative) = entry.enclosed_name() else {
                 continue;
@@ -1166,8 +1168,8 @@ fn unpack_ollama(
                 let mut output = File::create(&target).map_err(|error| error.to_string())?;
                 std::io::copy(&mut entry, &mut output).map_err(|error| error.to_string())?;
             }
-            progress((index + 1) as f64 / count as f64);
         }
+        progress(1.0);
         Ok(())
     }
     #[cfg(not(windows))]
@@ -1202,6 +1204,7 @@ fn unpack_ollama(
             }
             progress(read.load(Ordering::Relaxed) as f64 / size as f64);
         }
+        progress(1.0);
         Ok(())
     }
 }
