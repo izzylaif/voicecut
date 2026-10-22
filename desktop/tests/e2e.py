@@ -89,8 +89,8 @@ class App:
                 stderr=subprocess.STDOUT,
             )
 
-    def launch(self) -> None:
-        self.process = self.start()
+    def launch(self, *arguments: str) -> None:
+        self.process = self.start(*arguments)
         wait_for("the automation port", self.reachable, 180)
 
     def reachable(self) -> bool:
@@ -284,29 +284,43 @@ def check_documents(app: App, recording: Path, folder: Path, report: dict) -> No
         raise Failure(f"the project has no launcher: {sorted(document.iterdir())}")
     report["new_project"] = {"title": window["title"], "path": window["role"]["path"]}
 
-    app.call("/close", {"label": window["label"]})
-    wait_for("the project window to close", closed, 120)
-    app.call("/open", {"paths": [str(launcher)]})
-    window = opened("the project reopened from its launcher")
-    report["reopened_from_launcher"] = True
-
-    if sys.platform != "darwin":
-        # The file manager starts a second VoiceCut; it hands the file over.
+    if sys.platform == "darwin":
+        # The app stays without windows; the Finder opens the document again.
         app.call("/close", {"label": window["label"]})
         wait_for("the project window to close", closed, 120)
-        second = app.start(str(launcher))
-        try:
-            second.wait(timeout=120)
-        except subprocess.TimeoutExpired:
-            second.kill()
-            raise Failure(
-                "a second VoiceCut did not hand its file over and quit"
-            ) from None
-        window = opened("the project handed over by a second VoiceCut")
-        report["second_instance"] = {
-            "exit": second.returncode,
-            "title": window["title"],
-        }
+        app.call("/open", {"paths": [str(launcher)]})
+        opened("the project reopened from its launcher")
+        report["reopened_from_launcher"] = True
+        return
+
+    # Opening the launcher again comes back to the same window, also when the
+    # file manager starts a second VoiceCut for it: that one hands it over.
+    app.call("/open", {"paths": [str(launcher)]})
+    second = app.start(str(launcher))
+    try:
+        second.wait(timeout=120)
+    except subprocess.TimeoutExpired:
+        second.kill()
+        raise Failure("a second VoiceCut did not hand its file over and quit") from None
+    time.sleep(2)
+    windows = app.documents()
+    if len(windows) != 1 or project_window() is None:
+        raise Failure(f"opening the project again left these windows: {windows}")
+    report["second_instance"] = {"exit": second.returncode, "windows": len(windows)}
+
+    # Closing the last window quits VoiceCut on Linux and Windows ...
+    assert app.process is not None
+    app.call("/close", {"label": window["label"]})
+    try:
+        app.process.wait(timeout=90)
+    except subprocess.TimeoutExpired:
+        raise Failure("closing the last window did not quit VoiceCut") from None
+    report["closing_quits"] = app.process.returncode
+    # ... and double-clicking the launcher starts it with the project.
+    app.launch(str(launcher))
+    wait_for("the engine", lambda: app.call("/status")["phase"] == "ready", 300, 2)
+    opened("the project opened by starting VoiceCut with its launcher")
+    report["started_with_launcher"] = True
 
 
 def quit_app(app: App, report: dict[str, Any]) -> None:
