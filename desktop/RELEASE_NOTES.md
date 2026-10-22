@@ -2,6 +2,27 @@ VoiceCut listens to a narration recording, keeps the best take of every line,
 fixes the pauses, and lets you fine-tune every cut on a timeline before
 exporting.
 
+## What's new in 0.3.0
+
+- **The planner can run on your computer.** Local models run through Ollama
+  on macOS, Windows and Linux, and VoiceCut installs Ollama unless you have
+  it. New projects plan with Gemma 4 31B on your computer where it runs well
+  (Apple Silicon with 32 GB of memory or more, or an NVIDIA GPU with 24 GB),
+  and with the same model through OpenRouter elsewhere. The first Voice Cut
+  offers to download the model (about 20 GB, once) and starts when it is
+  there.
+- **OpenRouter** joins Gemini, OpenAI and DeepSeek. Gemma 4 31B there edits
+  nearly the way Gemini 3.1 Pro does, for about 5 cents of OpenRouter's
+  charges per hour of recording. Gemini now defaults to Gemini 3.8 Flash.
+- **Voice Cut edits only what is left on the timeline.** Trim a recording
+  first and only the parts you kept are transcribed and planned; delete part
+  of Voice Cut's result and the next run leaves it out too.
+- **Intel Macs:** the macOS download is now universal.
+- **Windows:** Voice Cut no longer hangs at "Checking runtimes", and setup
+  works when Windows long paths are off.
+- The run's log opens at a readable size and says whether Whisper runs on
+  the GPU.
+
 ## Install
 
 | System | File | |
@@ -14,9 +35,11 @@ exporting.
 The AppImage needs FUSE 2: if it does not start on Ubuntu, install it with
 `sudo apt install libfuse2` (`libfuse2t64` on Ubuntu 24.04 and later).
 
-On first launch VoiceCut downloads and sets up its engine (about 1.5 GB, up
-to 7 GB of disk while installing). Voice Cut itself needs a Gemini API key,
-which VoiceCut keeps in the system's keychain or credential store.
+On first launch VoiceCut downloads and sets up its engine (about 1.7 GB on a
+Mac and 2.9 GB on Windows and Linux; keep up to 9 GB free while it installs).
+The planner runs on your computer, or with your own API key for a cloud
+provider (OpenRouter, Gemini, OpenAI, DeepSeek), which VoiceCut keeps in the
+system's keychain or credential store.
 
 Whisper runs on the GPU on Apple Silicon (MLX) and on NVIDIA GPUs with a
 recent driver (CUDA 12); anywhere else it runs on the CPU, about as fast as
