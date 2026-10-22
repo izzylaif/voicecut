@@ -296,3 +296,42 @@ details summary {
 .error-text {
   color: var(--error);
 }
+
+/* About VoiceCut (about.html). */
+body.about {
+  padding: 28px 32px;
+  text-align: center;
+}
+
+body.about main {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+body.about .mark {
+  margin: 0 0 6px;
+}
+
+body.about h1 {
+  font-size: 26px;
+}
+
+body.about p {
+  margin: 4px 0;
+}
+
+body.about .developer {
+  margin-top: 14px;
+  font-weight: 600;
+}
+
+body.about a {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+body.about a:hover {
+  text-decoration: underline;
+}

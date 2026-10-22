@@ -126,7 +126,7 @@ export function DesktopWelcome({ onOpen }: { onOpen: (project: ProjectState) => 
                     <FileAudio size={16} />
                     <span className="recent-name">{recent.name}</span>
                     <span className="muted small recent-path">
-                      {recent.exists ? recent.path.replace(/^\/Users\/[^/]+/, '~') : 'moved or deleted'}
+                      {recent.exists ? shortPath(recent.path) : 'moved or deleted'}
                     </span>
                   </button>
                 </li>
@@ -146,4 +146,13 @@ export function DesktopWelcome({ onOpen }: { onOpen: (project: ProjectState) => 
       )}
     </div>
   );
+}
+
+/**
+ * A path as the recent list shows it: home as `~`, wrapped in left-to-right
+ * marks.  The list clips long paths on the left with `direction: rtl`, which
+ * would otherwise move the leading `~/` or `/` to the end.
+ */
+function shortPath(path: string): string {
+  return `\u200e${path.replace(/^(\/Users|\/home)\/[^/]+/, '~')}\u200e`;
 }

@@ -28,9 +28,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::{json, Value};
-use tauri::menu::{
-    AboutMetadata, Menu, MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder,
-};
+use tauri::menu::{Menu, MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder};
 use tauri::{
     AppHandle, DragDropEvent, Emitter, Manager, RunEvent, Theme, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent, Wry,
@@ -61,6 +59,8 @@ pub const MEDIA_EXTENSIONS: &[&str] = &[
 ];
 /// Commands the editor's pages may call (see `capabilities/app.json` for the
 /// app's own pages).
+const ABOUT_LABEL: &str = "about";
+
 const EDITOR_PERMISSIONS: &[&str] = &[
     "core:default",
     "allow-document-opened",
@@ -459,6 +459,36 @@ pub fn set_appearance(app: &AppHandle, appearance: &str) -> Result<(), String> {
     }
     let _ = app.emit("appearance", appearance);
     Ok(())
+}
+
+/// About VoiceCut: the version and who made it, with links (the system's
+/// own About panel has no links on macOS).
+fn show_about(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(ABOUT_LABEL) {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    let theme = app.state::<AppState>().preferences.lock().unwrap().theme();
+    let navigator = app.clone();
+    let built = WebviewWindowBuilder::new(app, ABOUT_LABEL, WebviewUrl::App("about.html".into()))
+        .title("About VoiceCut")
+        .on_navigation(move |url| navigation_allowed(&navigator, url))
+        .inner_size(420.0, 400.0)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .center()
+        .theme(theme)
+        .background_color(preferences::background(theme.unwrap_or(Theme::Dark)))
+        .build();
+    if let Ok(window) = built {
+        if theme.is_none() {
+            if let Ok(system) = window.theme() {
+                let _ = window.set_background_color(Some(preferences::background(system)));
+            }
+        }
+    }
 }
 
 fn engine_url(app: &AppHandle, query: &str) -> Result<tauri::Url, String> {
@@ -959,16 +989,8 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         }
         .build(app)
     };
-    let about = AboutMetadata {
-        name: Some("VoiceCut".into()),
-        version: Some(env!("CARGO_PKG_VERSION").into()),
-        copyright: Some("© 2026 VoiceCut contributors · MIT License".into()),
-        website: Some("https://github.com/vectozavr/voicecut".into()),
-        website_label: Some("github.com/vectozavr/voicecut".into()),
-        ..Default::default()
-    };
     let app_menu = SubmenuBuilder::new(app, "VoiceCut")
-        .about(Some(about))
+        .item(&item("about", "About VoiceCut", None)?)
         .separator()
         .item(&item("settings", "Settings…", Some("CmdOrCtrl+,"))?)
         .separator()
@@ -1073,19 +1095,11 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .separator()
         .item(&item("fullscreen", "&Full Screen", Some("F11"))?)
         .build()?;
-    let about = AboutMetadata {
-        name: Some("VoiceCut".into()),
-        version: Some(env!("CARGO_PKG_VERSION").into()),
-        copyright: Some("© 2026 VoiceCut contributors · MIT License".into()),
-        website: Some("https://github.com/vectozavr/voicecut".into()),
-        website_label: Some("github.com/vectozavr/voicecut".into()),
-        ..Default::default()
-    };
     let help = SubmenuBuilder::new(app, "&Help")
         .item(&item("shortcuts", "&Keyboard Shortcuts", None)?)
         .item(&item("help", "VoiceCut &Help", None)?)
         .separator()
-        .about(Some(about))
+        .item(&item("about", "&About VoiceCut", None)?)
         .build()?;
     let menu = Menu::with_items(app, &[&file, &edit, &view, &help])?;
     *app.state::<AppState>().recent_menu.lock().unwrap() = Some(recent);
@@ -1121,6 +1135,7 @@ fn on_menu(app: &AppHandle, id: &str) {
         "help" => {
             let _ = commands::open_in_browser(HELP_URL);
         }
+        "about" => show_about(app),
         "reveal" => {
             let state = app.state::<AppState>();
             if let Some(Role::Document { path, .. }) = focused
