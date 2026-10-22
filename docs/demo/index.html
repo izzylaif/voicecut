@@ -152,7 +152,10 @@
           </li>
           <li>
             <h3>Runs on your computer</h3>
-            <p>Transcription, alignment and rendering are local. Only the planner request goes to the cloud.</p>
+            <p>
+              Transcription, alignment and rendering are local, and the planner can be too: Gemma&nbsp;4 on your own
+              Mac or PC, or a cloud model with your own key.
+            </p>
           </li>
         </ul>
       </section>
@@ -365,20 +368,28 @@
             <p class="eyebrow">Planners</p>
             <h2 id="planners-title">Choose the model that edits</h2>
             <p>
-              The planner reads the transcript and chooses the takes. The list of models comes live from the
-              provider, and you can type any other model name.
+              The planner reads the transcript and chooses the takes. Its default model, on your computer and on
+              OpenRouter, is Gemma&nbsp;4 31B: an open model that edits nearly the way Gemini 3.1 Pro does, so a
+              big model is not needed. Other providers work too, and you can type any model name.
             </p>
             <ul class="planner-list">
               <li>
-                <div><strong>Gemini</strong><span class="tag accent">Recommended</span></div>
+                <div><strong>Local (Ollama)</strong><span class="tag accent">On your computer</span></div>
                 <p>
-                  Gemini 3.8 Flash by default. It hears the audio of every window as well as reading it, so it catches
-                  stumbles and mis-heard words, for about a dollar per hour of recording.
+                  Gemma 4 31B by default, on your Mac or PC, downloaded in the app. Nothing leaves the computer; it
+                  needs about 32&nbsp;GB of memory.
                 </p>
               </li>
               <li>
-                <div><strong>OpenRouter</strong><span class="tag">The cheapest</span></div>
-                <p>Gemma 4 31B by default: almost as good from the transcript alone, for about three cents an hour.</p>
+                <div><strong>OpenRouter</strong><span class="tag">Gemma 4</span></div>
+                <p>The same Gemma 4 31B by default, in the cloud. It reads the transcript of every window.</p>
+              </li>
+              <li>
+                <div><strong>Gemini</strong><span class="tag">Hears the audio</span></div>
+                <p>
+                  Gemini 3.8 Flash by default. It hears the audio of every window as well as reading it, so it catches
+                  stumbles and mis-heard words.
+                </p>
               </li>
               <li>
                 <div><strong>OpenAI</strong><span class="tag">Supported</span></div>
@@ -388,14 +399,13 @@
                 <div><strong>DeepSeek</strong><span class="tag">Supported</span></div>
                 <p>Reads the transcript of every window.</p>
               </li>
-              <li>
-                <div><strong>Local (Ollama)</strong><span class="tag">Supported</span></div>
-                <p>Open models on your Mac or PC, downloaded in the app. Nothing leaves the computer.</p>
-              </li>
             </ul>
             <p class="fine">
-              Your original file and any video never leave the computer. Keys live in the macOS Keychain, the
-              Windows Credential Manager or your Linux keyring, and are sent only to their own provider.
+              VoiceCut is free. A cloud planner bills your own API key at its provider, and none of it goes to
+              VoiceCut: for an hour of recording, about 5&nbsp;cents with Gemma&nbsp;4 through OpenRouter and about
+              $1 with Gemini 3.8 Flash, at their list prices. Your original file and any video never leave the
+              computer. Keys live in the macOS Keychain, the Windows Credential Manager or your Linux keyring, and
+              are sent only to their own provider.
             </p>
           </div>
           <figure class="shot">
@@ -520,10 +530,11 @@
               </p>
             </li>
             <li>
-              <h4>Add a planner key</h4>
+              <h4>Choose a planner</h4>
               <p>
-                Paste an API key in Settings — a
-                <a href="https://aistudio.google.com/apikey">Gemini key</a> is all you need to start.
+                Run Gemma&nbsp;4 on your computer, or paste an API key in Settings for a cloud planner:
+                <a href="https://openrouter.ai/settings/keys">OpenRouter</a>,
+                <a href="https://aistudio.google.com/apikey">Gemini</a>, OpenAI or DeepSeek.
               </p>
             </li>
           </ol>
@@ -538,9 +549,10 @@
           <details>
             <summary>Is VoiceCut really free?</summary>
             <p>
-              Yes. VoiceCut is open source under the MIT License, with no account and no subscription. A cloud
-              planner uses your own API key, so its provider bills you for what Voice Cut sends it, under that
-              provider's pricing.
+              Yes. VoiceCut is open source under the MIT License, with no account and no subscription, and with a
+              planner on your computer it costs nothing at all. A cloud planner uses your own API key, so its
+              provider bills you for what Voice Cut sends it — none of it goes to VoiceCut. For an hour of
+              recording that is about 5&nbsp;cents with Gemma&nbsp;4 through OpenRouter.
             </p>
           </details>
           <details>
@@ -567,8 +579,9 @@
           <details>
             <summary>Does my recording leave my computer?</summary>
             <p>
-              Transcription, alignment and rendering run locally. The planner receives the transcript of each
-              planning window; Gemini also receives a compressed 16&nbsp;kHz mono copy of that window's audio.
+              Not with a planner on your computer: then everything runs locally. With a cloud planner,
+              transcription, alignment and rendering still run locally; the planner receives the transcript of
+              each planning window, and Gemini also a compressed 16&nbsp;kHz mono copy of that window's audio.
               Your original file and any video never leave the computer.
             </p>
           </details>

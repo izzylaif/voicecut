@@ -54,8 +54,8 @@ the whole recording and edits it the way a human editor would.
 - **Leaves the last word to you.** The automatic edit opens as clips on a
   timeline over the original recording, ready to adjust.
 - **Runs on your computer.** Transcription, alignment and rendering are
-  local; only the planner request goes to the cloud (see
-  [Planners](#planners)).
+  local, and the planner can be too: Gemma 4 on your own Mac or PC, or a
+  cloud model with your own API key (see [Planners](#planners)).
 
 ## A quick tour
 
@@ -160,10 +160,13 @@ you run Voice Cut.
   <img alt="First launch: VoiceCut explains what it will install and how much space it needs, with an Install button" src="docs/assets/screenshots/setup-light.webp">
 </picture>
 
-Last, open **Settings** and paste a planner API key — a
-[Gemini key](https://aistudio.google.com/apikey) is all you need to start.
-VoiceCut keeps it in the macOS Keychain, the Windows Credential Manager or
-your Linux keyring, never in your projects.
+Last, choose the planner in the toolbar. **Local** runs Gemma 4 on your
+computer: choose it and VoiceCut downloads the model (about 20 GB; it needs
+about 32 GB of memory). For a cloud planner, paste an API key in
+**Settings** — [OpenRouter](https://openrouter.ai/settings/keys) for the
+same Gemma 4, [Gemini](https://aistudio.google.com/apikey), OpenAI or
+DeepSeek. VoiceCut keeps keys in the macOS Keychain, the Windows Credential
+Manager or your Linux keyring, never in your projects.
 
 Whisper runs on the GPU on Apple Silicon and on NVIDIA GPUs with a recent
 driver (CUDA 12); anywhere else it runs on the CPU, roughly as fast as the
@@ -180,45 +183,57 @@ the button. On Debian and Ubuntu the update asks for your password.
 ## Planners
 
 The planner is the language model that reads the transcript and chooses the
-takes. Pick it in the toolbar; the list of models comes live from the
-provider, and you can type any other model name.
+takes. Its default model is **Gemma 4 31B**, an open model, on your computer
+and through OpenRouter in the cloud alike; it edits nearly the way Gemini 3.1
+Pro does (see below). Other providers work too: with a Gemini key
+the default is Gemini 3.8 Flash, and OpenAI and DeepSeek are supported. Pick
+the planner in the toolbar; the list of models comes live from the provider,
+and you can type any other model name.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/planner-models-dark.webp">
   <img alt="The model picker in the toolbar: Gemini models listed live from the provider, with Gemini 3.8 Flash as the default" src="docs/assets/screenshots/planner-models-light.webp">
 </picture>
 
-| Planner | Default model | What it receives | Status |
+| Planner | Default model | What leaves your computer | Provider's charge per hour of recording |
 | --- | --- | --- | --- |
-| **Gemini** | `gemini-3.8-flash` | the transcript of each planning window and that window's audio | Recommended |
-| **OpenRouter** | `google/gemma-4-31b-it` | the transcript of each planning window | Supported; the cheapest |
-| **OpenAI** | `gpt-5-mini` | the transcript of each planning window | Supported |
-| **DeepSeek** | `deepseek-v4-flash` | the transcript of each planning window | Supported |
-| **Local (Ollama)** | Gemma 4 31B, on your computer | nothing leaves the computer | Supported; needs a fast computer |
+| **Local (Ollama)** | Gemma 4 31B | nothing | none |
+| **OpenRouter** | `google/gemma-4-31b-it`, the same Gemma 4 | the transcript of each planning window | about 5 cents |
+| **Gemini** | `gemini-3.8-flash` | the transcript and the audio of each planning window | about $1 |
+| **OpenAI** | `gpt-5-mini` | the transcript of each planning window | depends on the model |
+| **DeepSeek** | `deepseek-v4-flash` | the transcript of each planning window | depends on the model |
+
+VoiceCut itself is free and open source. A cloud provider bills your own API
+key for the planner's requests; the last column is roughly what that comes
+to, and none of it goes to VoiceCut.
 
 Gemini models **hear audio**: they receive a compressed 16 kHz mono copy of
 each window, so they can hear stumbles and fix mis-heard words. Your original
 file and any video never leave the computer. Keys are added in **Settings**,
 each with a link to get one, and are sent only to their own provider.
 
-The defaults come from a comparison on a 64-minute narration, scored against
-Gemini 3.1 Pro listening to the audio. Gemini 3.8 Flash made nearly the same
-edit (removed-word F1 0.98) for about a fifth of the price, roughly $1 per hour of
-recording. Gemma 4 31B through [OpenRouter](https://openrouter.ai) came close
-(0.92) for about three cents, reading the transcript only. Any other model of
-the provider's live list can be chosen instead. Gemma is not offered through
-the Gemini key: the Gemini API meters it at 16,000 input tokens a minute.
+**A big model is not needed.** The defaults come from a comparison on a
+64-minute narration, scored against Gemini 3.1 Pro listening to the audio,
+the most capable model we tried. Gemma 4 31B made nearly the same edit from
+the transcript alone (removed-word F1 0.92), and its 4-bit local build
+planned like the full model; Gemini 3.8 Flash, which also hears the audio,
+agreed with Pro even more closely (0.98). The charges above are list prices for what that run sent: for
+Gemma 4 about 175,000 tokens in and 26,000 out per hour of recording, which
+Gemini adds the audio to. Any other model of the provider's live list can be
+chosen instead. Gemma is not offered through the Gemini key: the Gemini API
+meters it at 16,000 input tokens a minute.
 
 **Local** planners run open models on your Mac or PC through Ollama, on
 macOS, Windows and Linux alike, so nothing leaves the computer. The model list
 shows VoiceCut's two recommendations first — Gemma 4 31B, which planned best
 in our comparison with Gemini, and Qwen 3.8 27B — then the other models your
 Ollama has; choose one and it downloads (about 18–20 GB) with its progress.
-Any other model of the [Ollama library](https://ollama.com/library) can be
-typed in. Each model has a **Reasoning** switch (off, on, or a level): the
-recommended ones start with the setting that planned best. **Settings ›
-Local models** lists them too and deletes them. If you already use Ollama,
-VoiceCut uses yours and its models.
+It needs about 32 GB of memory and plans more slowly than the cloud: an hour
+of narration takes about 1.5–2 hours on an M1 Max. Any other model of the
+[Ollama library](https://ollama.com/library) can be typed in. Each model has
+a **Reasoning** switch (off, on, or a level): the recommended ones start with
+the setting that planned best. **Settings › Local models** lists them too and
+deletes them. If you already use Ollama, VoiceCut uses yours and its models.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/settings-dark.webp">
@@ -294,13 +309,13 @@ plan, so you can always see why a cut was made.
 - **Recordings:** one main narrator, in English or Russian; choose the
   language in the toolbar. Conversations with overlapping speakers are not
   supported.
-- **Cloud planner:** the recommended planners need an internet connection and
-  an API key from their provider.
+- **Cloud planners** need an internet connection and your own API key,
+  which their provider bills.
 - **Local planner:** it needs about 32 GB of memory and 20 GB of disk: models
   small enough for less (14B parameters or fewer) choose takes far worse. And
   it takes longer than the recording itself: on an M1 Max an hour of
   narration plans in about 1.5–2 hours. Local models read the transcript
-  only; Gemini, which also hears the audio, remains the recommended planner.
+  only, without hearing the audio.
 - **Judgement:** the planner is a language model and can occasionally choose
   the wrong take, and a cut inside tightly connected speech (no pause
   between a kept and a removed word) can sound abrupt. Listen to the edit

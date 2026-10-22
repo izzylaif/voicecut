@@ -70,7 +70,9 @@ narration. It does not choose waveform samples or synthesize speech.
 | `deepseek` | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` | Cloud |
 | `ollama` | `gemma4:31b-it-qat` (`gemma4:31b-mlx` on Apple Silicon with more than 32 GB) | None | On this computer, through Ollama |
 
-A strong cloud model is the recommended option for reliable take selection.
+Gemma 4 31B (on this computer or through OpenRouter) and Gemini 3.8 Flash
+planned best in our comparison; local models of 14B parameters or fewer
+choose takes far worse.
 All backends must pass the same range, ordering, commitment, and
 source-grounding validation; changing a model does not bypass those checks.
 Answers whose geometry can be repaired without losing narration are repaired
@@ -103,7 +105,9 @@ agreement with Gemini 3.1 Pro listening to the audio on the words it removed
 (F1). Gemini 3.8 Flash with the audio scored 0.98 with no repeats left, at
 about a fifth of Pro's price: Pro reasons more than twice as long per window
 at three times the token price. Gemma 4 31B through OpenRouter, text only,
-scored 0.92 for about three cents per hour of recording. Through the Gemini
+scored 0.92; that run cost under 3 cents, about 5 cents an hour of recording
+at today's list price ($0.20 per million input tokens, $0.40 per million
+output; an hour is about 175,000 tokens in and 26,000 out). Through the Gemini
 API the same model scored 0.90 and took twice as long, because Google meters
 Gemma there at 16,000 input tokens a minute; the editor's Gemini list leaves
 Gemma out for that reason. When a provider answers "429" with the wait it
