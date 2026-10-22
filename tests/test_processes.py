@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -54,17 +56,22 @@ def test_a_worker_stops_when_the_editor_is_gone() -> None:
     assert process.wait(timeout=20) == 7
 
 
+# The parent passes its own process id: on Windows a venv's python.exe is a
+# launcher that runs the real interpreter as its child, so neither the
+# launcher's Popen nor the child's getppid() is the parent's interpreter.
 PARENT = """
-import subprocess, sys
-child = subprocess.Popen([sys.executable, "-c", sys.argv[1], sys.argv[2]])
-print(child.pid, flush=True)
-import time; time.sleep(60)
+import os, subprocess, sys, time
+child = subprocess.Popen([sys.executable, "-c", sys.argv[1], sys.argv[2], str(os.getpid())])
+print(os.getpid(), flush=True)
+time.sleep(60)
 """
 
 CHILD = """
 import os, sys, time
 from voicecut import processes
-processes.when_parent_exits(os.getppid(), lambda: (open(sys.argv[1], "w").close(), os._exit(0)))
+processes.when_parent_exits(
+    int(sys.argv[2]), lambda: (open(sys.argv[1], "w").close(), os._exit(0))
+)
 time.sleep(60)
 """
 
@@ -76,9 +83,9 @@ def test_a_child_notices_its_parent_exit(tmp_path: Path) -> None:
         stdout=subprocess.PIPE,
         text=True,
     )
-    parent.stdout.readline()
+    parent_pid = int(parent.stdout.readline())
     time.sleep(1.5)
-    parent.kill()
+    os.kill(parent_pid, getattr(signal, "SIGKILL", signal.SIGTERM))
     parent.wait(timeout=10)
     deadline = time.monotonic() + 15
     while not flag.exists() and time.monotonic() < deadline:
@@ -117,8 +124,6 @@ def _alive(pid: int) -> bool:
             check=False,
         )
         return str(pid) in result.stdout
-    import os
-
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
