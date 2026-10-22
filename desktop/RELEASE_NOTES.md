@@ -6,7 +6,7 @@ exporting.
 
 | System | File | |
 | --- | --- | --- |
-| macOS 14+ on Apple Silicon | `VoiceCut-<version>-arm64.dmg` | Open it and drag VoiceCut to Applications. |
+| macOS 14+, Apple Silicon or Intel | `VoiceCut-<version>-universal.dmg` | Open it and drag VoiceCut to Applications. |
 | Linux x86_64 (glibc 2.35+: Ubuntu 22.04, Debian 12, Fedora 36 or newer) | `VoiceCut-<version>-x86_64.AppImage` | `chmod +x` it and run it. It adds itself to your applications. |
 | Debian, Ubuntu | `VoiceCut-<version>-amd64.deb` | `sudo apt install ./VoiceCut-<version>-amd64.deb` |
 | Windows 10/11 x64 | `VoiceCut-<version>-x64-setup.exe` | Run it; it installs for you alone, no administrator needed. |

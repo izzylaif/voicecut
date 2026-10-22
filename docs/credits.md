@@ -94,7 +94,7 @@ its [MIT license](https://github.com/openai/whisper/blob/main/LICENSE).
 
 ### faster-whisper
 
-Off Apple Silicon (Linux and Windows) VoiceCut transcribes with
+Off Apple Silicon (Intel Macs, Linux and Windows) VoiceCut transcribes with
 [faster-whisper](https://github.com/SYSTRAN/faster-whisper), which runs the
 same Whisper large-v3-turbo model through
 [CTranslate2](https://github.com/OpenNMT/CTranslate2): in float16 on an NVIDIA
@@ -152,7 +152,8 @@ tensor and resampling operations used by those model adapters. They are
 runtime infrastructure, not semantic editors or production boundary
 authorities.
 
-- Pinned packages: PyTorch 2.8.0 and TorchAudio 2.8.0
+- Pinned packages: PyTorch 2.8.0 and TorchAudio 2.8.0 (on Intel Macs the
+  [conda-forge](https://conda-forge.org/) builds, as PyPI has none for them)
 - PyTorch license: [BSD-style terms](https://github.com/pytorch/pytorch/blob/main/LICENSE)
 - TorchAudio license: [BSD 2-Clause](https://github.com/pytorch/audio/blob/main/LICENSE)
 - TorchAudio citation: Yao-Yuan Yang et al., “TorchAudio: Building Blocks for

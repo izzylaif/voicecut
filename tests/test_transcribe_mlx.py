@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -66,3 +68,24 @@ def test_crisperwhisper_rejects_a_decoding_prompt() -> None:
             prompt="verbatim please",
             engine="crisperwhisper",
         )
+
+
+
+def test_pytorch_stages_never_load_ctranslate2() -> None:
+    """On Intel Macs PyTorch cannot compute in a process that loaded
+    CTranslate2 (faster-whisper): CTranslate2's wheel brings its own MKL, and
+    PyTorch's matrix products then fail or crash.  Whisper runs in processes
+    of its own (ctranslate2 imports PyTorch there but never computes with it);
+    the stages that compute with PyTorch must stay free of CTranslate2."""
+
+    pytest.importorskip("whisperx")
+    code = (
+        "import sys, voicecut.analyze, voicecut.ctc_enrich, voicecut.align_ctc, "
+        "voicecut.breath_detection, voicecut.full_pipeline, voicecut.editor.worker, "
+        "whisperx.alignment; "
+        "print(sorted({'ctranslate2', 'faster_whisper'} & set(sys.modules)))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "[]"

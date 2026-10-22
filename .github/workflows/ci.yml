@@ -25,6 +25,10 @@ jobs:
           - name: macOS
             os: macos-15
             lock: requirements-main.txt
+          - name: macOS Intel
+            os: macos-15-intel
+            lock: requirements-macos-x86_64.txt
+            base: main-osx-64.txt
           - name: Linux
             os: ubuntu-24.04
             lock: requirements-linux-x86_64.txt
@@ -59,11 +63,28 @@ jobs:
       # The locks the desktop app installs from, so this also checks that
       # they install on each system.
       - name: Install VoiceCut from the app's lock
+        env:
+          BASE: ${{ matrix.base }}
         run: |
-          uv venv --python 3.12 .venv
-          .github/scripts/run.sh "Install the lock" \
-            uv pip install --python .venv --index-strategy unsafe-best-match \
-            -r "desktop/runtime/${{ matrix.lock }}"
+          if [[ -n "${BASE}" ]]; then
+            # Intel Macs: a conda environment with PyTorch, then the lock with
+            # what conda does not bring (desktop/README.md, "Intel Macs").
+            read -r url sha256 < <(python3 -c 'import json; m = json.load(open("desktop/runtime/runtime.json"))["platforms"]["macos-x86_64"]["micromamba"]; print(m["url"], m["sha256"])')
+            curl -fsSL --retry 3 -o "${RUNNER_TEMP}/micromamba" "${url}"
+            echo "${sha256}  ${RUNNER_TEMP}/micromamba" | shasum -a 256 -c
+            chmod +x "${RUNNER_TEMP}/micromamba"
+            MAMBA_ROOT_PREFIX="${RUNNER_TEMP}/mamba" .github/scripts/run.sh "Install the conda base" \
+              "${RUNNER_TEMP}/micromamba" create --no-rc --yes --prefix "${PWD}/.venv" \
+              --file "desktop/runtime/${BASE}"
+            .github/scripts/run.sh "Install the lock" \
+              uv pip install --python .venv --no-deps --require-hashes \
+              -r "desktop/runtime/${{ matrix.lock }}"
+          else
+            uv venv --python 3.12 .venv
+            .github/scripts/run.sh "Install the lock" \
+              uv pip install --python .venv --index-strategy unsafe-best-match \
+              -r "desktop/runtime/${{ matrix.lock }}"
+          fi
           uv pip install --python .venv --no-deps -e .
           uv pip install --python .venv "pytest>=8.4,<9" "httpx>=0.27,<1" "ruff>=0.12,<1"
 

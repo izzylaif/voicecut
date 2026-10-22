@@ -3,9 +3,10 @@
 const REPOSITORY = "vectozavr/voicecut";
 const RELEASES_PAGE = `https://github.com/${REPOSITORY}/releases/latest`;
 // The installers of a release, by what their names end with
-// (VoiceCut-<version>-arm64.dmg and so on).
+// (VoiceCut-<version>-universal.dmg and so on; up to 0.2.0 the Mac's was
+// -arm64.dmg, for Apple Silicon only).
 const ASSETS = {
-  mac: /-arm64\.dmg$/i,
+  mac: /-(universal|arm64)\.dmg$/i,
   windows: /-x64-setup\.exe$/i,
   appimage: /-x86_64\.AppImage$/i,
   deb: /-amd64\.deb$/i,
@@ -14,7 +15,7 @@ const PLATFORMS = {
   mac: {
     label: "Download for Mac",
     asset: "mac",
-    meta: "macOS 14 or later · Apple Silicon",
+    meta: "macOS 14 or later · Apple Silicon or Intel",
   },
   windows: {
     label: "Download for Windows",
@@ -128,8 +129,9 @@ function detectSystem() {
   return "other";
 }
 
-// Best effort: Chromium reports the architecture, other browsers may name
-// the graphics card. Safari tells neither, and is then taken as Apple Silicon.
+// For a release whose Mac app is for Apple Silicon only. Best effort:
+// Chromium reports the architecture, other browsers may name the graphics
+// card. Safari tells neither, and is then taken as Apple Silicon.
 async function looksLikeIntelMac() {
   try {
     const values = await navigator.userAgentData?.getHighEntropyValues?.(["architecture"]);
@@ -248,20 +250,25 @@ async function setUpDownloads() {
         : "Free for macOS, Windows and Linux";
   }
 
-  if (system === "mac" && (await looksLikeIntelMac())) {
-    note.textContent = "VoiceCut for Mac needs Apple Silicon (M1 or newer); this Mac seems to have an Intel processor.";
-    note.hidden = false;
-  }
-
   const release = await latestRelease();
   if (!release) return;
   const assets = findAssets(release);
   const version = showRelease(release, assets);
+  const appleSiliconOnly = /-arm64\.dmg$/i.test(assets.mac?.name || "");
+  if (appleSiliconOnly) {
+    const requirement = document.querySelector('[data-platform="mac"] .platform-req');
+    if (requirement) requirement.innerHTML = "macOS 14 Sonoma or later<br />Apple Silicon (M1 or newer)";
+    if (system === "mac" && (await looksLikeIntelMac())) {
+      note.textContent = `VoiceCut ${version} for Mac needs Apple Silicon (M1 or newer); this Mac seems to have an Intel processor.`;
+      note.hidden = false;
+    }
+  }
   if (choice) {
     const asset = assets[choice.asset];
     if (asset) {
+      const details = system === "mac" && appleSiliconOnly ? "macOS 14 or later · Apple Silicon" : choice.meta;
       primary.href = asset.browser_download_url;
-      meta.textContent = `Free · ${version ? `Version ${version} · ` : ""}${choice.meta}`;
+      meta.textContent = `Free · ${version ? `Version ${version} · ` : ""}${details}`;
     }
   }
 }

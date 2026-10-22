@@ -159,7 +159,7 @@ python3 -m http.server 8000 --directory .pages-site
 ```
 
 The download buttons find the latest release's installers in the visitor's
-browser through the GitHub API, by the ends of their names (`-arm64.dmg`,
+browser through the GitHub API, by the ends of their names (`-universal.dmg`,
 `-x64-setup.exe`, `-x86_64.AppImage`, `-amd64.deb`). When the API cannot be
 reached they use `release.json`, the copy the build writes, and else link
 to the release page, so a new version needs no change to the site.

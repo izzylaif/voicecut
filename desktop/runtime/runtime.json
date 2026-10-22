@@ -48,6 +48,28 @@
         "needed_gb": 7
       }
     },
+    "macos-x86_64": {
+      "uv": {
+        "version": "0.13.4",
+        "url": "https://github.com/astral-sh/uv/releases/download/0.13.4/uv-x86_64-apple-darwin.tar.gz",
+        "sha256": "7be2dcd316122f4b3e5a0a7889f6248266c14425374e105ff7dc9779184603a6"
+      },
+      "micromamba": {
+        "version": "2.9.0",
+        "url": "https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-osx-64",
+        "sha256": "1e71054bb3ac9a076e21f7ec48acfef536f9b3f1408f371a942784bf5ef83d8a"
+      },
+      "requirements": {
+        "main": "requirements-macos-x86_64.txt"
+      },
+      "main_base": "main-osx-64.txt",
+      "mfa_lock": "mfa-osx-64.txt",
+      "space": {
+        "download_gb": 0.8,
+        "installed_gb": 3.4,
+        "needed_gb": 6
+      }
+    },
     "linux-x86_64": {
       "uv": {
         "version": "0.13.4",

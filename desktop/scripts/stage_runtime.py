@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Stage what the VoiceCut app bundles besides itself.
 
-    python3 desktop/scripts/stage_runtime.py [--platform linux-x86_64]
+    python3 desktop/scripts/stage_runtime.py [--platform linux-x86_64 ...]
 
-writes desktop/build/runtime/: runtime.json, the platform's lock files, and
-VoiceCut's own source (src/voicecut with the built editor frontend,
-pyproject.toml, README.md, LICENSE) with its hash in source.sha256.  The app
-installs these on first launch and updates the source when the hash changes.
-It also copies the app mark to desktop/ui/mark.svg.  Build the frontend first
-(npm run build --prefix frontend).  Runs on macOS, Linux and Windows.
+writes desktop/build/runtime/: runtime.json, the platforms' lock files (the
+universal macOS app carries both Macs'), and VoiceCut's own source
+(src/voicecut with the built editor frontend, pyproject.toml, README.md,
+LICENSE) with its hash in source.sha256.  The app installs these on first
+launch and updates the source when the hash changes.  It also copies the app
+mark to desktop/ui/mark.svg.  Build the frontend first (npm run build
+--prefix frontend).  Runs on macOS, Linux and Windows.
 """
 
 from __future__ import annotations
@@ -30,6 +31,8 @@ def host_platform() -> str:
     machine = platform.machine().lower()
     if sys.platform == "darwin" and machine == "arm64":
         return "macos-aarch64"
+    if sys.platform == "darwin" and machine == "x86_64":
+        return "macos-x86_64"
     if sys.platform == "linux" and machine in {"x86_64", "amd64"}:
         return "linux-x86_64"
     if sys.platform == "win32" and machine in {"x86_64", "amd64"}:
@@ -55,17 +58,21 @@ def source_hash(source: Path) -> str:
     return hashlib.sha256(listing.encode()).hexdigest()
 
 
-def stage(target: str, output: Path) -> None:
+def stage(targets: list[str], output: Path) -> None:
     spec_file = DESKTOP / "runtime" / "runtime.json"
     spec = json.loads(spec_file.read_text(encoding="utf-8"))
-    if target not in spec["platforms"]:
-        raise SystemExit(f"runtime.json has no platform {target}")
     if not (ROOT / "src/voicecut/editor/static/index.html").is_file():
         raise SystemExit(
             "build the editor frontend first: npm run build --prefix frontend"
         )
-    entry = spec["platforms"][target]
-    files = [*entry["requirements"].values(), entry["mfa_lock"]]
+    files = []
+    for target in targets:
+        if target not in spec["platforms"]:
+            raise SystemExit(f"runtime.json has no platform {target}")
+        entry = spec["platforms"][target]
+        files += [*entry["requirements"].values(), entry["mfa_lock"]]
+        if "main_base" in entry:
+            files.append(entry["main_base"])
 
     shutil.rmtree(output, ignore_errors=True)
     output.mkdir(parents=True)
@@ -78,15 +85,17 @@ def stage(target: str, output: Path) -> None:
         shutil.copy2(ROOT / name, source / name)
     (output / "source.sha256").write_text(source_hash(source) + "\n", encoding="utf-8")
     shutil.copy2(DESKTOP / "icons/voicecut.svg", DESKTOP / "ui/mark.svg")
-    print(f"staged the {target} runtime in {output}")
+    print(f"staged the {' and '.join(targets)} runtime in {output}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--platform", default=None, help="default: this computer's")
+    parser.add_argument(
+        "--platform", action="append", help="repeatable; default: this computer's"
+    )
     parser.add_argument("--output", type=Path, default=DESKTOP / "build" / "runtime")
     args = parser.parse_args()
-    stage(args.platform or host_platform(), args.output)
+    stage(args.platform or [host_platform()], args.output)
 
 
 if __name__ == "__main__":

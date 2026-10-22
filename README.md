@@ -122,12 +122,12 @@ right one for you.
 
 | System | Download | Then |
 | --- | --- | --- |
-| **macOS** 14 Sonoma or later, Apple Silicon (M1 or newer) | `VoiceCut-<version>-arm64.dmg` | Open it and drag VoiceCut to Applications. |
+| **macOS** 14 Sonoma or later, Apple Silicon or Intel | `VoiceCut-<version>-universal.dmg` | Open it and drag VoiceCut to Applications. |
 | **Windows** 10 or 11, x64 | `VoiceCut-<version>-x64-setup.exe` | Run it. It installs for you alone, no administrator needed. |
 | **Linux** x86_64 with glibc 2.35+ (Ubuntu 22.04, Debian 12, Fedora 36 or newer) | `VoiceCut-<version>-x86_64.AppImage` | `chmod +x` it and run it. It adds itself to your applications. |
 | **Debian, Ubuntu** | `VoiceCut-<version>-amd64.deb` | `sudo apt install ./VoiceCut-<version>-amd64.deb` |
 
-The release also lists `VoiceCut-<version>-arm64.app.tar.gz` and
+The release also lists `VoiceCut-<version>-universal.app.tar.gz` and
 `latest.json`: installed apps download them to update themselves; you don't
 need them.
 
@@ -264,9 +264,9 @@ plan, so you can always see why a cut was made.
 
 ## Current limitations
 
-- **Systems:** macOS 14+ on Apple Silicon (no Intel Macs), Windows 10/11 on
-  x64 and Linux on x86_64 with glibc 2.35+. There are no ARM builds for
-  Windows or Linux.
+- **Systems:** macOS 14+ (Apple Silicon or Intel), Windows 10/11 on x64 and
+  Linux on x86_64 with glibc 2.35+. There are no ARM builds for Windows or
+  Linux.
 - **Speed without a GPU:** off Apple Silicon and NVIDIA, Whisper runs on the
   CPU at roughly the length of the recording.
 - **Recordings:** one main narrator, in English or Russian; choose the

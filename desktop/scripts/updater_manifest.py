@@ -22,8 +22,14 @@ from pathlib import Path
 
 # File name ending -> the updater's targets for it: `{os}-{arch}-{bundle}`,
 # then `{os}-{arch}`, which older updaters and unknown bundle types look up.
+# The universal macOS app serves both kinds of Mac.
 PACKAGES = [
-    (".app.tar.gz", ["darwin-aarch64-app", "darwin-aarch64"]),
+    (
+        "-universal.app.tar.gz",
+        ["darwin-aarch64-app", "darwin-aarch64", "darwin-x86_64-app", "darwin-x86_64"],
+    ),
+    ("-arm64.app.tar.gz", ["darwin-aarch64-app", "darwin-aarch64"]),
+    ("-x86_64.app.tar.gz", ["darwin-x86_64-app", "darwin-x86_64"]),
     (".AppImage", ["linux-x86_64-appimage", "linux-x86_64"]),
     (".deb", ["linux-x86_64-deb"]),
     ("-setup.exe", ["windows-x86_64-nsis", "windows-x86_64"]),

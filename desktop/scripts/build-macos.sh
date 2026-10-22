@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Build VoiceCut.app and its disk image for Apple Silicon Macs.
+# Build VoiceCut.app and its disk image for Macs, as a universal app: Apple
+# Silicon and Intel, each installing its own engine (desktop/runtime).
 #
 #   desktop/scripts/build-macos.sh
 #
-# Writes desktop/build/VoiceCut-<version>-arm64.dmg.  Without an Apple
+# Writes desktop/build/VoiceCut-<version>-universal.dmg.  Without an Apple
 # Developer ID the app is signed ad hoc: it runs on the Mac that built it.
 # With one (see desktop/README.md, "Signing and notarization"):
 #
@@ -18,13 +19,14 @@
 #
 # With TAURI_SIGNING_PRIVATE_KEY (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, if
 # the key has one) it also writes what the app's updater installs:
-# src-tauri/target/release/bundle/macos/VoiceCut.app.tar.gz and its signature
-# (see desktop/README.md, "Updates").
+# src-tauri/target/universal-apple-darwin/release/bundle/macos/VoiceCut.app.tar.gz
+# and its signature (see desktop/README.md, "Updates").
 #
 # VOICECUT_TEST_BUILD=1 builds the end-to-end test variant instead (cargo
 # feature `automation`, see src-tauri/src/automation.rs) and no disk image.
 #
-# Needs: Rust (cargo), Node.js, resvg (cargo install resvg), uv.
+# Needs: Rust (cargo, and rustup for the aarch64-apple-darwin and
+# x86_64-apple-darwin targets), Node.js, resvg (cargo install resvg), uv.
 set -euo pipefail
 
 # A CI run without these secrets gets them empty; empty means not set (an
@@ -43,8 +45,9 @@ BUILD="${DESKTOP}/build"
 UV="${UV:-$(command -v uv || echo "${HOME}/Library/Python/3.9/bin/uv")}"
 VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
   "${DESKTOP}/src-tauri/tauri.conf.json")"
-DMG="${BUILD}/VoiceCut-${VERSION}-arm64.dmg"
-APP="${DESKTOP}/src-tauri/target/release/bundle/macos/VoiceCut.app"
+TARGET=universal-apple-darwin
+DMG="${BUILD}/VoiceCut-${VERSION}-universal.dmg"
+APP="${DESKTOP}/src-tauri/target/${TARGET}/release/bundle/macos/VoiceCut.app"
 IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
 # The updater's package needs the signing key; without it there is none.
 UPDATER=()
@@ -71,7 +74,7 @@ fi
 npm run build --prefix "${ROOT}/frontend"
 
 step "Staging VoiceCut's runtime"
-python3 "${DESKTOP}/scripts/stage_runtime.py" --platform macos-aarch64
+python3 "${DESKTOP}/scripts/stage_runtime.py" --platform macos-aarch64 --platform macos-x86_64
 
 step "Rendering the icons"
 "${DESKTOP}/scripts/make-icons.sh"
@@ -80,17 +83,20 @@ step "Building VoiceCut.app"
 if [[ ! -d "${DESKTOP}/node_modules" ]]; then
   npm ci --prefix "${DESKTOP}" --no-audit --no-fund
 fi
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
 if [[ -n "${VOICECUT_TEST_BUILD:-}" ]]; then
   # Its own identifier: the Finder and Launch Services must not mistake it for
   # the VoiceCut you use and send it your documents.
-  (cd "${DESKTOP}" && npx tauri build --bundles app --features automation \
-    --config src-tauri/tauri.test.conf.json ${UPDATER[@]+"${UPDATER[@]}"})
+  (cd "${DESKTOP}" && npx tauri build --target "${TARGET}" --bundles app \
+    --features automation --config src-tauri/tauri.test.conf.json ${UPDATER[@]+"${UPDATER[@]}"})
   codesign --verify --deep --strict "${APP}"
   echo "test build: ${APP}"
   exit 0
 fi
-(cd "${DESKTOP}" && npx tauri build --bundles app ${UPDATER[@]+"${UPDATER[@]}"})
+(cd "${DESKTOP}" && npx tauri build --target "${TARGET}" --bundles app \
+  ${UPDATER[@]+"${UPDATER[@]}"})
 codesign --verify --deep --strict --verbose=2 "${APP}"
+lipo "${APP}/Contents/MacOS/voicecut-desktop" -verify_arch arm64 x86_64
 
 step "Building the disk image"
 rm -f "${DMG}"

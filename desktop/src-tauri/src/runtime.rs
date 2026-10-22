@@ -9,9 +9,11 @@
 //! every finished step, so a new app version updates only what changed and a
 //! failed setup resumes at the step that failed.
 //!
-//! macOS gets Whisper on MLX in a second environment; Linux and Windows run
-//! faster-whisper in the main one, plus NVIDIA's CUDA libraries when an NVIDIA
-//! GPU is present.
+//! Apple Silicon gets Whisper on MLX in a second environment; Intel Macs,
+//! Linux and Windows run faster-whisper in the main one, plus NVIDIA's CUDA
+//! libraries when an NVIDIA GPU is present.  PyPI has no PyTorch for Intel
+//! Macs, so there the main environment starts as a conda environment with
+//! PyTorch from conda-forge (`main_base`) and takes the rest from its lock.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -81,6 +83,9 @@ pub struct Spec {
     pub micromamba: Download,
     pub python: Pythons,
     pub requirements: Requirements,
+    /// An explicit conda lock the main environment is created from, before
+    /// its Python lock is installed into it (Intel Macs).
+    pub main_base: Option<String>,
     pub mfa: Mfa,
     pub respiro: Respiro,
     pub space: Space,
@@ -97,6 +102,8 @@ struct Platform {
     uv: Download,
     micromamba: Download,
     requirements: Requirements,
+    #[serde(default)]
+    main_base: Option<String>,
     mfa_lock: String,
     space: Space,
 }
@@ -112,6 +119,8 @@ struct RawSpec {
 /// This system's key in `runtime.json`.
 pub const PLATFORM: &str = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
     "macos-aarch64"
+} else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+    "macos-x86_64"
 } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
     "linux-x86_64"
 } else if cfg!(all(windows, target_arch = "x86_64")) {
@@ -217,7 +226,7 @@ impl Step {
         match self {
             Step::Tools => "uv and micromamba",
             Step::Python => {
-                if cfg!(target_os = "macos") {
+                if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
                     "Python 3.12 and 3.11"
                 } else {
                     "Python 3.12"
@@ -225,7 +234,7 @@ impl Step {
             }
             Step::Source => "the editor and the Voice Cut pipeline",
             Step::MainEnv => {
-                if cfg!(target_os = "macos") {
+                if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
                     "PyTorch, WhisperX, Silero VAD, Gemini and OpenAI clients"
                 } else {
                     "PyTorch, WhisperX, faster-whisper, Gemini and OpenAI clients"
@@ -299,6 +308,7 @@ impl Bundle {
             micromamba: platform.micromamba,
             python,
             requirements: platform.requirements,
+            main_base: platform.main_base,
             mfa: Mfa {
                 version: mfa.version,
                 lock: platform.mfa_lock,
@@ -326,6 +336,8 @@ impl Bundle {
     /// Whether the step belongs to this computer's runtime.
     pub fn applies(&self, step: Step) -> bool {
         match step {
+            // A main environment from a conda lock brings its own Python.
+            Step::Python => self.spec.main_base.is_none() || self.spec.requirements.mlx.is_some(),
             Step::MlxEnv => self.spec.requirements.mlx.is_some(),
             Step::Gpu => self.spec.requirements.cuda.is_some() && nvidia_gpu(),
             _ => true,
@@ -348,11 +360,19 @@ impl Bundle {
                 spec.uv.version, spec.python.main, spec.python.mlx
             ),
             Step::Source => self.source_sha256.clone(),
-            Step::MainEnv => format!(
-                "{} {}",
-                spec.python.main,
-                self.file_hash(&spec.requirements.main)
-            ),
+            Step::MainEnv => match &spec.main_base {
+                None => format!(
+                    "{} {}",
+                    spec.python.main,
+                    self.file_hash(&spec.requirements.main)
+                ),
+                Some(base) => format!(
+                    "{} {} {}",
+                    spec.python.main,
+                    self.file_hash(base),
+                    self.file_hash(&spec.requirements.main)
+                ),
+            },
             Step::MlxEnv => format!(
                 "{} {}",
                 spec.python.mlx,

@@ -6,7 +6,8 @@ the file manager or Explorer.
 
 | | Installer | Engine and data | Whisper |
 |---|---|---|---|
-| macOS 14+, Apple Silicon | `VoiceCut-<v>-arm64.dmg` | `~/Library/Application Support/VoiceCut` | MLX (GPU) |
+| macOS 14+, Apple Silicon | `VoiceCut-<v>-universal.dmg` | `~/Library/Application Support/VoiceCut` | MLX (GPU) |
+| macOS 14+, Intel | the same | the same | faster-whisper on the CPU |
 | Linux x86_64, glibc 2.35+ | `VoiceCut-<v>-x86_64.AppImage` or `-amd64.deb` | `$XDG_DATA_HOME/voicecut` (`~/.local/share/voicecut`) | faster-whisper: CUDA on NVIDIA, else CPU |
 | Windows 10/11 x64 | `VoiceCut-<v>-x64-setup.exe` | `%LOCALAPPDATA%\com.vectozavr.voicecut` | faster-whisper: CUDA on NVIDIA, else CPU |
 
@@ -27,15 +28,16 @@ VoiceCut (Tauri, ~10 MB)                    data directory (see above)
   itself, `macos.rs` the Dock.
 * `ui/` — the app's own pages: first-run setup, starting, errors.
 * `runtime/` — what setup installs, pinned per system: tool versions and
-  checksums (`runtime.json`), hashed Python locks, explicit conda locks of MFA.
+  checksums (`runtime.json`), hashed Python locks, explicit conda locks of MFA
+  (and of PyTorch for Intel Macs).
 * `icons/` — the app icon, the document icon and the disk-image background,
   drawn by hand as SVG; `scripts/make-icons.sh` renders them (the rendered
   icons are committed, so only macOS builds need it).
 * `linux/`, `windows/` — the menu entry, the MIME type and the installer hook
   that give `.vc` documents their icon.
-* `scripts/` — `build-macos.sh` (the `.dmg`), `stage_runtime.py` (what every
-  build bundles), `lock-runtime.sh` (the locks), `updater_manifest.py` (a
-  release's `latest.json`).
+* `scripts/` — `build-macos.sh` (the universal `.dmg`), `stage_runtime.py`
+  (what every build bundles), `lock-runtime.sh` (the locks),
+  `updater_manifest.py` (a release's `latest.json`).
 * `tests/` — the end-to-end test of a built app (`e2e.py`) and the pipeline
   check it runs inside the installed engine (`pipeline_smoke.py`).
 
@@ -66,12 +68,13 @@ On first launch the app shows what it will install and asks to go ahead.
 Setup does what `scripts/install.sh` does in a checkout, pinned and verified:
 
 1. uv and micromamba, checked against their SHA-256;
-2. CPython through uv (3.12; on macOS also 3.11 for MLX);
+2. CPython through uv (3.12; on Apple Silicon also 3.11 for MLX; an Intel
+   Mac's Python comes with its PyTorch, see "Intel Macs");
 3. VoiceCut's source and built editor, from the app;
 4. `.venv` (editor, pipeline, PyTorch, WhisperX, planners) from the
-   system's hashed lock; on Linux and Windows it also holds faster-whisper
-   and PyTorch for the CPU;
-5. macOS: `.venv-mlx` (MLX Whisper, local planners);
+   system's hashed lock; on Intel Macs, Linux and Windows it also holds
+   faster-whisper and PyTorch for the CPU;
+5. Apple Silicon: `.venv-mlx` (MLX Whisper, local planners);
    Linux and Windows with an NVIDIA GPU (`nvidia-smi` finds one): the CUDA 12
    cuBLAS and cuDNN libraries faster-whisper needs, from
    `requirements-cuda-*.txt`;
@@ -81,7 +84,7 @@ Setup does what `scripts/install.sh` does in a checkout, pinned and verified:
 7. Respiro-en (breath detection), checked against its SHA-256;
 8. a check that every part starts, and removal of the downloaded archives.
 
-About 1.3–1.6 GB is downloaded and 3.5–4.3 GB stays on disk (the CUDA
+About 0.8–1.6 GB is downloaded and 3.4–4.3 GB stays on disk (the CUDA
 libraries add about 1 GB). Each step records a fingerprint of its pins in
 `setup.json`: a failed or cancelled setup resumes at the step that did not
 finish ("Try Again"), and a new app version updates only what changed (a new
@@ -98,7 +101,7 @@ remove the engine too); `.deb` — remove the package; AppImage — delete the
 file, `~/.local/share/applications/voicecut-appimage.desktop` and
 `~/.local/share/mime/packages/voicecut.xml`.
 
-## Whisper on Linux and Windows
+## Whisper on Intel Macs, Linux and Windows
 
 MLX exists only on Apple Silicon. Elsewhere VoiceCut transcribes and recovers
 untranscribed speech with faster-whisper (CTranslate2) and the same
@@ -111,6 +114,35 @@ on. On an M1 Max CPU it ran at about 0.9× real time (a 101 s take in 92 s,
 against 27 s on MLX; 7.5 minutes in 6.4 minutes); expect similar on a recent
 desktop CPU and many times faster on a GPU. The pipeline's `--whisper-engine`
 chooses an engine by hand.
+
+## Intel Macs
+
+The disk image holds one universal app. On an Intel Mac it installs an engine
+of its own (`macos-x86_64` in `runtime.json`) with Whisper on faster-whisper,
+as on Linux. What differs is where PyTorch comes from: PyPI has no macOS
+x86_64 wheels of PyTorch or torchaudio after 2.2.2, of numba after 0.62 or of
+llvmlite after 0.45, and WhisperX 3.8.6 and pyannote.audio 4 need PyTorch
+2.8. conda-forge still builds all of them, so setup creates `.venv` as a
+conda environment from `runtime/main-osx-64.txt` — Python 3.12.15, PyTorch
+2.8.0 (the OpenBLAS build), torchaudio 2.8.0, numba and llvmlite in the
+versions the other locks pin — and installs `requirements-macos-x86_64.txt`,
+everything else, hash-checked from PyPI, into it with `uv pip install
+--no-deps`. Packages both bring are pinned to the same versions, and uv keeps
+conda's copies. A new Python lock alone keeps the conda part. Otherwise:
+
+* onnxruntime and cryptography are at 1.23.2 and 48.0.1, their last versions
+  with Intel wheels;
+* conda-forge's torchaudio brings torchcodec 0.8.1 (WhisperX asks for one
+  below 0.8) and there is no torchvision; VoiceCut uses neither, and these
+  are the two complaints of `uv pip check`;
+* numpy comes from PyPI, as everywhere: conda's numpy calls MKL, which
+  breaks once CTranslate2 is loaded;
+* CTranslate2's wheel carries its own MKL and Intel OpenMP, so PyTorch cannot
+  compute in a process that loaded CTranslate2 (MKL errors with conda's MKL
+  build of PyTorch, a crash with the OpenBLAS one). The pipeline runs Whisper
+  in processes of its own, where CTranslate2 imports PyTorch but never
+  computes with it; `tests/test_transcribe_mlx.py` checks that the stages
+  computing with PyTorch never load CTranslate2.
 
 ## Documents
 
@@ -215,12 +247,13 @@ download the next version by hand, with a new public key inside.
 With the key, `tauri build --config src-tauri/tauri.updater.conf.json` (what
 `build-macos.sh` and `desktop.yml` add) writes a signature next to every
 installer and, on macOS, `VoiceCut.app.tar.gz`. `release.yml` attaches the
-installers, the macOS archive and `latest.json` (`scripts/updater_manifest.py`,
-with the signatures inside) to the draft. Once the draft is published,
-`releases/latest/download/latest.json` serves its manifest and every
-installed VoiceCut offers the update. Each release needs a higher version in
-`src-tauri/tauri.conf.json`: the app installs only a later version (a
-pre-release only over a pre-release).
+installers, the macOS archive (`-universal.app.tar.gz`, which `latest.json`
+lists for both `darwin-aarch64` and `darwin-x86_64`) and `latest.json`
+(`scripts/updater_manifest.py`, with the signatures inside) to the draft.
+Once the draft is published, `releases/latest/download/latest.json` serves
+its manifest and every installed VoiceCut offers the update. Each release
+needs a higher version in `src-tauri/tauri.conf.json`: the app installs only
+a later version (a pre-release only over a pre-release).
 
 ### Trying an update locally
 
@@ -231,13 +264,18 @@ the real app), and `tauri.test.conf.json` lets it use plain HTTP. On a Mac:
 ```bash
 # The old version, somewhere writable.
 VOICECUT_TEST_BUILD=1 desktop/scripts/build-macos.sh
-ditto desktop/src-tauri/target/release/bundle/macos/VoiceCut.app ~/vc-update/VoiceCut.app
-# A newer one, signed, and its manifest.
+ditto desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/VoiceCut.app \
+  ~/vc-update/VoiceCut.app
+# A newer one for this Mac (-x86_64 instead of -arm64 on an Intel Mac),
+# signed, and its manifest.
 (cd desktop && TAURI_SIGNING_PRIVATE_KEY=~/.tauri/voicecut-updater.key TAURI_SIGNING_PRIVATE_KEY_PASSWORD= \
   npx tauri build --bundles app --features automation --config src-tauri/tauri.test.conf.json \
   --config src-tauri/tauri.updater.conf.json --config '{"version": "0.2.1"}')
 mkdir ~/vc-update/release
-cp desktop/src-tauri/target/release/bundle/macos/VoiceCut.app.tar.gz{,.sig} ~/vc-update/release/
+for file in VoiceCut.app.tar.gz{,.sig}; do
+  cp "desktop/src-tauri/target/release/bundle/macos/${file}" \
+    ~/vc-update/release/"${file/VoiceCut/VoiceCut-0.2.1-arm64}"
+done
 python3 desktop/scripts/updater_manifest.py ~/vc-update/release --version 0.2.1 \
   --base-url http://127.0.0.1:8000
 python3 -m http.server 8000 --directory ~/vc-update/release &
@@ -271,7 +309,7 @@ with `scripts/install.sh` instead of the installed runtime (no setup;
 
 ```bash
 VOICECUT_RUNTIME="$PWD" VOICECUT_DATA_DIR=/tmp/voicecut-dev \
-  desktop/src-tauri/target/release/bundle/macos/VoiceCut.app/Contents/MacOS/voicecut-desktop
+  desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/VoiceCut.app/Contents/MacOS/voicecut-desktop
 ```
 
 Built with the cargo feature `automation` (`VOICECUT_TEST_BUILD=1
@@ -292,7 +330,9 @@ Everything needs Rust (`rustup`), Node.js 20+ and Python 3.
 
 * **macOS**: also uv, resvg (`cargo install resvg`) and the Xcode command
   line tools. `desktop/scripts/build-macos.sh` writes
-  `desktop/build/VoiceCut-<version>-arm64.dmg`.
+  `desktop/build/VoiceCut-<version>-universal.dmg`, one app for Apple Silicon
+  and Intel Macs (it adds the `aarch64-apple-darwin` and
+  `x86_64-apple-darwin` Rust targets).
 * **Linux** (build on Ubuntu 22.04 or Debian 12 to reach the most systems):
   the WebKitGTK, GStreamer and other packages listed in
   `.github/actions/prepare-desktop/action.yml`. **Windows**: nothing more
@@ -309,22 +349,24 @@ Everything needs Rust (`rustup`), Node.js 20+ and Python 3.
   what differs from macOS).
 
 The locks are refreshed with `desktop/scripts/lock-runtime.sh` (see its
-header); it solves the Linux and Windows locks from a Mac.
+header); it solves the Intel Mac, Linux and Windows locks from a Mac.
 
 ## Continuous integration and releases
 
-* `.github/workflows/ci.yml` — Python tests on macOS, Linux and Windows, each
-  installed from the lock the app installs; the editor frontend's checks.
+* `.github/workflows/ci.yml` — Python tests on macOS (Apple Silicon and
+  Intel), Linux and Windows, each installed from the locks the app installs;
+  the editor frontend's checks.
 * `.github/workflows/desktop.yml` — Clippy and the Rust tests on all three
   systems, then the installers as the run's artifacts (with the updater's
   signatures when the `TAURI_SIGNING_PRIVATE_KEY` secret is set); on Linux
   the `.deb` is installed and its menu entry and file type checked.
 * `.github/workflows/e2e.yml` — a test build installed like a user would (the
-  AppImage under Xvfb, the Windows installer silently), set up from nothing,
-  Whisper and MFA run in the engine it installed, a project created, closed,
-  reopened from its launcher and handed over by a second VoiceCut, then quit.
-  Started by hand with "full" and a `GEMINI_API_KEY` secret, it runs the
-  whole Voice Cut too.
+  AppImage under Xvfb, the Windows installer silently, the app on an Intel
+  Mac runner, since GitHub's Apple Silicon runners have no GPU for MLX), set
+  up from nothing, Whisper and MFA run in the engine it installed, a project
+  created, closed, reopened from its launcher and handed over by a second
+  VoiceCut, then quit. Started by hand with "full" and a `GEMINI_API_KEY`
+  secret, it runs the whole Voice Cut too.
 * `.github/workflows/release.yml` — on a `v<version>` tag or by hand: builds
   all installers and attaches them to a **draft** GitHub Release with
   `RELEASE_NOTES.md`, plus `latest.json` and the macOS `.app.tar.gz` for the

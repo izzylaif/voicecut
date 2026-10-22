@@ -2,8 +2,9 @@
 //!
 //! The steps mirror `scripts/install.sh` with every version pinned: uv and
 //! micromamba (checked against their SHA-256), CPython builds through uv, the
-//! two Python environments from hashed lock files, the MFA environment from
-//! an explicit conda lock, Respiro-en, then a check that every part starts.
+//! Python environments from hashed lock files (on Intel Macs the main one over
+//! an explicit conda lock with PyTorch), the MFA environment from an explicit
+//! conda lock, Respiro-en, then a check that every part starts.
 //! A step that finishes is recorded in `setup.json`; a failed or cancelled
 //! setup resumes at the step that did not finish.
 
@@ -25,6 +26,11 @@ use crate::runtime::{Bundle, Installed, Step};
 
 const LOG_TAIL: usize = 14;
 const DOWNLOAD_ATTEMPTS: u32 = 3;
+/// The share of the main environment's step that creating its conda base
+/// takes, where it has one (Intel Macs); uv installs the rest.
+const BASE_SHARE: f64 = 0.45;
+/// In a main environment created from a conda lock: that lock's SHA-256.
+const BASE_MARKER: &str = "voicecut-base.sha256";
 /// Environment variables setup tools keep: identity, locale and proxies.
 const KEPT_VARIABLES: &[&str] = &[
     "HOME",
@@ -192,6 +198,8 @@ struct Tally {
     downloaded: usize,
     installed: usize,
     linked: usize,
+    /// Where uv's share of the step starts (after a conda base).
+    start: f64,
     /// Never move the bar back when a tool announces more work.
     shown: f64,
 }
@@ -256,24 +264,37 @@ impl Run<'_> {
         let mut tally = self.tally.lock().unwrap();
         let fraction = match step {
             Step::MainEnv | Step::MlxEnv => {
-                if let Some(rest) = text.strip_prefix("Resolved ") {
+                let start = tally.start;
+                let share = |fraction: f64| start + (1.0 - start) * fraction;
+                if text.starts_with("Linking ") {
+                    // micromamba creating the environment's conda base.
+                    tally.linked += 1;
+                    Some(
+                        0.05 + (BASE_SHARE - 0.05) * tally.linked as f64
+                            / tally.packages.max(1) as f64,
+                    )
+                } else if let Some(rest) = text.strip_prefix("Resolved ") {
                     tally.packages = rest
                         .split_whitespace()
                         .next()
                         .and_then(|n| n.parse().ok())
                         .unwrap_or(0);
-                    Some(0.08)
+                    Some(share(0.08))
                 } else if text.starts_with("Downloading ") {
                     tally.announced += 1;
                     None
                 } else if text.starts_with("Downloaded ") {
                     tally.downloaded += 1;
-                    Some(0.08 + 0.72 * tally.downloaded as f64 / tally.announced.max(1) as f64)
+                    Some(share(
+                        0.08 + 0.72 * tally.downloaded as f64 / tally.announced.max(1) as f64,
+                    ))
                 } else if text.starts_with("Prepared ") {
-                    Some(0.82)
+                    Some(share(0.82))
                 } else if text.starts_with("+ ") {
                     tally.installed += 1;
-                    Some(0.84 + 0.1 * tally.installed as f64 / tally.packages.max(1) as f64)
+                    Some(share(
+                        0.84 + 0.1 * tally.installed as f64 / tally.packages.max(1) as f64,
+                    ))
                 } else {
                     None
                 }
@@ -541,8 +562,10 @@ impl Run<'_> {
             "--no-bin".as_ref(),
             "--install-dir".as_ref(),
             install_dir.as_os_str(),
-            python.main.as_ref(),
         ];
+        if self.bundle.spec.main_base.is_none() {
+            args.push(python.main.as_ref());
+        }
         if self.bundle.applies(Step::MlxEnv) {
             args.push(python.mlx.as_ref());
         }
@@ -569,35 +592,48 @@ impl Run<'_> {
         venv: &Path,
         version: &str,
         requirements: &str,
+        base: Option<&str>,
     ) -> Result<(), String> {
         let python = self.paths.venv_python(venv);
-        if !venv_has_version(venv, version) {
-            if venv.exists() {
-                fs::remove_dir_all(venv).map_err(|error| error.to_string())?;
+        if let Some(base) = base {
+            self.conda_base(venv, base)?;
+        } else {
+            if !venv_has_version(venv, version) {
+                if venv.exists() {
+                    fs::remove_dir_all(venv).map_err(|error| error.to_string())?;
+                }
+                self.uv(&[
+                    "venv".as_ref(),
+                    "--python".as_ref(),
+                    version.as_ref(),
+                    venv.as_os_str(),
+                ])?;
             }
-            self.uv(&[
-                "venv".as_ref(),
-                "--python".as_ref(),
-                version.as_ref(),
-                venv.as_os_str(),
-            ])?;
+            self.fraction(0.05);
         }
-        self.fraction(0.05);
         let lock = self.bundle.file(requirements);
         // The Linux lock takes PyTorch from its CPU index and everything else
         // from PyPI; every package is checked against its hash, so take each
-        // from whichever index has the pinned version.
-        self.uv(&[
+        // from whichever index has the pinned version.  Over a conda base,
+        // `install` adds the lock to what conda installed (`sync` would remove
+        // that), leaving the packages conda installed in the version the lock
+        // pins; without dependencies, since what conda brings instead of PyPI
+        // (PyTorch, numba) is not in the lock.
+        let mut args: Vec<&std::ffi::OsStr> = vec![
             "pip".as_ref(),
-            "sync".as_ref(),
+            if base.is_some() { "install" } else { "sync" }.as_ref(),
             "--python".as_ref(),
             python.as_os_str(),
             "--index-strategy".as_ref(),
             "unsafe-best-match".as_ref(),
             "--require-hashes".as_ref(),
             "--compile-bytecode".as_ref(),
-            lock.as_os_str(),
-        ])?;
+        ];
+        if base.is_some() {
+            args.extend(["--no-deps", "--requirement"].map(std::ffi::OsStr::new));
+        }
+        args.push(lock.as_os_str());
+        self.uv(&args)?;
         self.fraction(0.9);
         // VoiceCut itself, editable like scripts/install.sh, so `voicecut` and
         // `voicecut-editor` exist and run the source in runtime/src.
@@ -613,6 +649,45 @@ impl Run<'_> {
         ])
     }
 
+    /// Create `venv` as a conda environment from the explicit lock `base`,
+    /// unless it already is one from the same lock (when only the Python
+    /// lock changed, or setup failed after this part).
+    fn conda_base(&self, venv: &Path, base: &str) -> Result<(), String> {
+        let lock = self.bundle.file(base);
+        let wanted = file_sha256(&lock).ok_or_else(|| format!("Cannot read {base}"))?;
+        let marker = venv.join(BASE_MARKER);
+        let python = self.paths.venv_python(venv);
+        if python.exists() && fs::read_to_string(&marker).is_ok_and(|text| text.trim() == wanted) {
+            return Ok(());
+        }
+        if venv.exists() {
+            fs::remove_dir_all(venv).map_err(|error| error.to_string())?;
+        }
+        fs::create_dir_all(self.paths.mamba_root()).map_err(|error| error.to_string())?;
+        self.tally.lock().unwrap().packages = explicit_packages(&lock);
+        self.run(
+            &self.paths.micromamba(),
+            &[
+                "create".as_ref(),
+                "--no-rc".as_ref(),
+                "--yes".as_ref(),
+                "--prefix".as_ref(),
+                venv.as_os_str(),
+                "--file".as_ref(),
+                lock.as_os_str(),
+            ],
+            &[],
+        )?;
+        fs::write(&marker, format!("{wanted}\n")).map_err(|error| error.to_string())?;
+        // uv's share of the step comes after.
+        let mut tally = self.tally.lock().unwrap();
+        tally.start = BASE_SHARE;
+        tally.shown = tally.shown.max(BASE_SHARE);
+        drop(tally);
+        self.fraction(BASE_SHARE);
+        Ok(())
+    }
+
     fn aligner(&self) -> Result<(), String> {
         let paths = self.paths;
         let mfa = &self.bundle.spec.mfa;
@@ -622,14 +697,7 @@ impl Run<'_> {
         }
         fs::create_dir_all(paths.mamba_root()).map_err(|error| error.to_string())?;
         let lock = self.bundle.file(&mfa.lock);
-        // An explicit lock lists one package URL per line.
-        self.tally.lock().unwrap().packages = fs::read_to_string(&lock)
-            .map(|text| {
-                text.lines()
-                    .filter(|line| line.starts_with("https://"))
-                    .count()
-            })
-            .unwrap_or(0);
+        self.tally.lock().unwrap().packages = explicit_packages(&lock);
         self.fraction(0.05);
         self.run(
             &paths.micromamba(),
@@ -797,13 +865,17 @@ impl Run<'_> {
             Step::Tools => self.tools(),
             Step::Python => self.python(),
             Step::Source => self.source(),
-            Step::MainEnv => {
-                self.environment_step(&paths.venv(), &spec.python.main, &spec.requirements.main)
-            }
+            Step::MainEnv => self.environment_step(
+                &paths.venv(),
+                &spec.python.main,
+                &spec.requirements.main,
+                spec.main_base.as_deref(),
+            ),
             Step::MlxEnv => self.environment_step(
                 &paths.mlx_venv(),
                 &spec.python.mlx,
                 spec.requirements.mlx.as_deref().unwrap_or_default(),
+                None,
             ),
             Step::Gpu => self.gpu(),
             Step::Aligner => self.aligner(),
@@ -978,6 +1050,17 @@ fn copy_dir(source: &Path, destination: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// How many packages an explicit conda lock lists (one URL per line).
+fn explicit_packages(lock: &Path) -> usize {
+    fs::read_to_string(lock)
+        .map(|text| {
+            text.lines()
+                .filter(|line| line.starts_with("https://"))
+                .count()
+        })
+        .unwrap_or(0)
 }
 
 fn file_sha256(path: &Path) -> Option<String> {

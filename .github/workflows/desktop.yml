@@ -1,7 +1,8 @@
 name: Desktop installers
 
-# Builds VoiceCut for macOS (.dmg), Linux (.AppImage and .deb) and Windows
-# (setup .exe) and uploads them as the run's artifacts.  The release workflow
+# Builds VoiceCut for macOS (a universal .dmg, for Apple Silicon and Intel),
+# Linux (.AppImage and .deb) and Windows (setup .exe) and uploads them as the
+# run's artifacts.  The release workflow
 # reuses it.  With the APPLE_* secrets (see desktop/README.md) the macOS app
 # is signed with a Developer ID and notarized; without them it is signed ad
 # hoc.  With the TAURI_SIGNING_PRIVATE_KEY secret every installer also gets
@@ -140,9 +141,10 @@ jobs:
           }
           case "${RUNNER_OS}" in
             macOS)
-              cp "desktop/build/VoiceCut-${version}-arm64.dmg" installers/
-              if [[ -f "${bundle}/macos/VoiceCut.app.tar.gz.sig" ]]; then
-                collect "${bundle}/macos/VoiceCut.app.tar.gz" "VoiceCut-${version}-arm64.app.tar.gz"
+              cp "desktop/build/VoiceCut-${version}-universal.dmg" installers/
+              macos=desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos
+              if [[ -f "${macos}/VoiceCut.app.tar.gz.sig" ]]; then
+                collect "${macos}/VoiceCut.app.tar.gz" "VoiceCut-${version}-universal.app.tar.gz"
               fi ;;
             Linux)
               collect "$(ls "${bundle}"/appimage/*.AppImage)" "VoiceCut-${version}-x86_64.AppImage"

@@ -4,7 +4,9 @@ name: End-to-end
 # user would, lets it set itself up from nothing, runs Whisper and MFA in the
 # runtime it installed, and opens a project.  See desktop/tests/e2e.py.  The
 # whole Voice Cut runs only when started by hand with "full" and the
-# GEMINI_API_KEY secret set.
+# GEMINI_API_KEY secret set.  macOS runs on an Intel runner, with the Intel
+# Mac's engine (PyTorch from conda-forge, Whisper on the CPU): GitHub's Apple
+# Silicon runners have no GPU for MLX.
 
 on:
   push:
@@ -46,6 +48,9 @@ jobs:
           - name: Windows
             os: windows-2025
             bundle: nsis
+          - name: macOS Intel
+            os: macos-15-intel
+            bundle: app
     defaults:
       run:
         shell: bash
@@ -89,6 +94,13 @@ jobs:
             exit 1
           }
           "VOICECUT_APP=$app" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Find it (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          app="${PWD}/desktop/src-tauri/target/release/bundle/macos/VoiceCut.app/Contents/MacOS/voicecut-desktop"
+          lipo -archs "${app}"
+          echo "VOICECUT_APP=${app}" >>"${GITHUB_ENV}"
 
       - name: Find it (Linux)
         if: runner.os == 'Linux'
