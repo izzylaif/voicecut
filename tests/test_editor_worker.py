@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -292,3 +293,49 @@ def test_worker_module_frames_events_on_stdout(tmp_path: Path) -> None:
     event = json.loads(completed.stdout.strip())
     assert event["type"] == "error"
     assert "argv" in event["message"]
+
+
+CONTROLLED_SCRIPT = """
+import signal, subprocess, sys, time
+from voicecut.editor import worker
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(3))
+worker.cancel_on_stdin()
+import numpy  # a DLL load, with its C runtime
+subprocess.run([sys.executable, "-c", "pass"], check=True, timeout=60)
+print("ready", flush=True)
+while True:
+    time.sleep(0.05)
+"""
+
+
+@pytest.mark.parametrize("ending", ["cancel", "closed pipe"])
+def test_the_control_pipe_lets_the_worker_run_and_stops_it(
+    tmp_path: Path, ending: str
+) -> None:
+    """While the worker watches the editor's pipe it still loads DLLs and
+    starts children (on Windows a blocking read of the pipe hung both), and
+    "cancel" or the end of the pipe stops it."""
+
+    script = tmp_path / "controlled.py"
+    script.write_text(CONTROLLED_SCRIPT, encoding="utf-8")
+    process = subprocess.Popen(
+        [sys.executable, str(script)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    timer = threading.Timer(120, process.kill)
+    timer.start()
+    try:
+        assert process.stdout.readline().strip() == "ready"
+        if ending == "cancel":
+            process.stdin.write("cancel\n")
+            process.stdin.flush()
+        else:
+            process.stdin.close()
+        assert process.wait(timeout=60) == 3
+    finally:
+        timer.cancel()
+        if process.poll() is None:
+            process.kill()

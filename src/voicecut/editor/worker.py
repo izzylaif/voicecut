@@ -17,7 +17,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import IO, Any
 
@@ -38,6 +38,7 @@ STAGE_STATUSES = frozenset({"started", "completed", "cached", "skipped", "failed
 CANCELLED_EXIT_STATUS = 130
 # Set by the editor: "cancel" on standard input (or its end) stops the run.
 STDIN_CONTROL_ENV = "VOICECUT_WORKER_STDIN_CONTROL"
+STDIN_POLL_SECONDS = 0.2
 
 
 class WorkerCancelled(BaseException):
@@ -134,6 +135,8 @@ def make_streaming_runner(
         kwargs.pop("capture_output", None)
         for key, value in processes.own_group().items():
             kwargs.setdefault(key, value)
+        # The editor's control pipe is the worker's alone.
+        kwargs.setdefault("stdin", subprocess.DEVNULL)
         stderr_lines: list[str] = []
 
         def on_stdout(line: str) -> None:
@@ -249,11 +252,54 @@ def request_cancel() -> None:
         os.kill(os.getpid(), signal.SIGTERM)
 
 
+def _control_lines() -> Iterator[str]:
+    """The lines the editor writes on standard input, until it closes the pipe.
+
+    Windows lets nothing else use a pipe while one thread waits in a blocking
+    read of it: the C runtime of a DLL being loaded (numpy's) or of a child
+    process inheriting the pipe asks its file type and waits too, forever.  So
+    there the pipe is polled with ``PeekNamedPipe`` and read only when it holds
+    data; a failed peek means that the editor closed its end.
+    """
+
+    if not processes.WINDOWS:
+        yield from sys.stdin
+        return
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    peek = ctypes.WinDLL("kernel32").PeekNamedPipe
+    peek.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        ctypes.POINTER(wintypes.DWORD),
+        ctypes.c_void_p,
+    ]
+    peek.restype = wintypes.BOOL
+    descriptor = sys.stdin.fileno()
+    handle = msvcrt.get_osfhandle(descriptor)
+    available = wintypes.DWORD()
+    pending = b""
+    while peek(handle, None, 0, None, ctypes.byref(available), None):
+        if not available.value:
+            time.sleep(STDIN_POLL_SECONDS)
+            continue
+        data = os.read(descriptor, available.value)
+        if not data:
+            return
+        *lines, pending = (pending + data).split(b"\n")
+        for line in lines:
+            yield line.decode("utf-8", "replace") + "\n"
+
+
 def cancel_on_stdin() -> threading.Thread:
     """Stop when the editor writes "cancel" or goes away (standard input ends)."""
 
     def watch() -> None:
-        for line in sys.stdin:
+        for line in _control_lines():
             if line.strip() == "cancel":
                 break
         request_cancel()
