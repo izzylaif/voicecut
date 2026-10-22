@@ -2,308 +2,625 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#fbfbfd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0c0e" media="(prefers-color-scheme: dark)" />
     <meta
       name="description"
-      content="VoiceCut automatically edits retake-heavy narration while preserving the speaker's real voice."
-    />
-    <meta name="theme-color" content="#ffffff" />
-    <meta
-      property="og:title"
-      content="VoiceCut — automatic narration editing for content creators"
-    />
-    <meta
-      property="og:description"
-      content="Remove false starts, retakes, and recording directions from audio or video while preserving the original voice."
+      content="VoiceCut is a free app for macOS, Windows and Linux that edits narration for you: it keeps the best take of every line, removes false starts and retakes, fixes the pauses, and lets you fine-tune every cut on a timeline."
     />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://vectozavr.github.io/voicecut/" />
+    <meta property="og:title" content="VoiceCut — free narration editor for Mac, Windows and Linux" />
     <meta
-      property="og:url"
-      content="https://vectozavr.github.io/voicecut/"
+      property="og:description"
+      content="Record with all your retakes. Get back one clean take. Free and open source."
     />
-    <meta
-      property="og:image"
-      content="https://vectozavr.github.io/voicecut/assets/video-after.jpg"
-    />
-    <title>VoiceCut — automatic narration editing</title>
-    <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+    <meta property="og:image" content="https://vectozavr.github.io/voicecut/assets/social-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <title>VoiceCut — free narration editor for Mac, Windows and Linux</title>
+    <link rel="icon" href="assets/icon-128.png" type="image/png" sizes="128x128" />
+    <link rel="apple-touch-icon" href="assets/icon-256.png" />
     <link rel="stylesheet" href="styles.css" />
-    <script src="player.js" defer></script>
+    <script src="site.js" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#examples">Skip to the examples</a>
+    <a class="skip-link" href="#main">Skip to content</a>
 
-    <header class="site-header">
-      <a class="brand" href="https://github.com/vectozavr/voicecut">
-        <img
-          class="brand-logo"
-          src="assets/logo.svg"
-          width="36"
-          height="36"
-          alt=""
-        />
-        <span>VoiceCut</span>
-      </a>
-      <nav aria-label="Primary navigation">
-        <a href="#examples">Examples</a>
-        <a href="#how-it-works">How it works</a>
-        <a href="https://github.com/vectozavr/voicecut">GitHub</a>
-      </nav>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="brand" href="#top" aria-label="VoiceCut, back to the top">
+          <img src="assets/icon-128.png" width="28" height="28" alt="" />
+          <span>VoiceCut</span>
+        </a>
+        <nav class="nav-links" aria-label="Sections">
+          <a href="#features">Features</a>
+          <a href="#examples">Examples</a>
+          <a href="#how">How it works</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <div class="nav-end">
+          <a class="nav-github" href="https://github.com/vectozavr/voicecut" aria-label="VoiceCut on GitHub">
+            <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+              />
+            </svg>
+          </a>
+          <a class="button small primary" href="#download">Download</a>
+        </div>
+      </div>
     </header>
 
-    <main>
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <p class="eyebrow">Open-source audio and video editing</p>
-          <h1 id="hero-title">
-            VoiceCut — automatic narration editing for content creators.
-          </h1>
-          <p class="hero-lede">
-            Remove false starts, retakes, corrections, and recording directions
-            from audio or video while preserving the speaker's real voice.
+    <main id="main">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <img class="hero-icon" src="assets/icon.png" width="160" height="160" alt="" />
+        <p class="pill">Free&nbsp;· Open source&nbsp;· macOS, Windows, Linux</p>
+        <h1 id="hero-title">VoiceCut</h1>
+        <p class="hero-title">Record with all your retakes. <br />Get back one clean take.</p>
+        <p class="hero-lede">
+          VoiceCut listens to your narration, keeps the best take of every line, drops false starts,
+          repeats and breaths, and gives every pause a natural length. Then you fine-tune every cut on a
+          timeline and export audio or video.
+        </p>
+        <div class="hero-actions">
+          <a
+            class="button primary large"
+            data-download="primary"
+            href="https://github.com/vectozavr/voicecut/releases/latest"
+          >
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" />
+            </svg>
+            <span data-download-label>Download VoiceCut</span>
+          </a>
+          <p class="download-meta" data-download-meta>Free for macOS, Windows and Linux</p>
+          <p class="download-note" data-download-note hidden></p>
+          <p class="download-other">
+            <a href="#download">All downloads</a>
+            <span aria-hidden="true">·</span>
+            <a href="https://github.com/vectozavr/voicecut">View on GitHub</a>
           </p>
-          <div class="hero-actions">
-            <a class="button button-primary" href="#examples">Explore examples</a>
-            <a
-              class="button button-secondary"
-              href="https://github.com/vectozavr/voicecut"
-              >View on GitHub</a
-            >
-          </div>
         </div>
-        <figure class="hero-visual">
-          <img
-            src="hero-pipeline.svg"
-            width="1600"
-            height="900"
-            decoding="async"
-            alt="VoiceCut pipeline from fragmented source takes through semantic word selection and aligned cut boundaries to one clean audio and video edit"
-          />
+        <figure class="hero-shot">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/editor-dark.webp" />
+            <img
+              src="assets/screenshots/editor-light.webp"
+              width="2400"
+              height="1528"
+              alt="The VoiceCut editor after Voice Cut: a 38-second recording full of retakes became 23.6 seconds of clips on the timeline, with a live caption and the full text"
+              fetchpriority="high"
+            />
+          </picture>
         </figure>
       </section>
 
-      <section class="examples" id="examples" aria-labelledby="examples-title">
-        <div class="section-heading">
-          <p class="eyebrow">Real examples</p>
-          <h2 id="examples-title">Compare the source and final edit</h2>
-          <p>
-            These files were produced by the normal VoiceCut pipeline without
-            manual repair. Starting one player automatically pauses the others.
+      <section class="section features" id="features" aria-labelledby="features-title">
+        <div class="section-head">
+          <p class="eyebrow">What it does</p>
+          <h2 id="features-title">It hears the retakes and keeps the take you meant</h2>
+          <p class="section-lede">
+            The video from the screenshots, word for word. Struck-through words are what Voice Cut removed;
+            nothing was added or regenerated.
           </p>
         </div>
-
-        <div class="audio-examples" id="audio">
-          <article class="demo-card">
-            <header class="card-header">
-              <div>
-                <p class="card-kicker">English narration</p>
-                <h3>False starts become one clean take</h3>
-              </div>
-            </header>
-            <div class="player-grid">
-              <section class="player-panel before-panel" aria-labelledby="en-before">
-                <div class="player-heading">
-                  <span class="status-dot" aria-hidden="true"></span>
-                  <h4 id="en-before">Original</h4>
-                  <span>38.00 s</span>
-                </div>
-                <audio controls preload="metadata">
-                  <source src="media/audio/example_en.wav" type="audio/wav" />
-                  Your browser cannot play this WAV file.
-                  <a href="media/audio/example_en.wav">Open the original audio</a>.
-                </audio>
-              </section>
-              <section class="player-panel result-panel" aria-labelledby="en-after">
-                <div class="player-heading">
-                  <span class="status-dot" aria-hidden="true"></span>
-                  <h4 id="en-after">VoiceCut</h4>
-                  <span>27.34 s</span>
-                </div>
-                <audio controls preload="metadata">
-                  <source
-                    src="media/audio/example_en_edited.wav"
-                    type="audio/wav"
-                  />
-                  Your browser cannot play this WAV file.
-                  <a href="media/audio/example_en_edited.wav">Open the edited audio</a>.
-                </audio>
-              </section>
-            </div>
-            <p class="card-note">
-              The abandoned opening and repeated phrase are removed; the
-              complete intended take remains.
+        <figure class="transcript-demo">
+          <blockquote class="transcript-text">
+            <p>
+              <del><span class="visually-hidden">Removed: </span>We can do.</del> we can rewrite the same loss in
+              the row-wise manner. Every element of the sum here is an L2 loss of the corresponding row from the
+              matrix. That means we can study one row at a time.
+              <del><span class="visually-hidden">Removed: </span>that</del> This makes the problem much simpler.
+              since if we can solve this problem for a single row,
+              <del><span class="visually-hidden">Removed: </span>then we can solve this for</del> Then we can
+              solve this for all rows just by applying the same algorithm to every other row.
             </p>
-          </article>
+          </blockquote>
+          <figcaption class="transcript-stats">
+            <span><strong>0:30</strong> recorded</span>
+            <span><strong>0:22</strong> after Voice Cut</span>
+            <span><strong>3</strong> false starts removed</span>
+            <span><strong>0</strong> words synthesized</span>
+          </figcaption>
+        </figure>
+        <ul class="facts">
+          <li>
+            <h3>The best take of every line</h3>
+            <p>It tells a corrected retake from a fluent but abandoned attempt, and keeps the one you meant.</p>
+          </li>
+          <li>
+            <h3>Cuts only where it is silent</h3>
+            <p>Every cut lands between words, never inside one, and keeps each word's natural decay.</p>
+          </li>
+          <li>
+            <h3>Natural pauses</h3>
+            <p>Each pause gets a length for its kind, and breaths and clicks become clean room tone.</p>
+          </li>
+          <li>
+            <h3>Your real voice</h3>
+            <p>Nothing is synthesized. Every sound in the edit comes from your own recording.</p>
+          </li>
+          <li>
+            <h3>Video too</h3>
+            <p>The picture follows the kept speech with direct cuts — no frozen frames, no fake pauses.</p>
+          </li>
+          <li>
+            <h3>Runs on your computer</h3>
+            <p>Transcription, alignment and rendering are local. Only the planner request goes to the cloud.</p>
+          </li>
+        </ul>
+      </section>
 
-          <article class="demo-card" lang="ru">
-            <header class="card-header">
-              <div>
-                <p class="card-kicker">Русская речь</p>
-                <h3>Повторы превращаются в связное объяснение</h3>
-              </div>
-            </header>
-            <div class="player-grid">
-              <section class="player-panel before-panel" aria-labelledby="ru-before">
-                <div class="player-heading">
-                  <span class="status-dot" aria-hidden="true"></span>
-                  <h4 id="ru-before">Оригинал</h4>
-                  <span>35,07 с</span>
-                </div>
-                <audio controls preload="metadata">
-                  <source src="media/audio/example_ru.wav" type="audio/wav" />
-                  Ваш браузер не может воспроизвести WAV.
-                  <a href="media/audio/example_ru.wav">Открыть оригинал</a>.
-                </audio>
-              </section>
-              <section class="player-panel result-panel" aria-labelledby="ru-after">
-                <div class="player-heading">
-                  <span class="status-dot" aria-hidden="true"></span>
-                  <h4 id="ru-after">VoiceCut</h4>
-                  <span>21,68 с</span>
-                </div>
-                <audio controls preload="metadata">
-                  <source
-                    src="media/audio/example_ru_edited.wav"
-                    type="audio/wav"
-                  />
-                  Ваш браузер не может воспроизвести WAV.
-                  <a href="media/audio/example_ru_edited.wav">Открыть результат</a>.
-                </audio>
-              </section>
-            </div>
-            <p class="card-note">
-              Неудачные попытки и повторённые фразы удалены, а финальное
-              объяснение сохранено.
+      <section class="section tour" aria-label="A quick tour">
+        <article class="tour-row">
+          <div class="tour-text">
+            <p class="step">1</p>
+            <h2>Drop in a recording</h2>
+            <p>
+              WAV, MP3, M4A, FLAC, MOV, MP4 and other common formats. Each project is one
+              <code>.vc</code> document you open from the Finder, your file manager or Explorer.
             </p>
-          </article>
-        </div>
-
-        <article class="demo-card video-card" id="video">
-          <header class="card-header">
-            <div>
-              <p class="card-kicker">Video editing</p>
-              <h3>The picture follows the selected speech</h3>
-            </div>
-          </header>
-          <div class="video-grid">
-            <section class="video-panel" aria-labelledby="video-before">
-              <div class="player-heading">
-                <span class="status-dot" aria-hidden="true"></span>
-                <h4 id="video-before">Original</h4>
-                <span>30.25 s</span>
-              </div>
-              <video
-                controls
-                playsinline
-                preload="metadata"
-                poster="assets/video-before.jpg"
-              >
-                <source src="media/video/video.mp4" type="video/mp4" />
-                Your browser cannot play this MP4 file.
-                <a href="media/video/video.mp4">Open the original video</a>.
-              </video>
-            </section>
-            <section class="video-panel result-panel" aria-labelledby="video-after">
-              <div class="player-heading">
-                <span class="status-dot" aria-hidden="true"></span>
-                <h4 id="video-after">VoiceCut</h4>
-                <span>23.78 s</span>
-              </div>
-              <video
-                controls
-                playsinline
-                preload="metadata"
-                poster="assets/video-after.jpg"
-              >
-                <source src="media/video/video_edited.mp4" type="video/mp4" />
-                Your browser cannot play this MP4 file.
-                <a href="media/video/video_edited.mp4">Open the edited video</a>.
-              </video>
-            </section>
           </div>
-          <p class="card-note">
-            VoiceCut applies direct visual cuts at the selected speech ranges—no
-            frozen frames and no artificial video pauses.
-          </p>
+          <figure class="shot">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/start-dark.webp" />
+              <img
+                src="assets/screenshots/start-light.webp"
+                width="2400"
+                height="1528"
+                loading="lazy"
+                alt="The VoiceCut start page: drop a recording, New Project, Open, and recent projects"
+              />
+            </picture>
+          </figure>
+        </article>
+
+        <article class="tour-row">
+          <div class="tour-text">
+            <p class="step">2</p>
+            <h2>Press Voice Cut</h2>
+            <p>
+              Pick the planner, its model and the language, then press one button. Every stage shows its
+              progress, and an interrupted run picks up where it stopped.
+            </p>
+          </div>
+          <figure class="shot">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/voice-cut-run-dark.webp" />
+              <img
+                src="assets/screenshots/voice-cut-run-light.webp"
+                width="2400"
+                height="1528"
+                loading="lazy"
+                alt="Voice Cut running: transcription, retake recovery and take selection, each stage with its time"
+              />
+            </picture>
+          </figure>
+        </article>
+
+        <article class="tour-row">
+          <div class="tour-text">
+            <p class="step">3</p>
+            <h2>Fine-tune every cut</h2>
+            <p>The edit opens as clips over the original recording, so nothing is ever lost.</p>
+            <ul class="checks">
+              <li>Drag a clip edge to bring back removed words or trim them</li>
+              <li>Resize pauses, or press <kbd>P</kbd> to insert one</li>
+              <li>Split with <kbd>S</kbd>, delete, undo and redo</li>
+              <li>Listen at 0.5× to 2.5× while the caption follows every word</li>
+            </ul>
+          </div>
+          <figure class="shot">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/video-dark.webp" />
+              <img
+                src="assets/screenshots/video-light.webp"
+                width="2400"
+                height="1528"
+                loading="lazy"
+                alt="A video project after Voice Cut: the picture, filmstrip and waveform follow the seven kept takes"
+              />
+            </picture>
+          </figure>
+        </article>
+
+        <article class="tour-row">
+          <div class="tour-text">
+            <p class="step">4</p>
+            <h2>Export what you hear</h2>
+            <p>
+              MP4 or MOV video, or WAV, FLAC, AAC and MP3 audio. The preview is rendered by the same code as
+              the export, so the file sounds exactly like the editor.
+            </p>
+          </div>
+          <figure class="shot">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/export-dark.webp" />
+              <img
+                src="assets/screenshots/export-light.webp"
+                width="2400"
+                height="1528"
+                loading="lazy"
+                alt="The Export dialog with the video and audio formats"
+              />
+            </picture>
+          </figure>
         </article>
       </section>
 
-      <section
-        class="how-it-works"
-        id="how-it-works"
-        aria-labelledby="how-title"
-      >
-        <div class="section-heading">
-          <p class="eyebrow">How it works</p>
-          <h2 id="how-title">One semantic plan. One final render.</h2>
-          <p>
-            VoiceCut first determines what the speaker intended to keep, then
-            resolves safe source boundaries before rendering once from the
-            original recording.
+      <section class="section examples" id="examples" aria-labelledby="examples-title">
+        <div class="section-head">
+          <p class="eyebrow">Real examples</p>
+          <h2 id="examples-title">Hear the difference</h2>
+          <p class="section-lede">
+            Straight out of Voice Cut, with no manual repair. The bars are drawn to scale: the shorter one is
+            what is left once the retakes are gone.
           </p>
         </div>
-        <figure class="pipeline-figure">
-          <a
-            class="pipeline-image-link"
-            href="assets/pipeline.svg"
-            target="_blank"
-            rel="noopener"
-          >
-            <img
-              src="assets/pipeline.svg"
-              alt="VoiceCut pipeline from canonical audio or video through Whisper transcription, semantic planning, source grounding, completeness validation, MFA phone alignment, pause and ambience planning, an immutable boundary plan, and one final render"
-            />
-          </a>
-          <figcaption>
-            The planner chooses source occurrences; MFA supplies phone-safe
-            coordinates; the immutable plan is rendered once from the canonical
-            source.
-            <a href="assets/pipeline.svg" target="_blank" rel="noopener"
-              >Open the diagram full size.</a
-            >
-            <a href="https://github.com/vectozavr/voicecut#how-it-works"
-              >Read the technical overview.</a
-            >
-          </figcaption>
-        </figure>
+
+        <div class="example-grid">
+          <article class="example">
+            <header>
+              <p class="example-kicker">English narration</p>
+              <h3>False starts become one clean take</h3>
+            </header>
+            <div class="tracks">
+              <div class="track" data-player style="--share: 1">
+                <button class="play" type="button" aria-label="Play the original English recording"></button>
+                <div class="track-body">
+                  <div class="track-head">
+                    <span class="track-name">Original</span><span class="track-time" data-time>0:38</span>
+                  </div>
+                  <div class="track-bar" data-seek role="slider" tabindex="0" aria-label="Position in the original" aria-valuemin="0" aria-valuemax="38" aria-valuenow="0">
+                    <span class="track-fill"></span>
+                  </div>
+                </div>
+                <audio controls preload="none" src="media/audio/example_en.wav"></audio>
+              </div>
+              <div class="track result" data-player style="--share: 0.7195">
+                <button class="play" type="button" aria-label="Play the VoiceCut edit of the English recording"></button>
+                <div class="track-body">
+                  <div class="track-head">
+                    <span class="track-name">VoiceCut</span><span class="track-time" data-time>0:27</span>
+                  </div>
+                  <div class="track-bar" data-seek role="slider" tabindex="0" aria-label="Position in the edit" aria-valuemin="0" aria-valuemax="27" aria-valuenow="0">
+                    <span class="track-fill"></span>
+                  </div>
+                </div>
+                <audio controls preload="none" src="media/audio/example_en_edited.wav"></audio>
+              </div>
+            </div>
+            <p class="example-note">The abandoned opening and the repeated phrase are gone; the complete take stays.</p>
+          </article>
+
+          <article class="example" lang="ru">
+            <header>
+              <p class="example-kicker">Русская речь</p>
+              <h3>Повторы превращаются в связное объяснение</h3>
+            </header>
+            <div class="tracks">
+              <div class="track" data-player style="--share: 1">
+                <button class="play" type="button" aria-label="Слушать оригинал"></button>
+                <div class="track-body">
+                  <div class="track-head">
+                    <span class="track-name">Оригинал</span><span class="track-time" data-time>0:35</span>
+                  </div>
+                  <div class="track-bar" data-seek role="slider" tabindex="0" aria-label="Позиция в оригинале" aria-valuemin="0" aria-valuemax="35" aria-valuenow="0">
+                    <span class="track-fill"></span>
+                  </div>
+                </div>
+                <audio controls preload="none" src="media/audio/example_ru.wav"></audio>
+              </div>
+              <div class="track result" data-player style="--share: 0.6183">
+                <button class="play" type="button" aria-label="Слушать результат VoiceCut"></button>
+                <div class="track-body">
+                  <div class="track-head">
+                    <span class="track-name">VoiceCut</span><span class="track-time" data-time>0:22</span>
+                  </div>
+                  <div class="track-bar" data-seek role="slider" tabindex="0" aria-label="Позиция в результате" aria-valuemin="0" aria-valuemax="22" aria-valuenow="0">
+                    <span class="track-fill"></span>
+                  </div>
+                </div>
+                <audio controls preload="none" src="media/audio/example_ru_edited.wav"></audio>
+              </div>
+            </div>
+            <p class="example-note">Неудачные попытки и повторённые фразы удалены, финальное объяснение сохранено.</p>
+          </article>
+        </div>
+
+        <article class="example example-video">
+          <header>
+            <p class="example-kicker">Video</p>
+            <h3>The picture follows the kept speech</h3>
+          </header>
+          <div class="video-grid">
+            <figure>
+              <figcaption><span>Original</span><span>0:30</span></figcaption>
+              <video controls playsinline preload="none" poster="assets/video-before.jpg" width="960" height="540">
+                <source src="media/video/video.mp4" type="video/mp4" />
+                <a href="media/video/video.mp4">Open the original video</a>
+              </video>
+            </figure>
+            <figure class="result">
+              <figcaption><span>VoiceCut</span><span>0:24</span></figcaption>
+              <video controls playsinline preload="none" poster="assets/video-after.jpg" width="960" height="540">
+                <source src="media/video/video_edited.mp4" type="video/mp4" />
+                <a href="media/video/video_edited.mp4">Open the edited video</a>
+              </video>
+            </figure>
+          </div>
+          <p class="example-note">Direct cuts at the kept speech: no frozen frames and no artificial pauses.</p>
+        </article>
       </section>
 
-      <section class="cta" aria-labelledby="cta-title">
-        <div>
-          <p class="eyebrow">Quick start</p>
-          <h2 id="cta-title">Run VoiceCut with one command.</h2>
+      <section class="section planners" id="planners" aria-labelledby="planners-title">
+        <div class="split">
+          <div class="split-text">
+            <p class="eyebrow">Planners</p>
+            <h2 id="planners-title">Choose the model that edits</h2>
+            <p>
+              The planner reads the transcript and chooses the takes. The list of models comes live from the
+              provider, and you can type any other model name.
+            </p>
+            <ul class="planner-list">
+              <li>
+                <div><strong>Gemini</strong><span class="tag accent">Recommended</span></div>
+                <p>Hears the audio of every window as well as reading it, so it catches stumbles and mis-heard words.</p>
+              </li>
+              <li>
+                <div><strong>OpenAI</strong><span class="tag">Supported</span></div>
+                <p>Reads the transcript of every window.</p>
+              </li>
+              <li>
+                <div><strong>DeepSeek</strong><span class="tag">Supported</span></div>
+                <p>Reads the transcript of every window.</p>
+              </li>
+              <li>
+                <div><strong>Local (MLX)</strong><span class="tag">Experimental</span></div>
+                <p>Qwen or Gemma on a Mac with Apple Silicon. Nothing leaves the computer.</p>
+              </li>
+            </ul>
+            <p class="fine">
+              Your original file and any video never leave the computer. Keys live in the macOS Keychain, the
+              Windows Credential Manager or your Linux keyring, and are sent only to their own provider.
+            </p>
+          </div>
+          <figure class="shot">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/planner-models-dark.webp" />
+              <img
+                src="assets/screenshots/planner-models-light.webp"
+                width="2400"
+                height="1528"
+                loading="lazy"
+                alt="The model picker in the toolbar: Gemini models listed live from the provider, with Gemini 3.1 Pro Preview as the default"
+              />
+            </picture>
+          </figure>
         </div>
-        <div class="command-wrap">
-          <code>voicecut recording.wav</code>
-          <button type="button" data-copy="voicecut recording.wav">
-            Copy command
-          </button>
-          <span class="copy-status" aria-live="polite"></span>
+      </section>
+
+      <section class="section how" id="how" aria-labelledby="how-title">
+        <div class="section-head">
+          <p class="eyebrow">How it works</p>
+          <h2 id="how-title">Choose the takes, then cut only where it is silent</h2>
         </div>
-        <a class="button button-primary" href="https://github.com/vectozavr/voicecut#quick-start">
-          Install from GitHub
-        </a>
+        <ol class="steps">
+          <li>
+            <span class="step-number">1</span>
+            <h3>Transcribe everything</h3>
+            <p>Whisper writes down every word, and speech it skipped is transcribed again on its own.</p>
+          </li>
+          <li>
+            <span class="step-number">2</span>
+            <h3>Choose the takes</h3>
+            <p>The planner reads minutes at a time with look-ahead, and revokes a choice when a better retake comes.</p>
+          </li>
+          <li>
+            <span class="step-number">3</span>
+            <h3>Find the real edges</h3>
+            <p>The Montreal Forced Aligner and the waveform decide where every kept word starts and stops.</p>
+          </li>
+          <li>
+            <span class="step-number">4</span>
+            <h3>Fix the pauses</h3>
+            <p>Every gap gets a natural length; breaths and clicks become room tone from the same recording.</p>
+          </li>
+          <li>
+            <span class="step-number">5</span>
+            <h3>Render once</h3>
+            <p>Kept speech is copied sample for sample and joined with short crossfades in silence.</p>
+          </li>
+        </ol>
+        <p class="how-links">
+          <a href="assets/pipeline.svg" target="_blank" rel="noopener">See the whole pipeline</a>
+          <span aria-hidden="true">·</span>
+          <a href="https://github.com/vectozavr/voicecut#how-it-works">Read the technical overview</a>
+        </p>
+      </section>
+
+      <section class="section download" id="download" aria-labelledby="download-title">
+        <div class="section-head">
+          <img class="download-icon" src="assets/icon-256.png" width="96" height="96" alt="" loading="lazy" />
+          <h2 id="download-title">Download VoiceCut</h2>
+          <p class="section-lede">Free. No account. It updates itself.</p>
+          <p class="release-line" data-release-line>
+            <a href="https://github.com/vectozavr/voicecut/releases/latest">Latest release on GitHub</a>
+          </p>
+        </div>
+
+        <div class="platforms">
+          <article class="platform" data-platform="mac">
+            <span class="platform-badge">Your system</span>
+            <h3>macOS</h3>
+            <p class="platform-req">macOS 14 Sonoma or later<br />Apple Silicon (M1 or newer)</p>
+            <div class="platform-actions">
+              <a class="button primary" data-asset="mac" href="https://github.com/vectozavr/voicecut/releases/latest">
+                Download .dmg
+              </a>
+            </div>
+            <p class="platform-file" data-asset-file="mac">&nbsp;</p>
+          </article>
+          <article class="platform" data-platform="windows">
+            <span class="platform-badge">Your system</span>
+            <h3>Windows</h3>
+            <p class="platform-req">Windows 10 or 11<br />x64</p>
+            <div class="platform-actions">
+              <a class="button primary" data-asset="windows" href="https://github.com/vectozavr/voicecut/releases/latest">
+                Download installer
+              </a>
+            </div>
+            <p class="platform-file" data-asset-file="windows">&nbsp;</p>
+          </article>
+          <article class="platform" data-platform="linux">
+            <span class="platform-badge">Your system</span>
+            <h3>Linux</h3>
+            <p class="platform-req">x86_64 with glibc 2.35+<br />Ubuntu 22.04, Debian 12, Fedora 36 or newer</p>
+            <div class="platform-actions">
+              <a class="button primary" data-asset="appimage" href="https://github.com/vectozavr/voicecut/releases/latest">
+                AppImage
+              </a>
+              <a class="button" data-asset="deb" href="https://github.com/vectozavr/voicecut/releases/latest">.deb</a>
+            </div>
+            <p class="platform-file" data-asset-file="linux">&nbsp;</p>
+          </article>
+        </div>
+
+        <div class="first-launch">
+          <h3>Opening it the first time</h3>
+          <ol class="launch-steps">
+            <li>
+              <h4>Allow the download</h4>
+              <p>
+                The installers are not signed with paid certificates yet, so your system asks once.
+                <strong>macOS:</strong> System Settings › Privacy &amp; Security › <em>Open Anyway</em>.
+                <strong>Windows:</strong> <em>More info</em> › <em>Run anyway</em>.
+                <strong>Linux:</strong> make the AppImage executable; if it does not start, install
+                <code>libfuse2</code>.
+              </p>
+            </li>
+            <li>
+              <h4>Install the engine</h4>
+              <p>
+                One click sets up Python, PyTorch, Whisper, the aligner and FFmpeg: about 1.5&nbsp;GB, once.
+                Speech models, about 2&nbsp;GB, follow with the first Voice Cut.
+              </p>
+            </li>
+            <li>
+              <h4>Add a planner key</h4>
+              <p>
+                Paste an API key in Settings — a
+                <a href="https://aistudio.google.com/apikey">Gemini key</a> is all you need to start.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section faq" id="faq" aria-labelledby="faq-title">
+        <div class="section-head">
+          <h2 id="faq-title">Questions</h2>
+        </div>
+        <div class="faq-list">
+          <details>
+            <summary>Is VoiceCut really free?</summary>
+            <p>
+              Yes. VoiceCut is open source under the MIT License, with no account and no subscription. A cloud
+              planner uses your own API key, so its provider bills you for what Voice Cut sends it, under that
+              provider's pricing.
+            </p>
+          </details>
+          <details>
+            <summary>macOS says VoiceCut can't be opened. What do I do?</summary>
+            <p>
+              The installers are not signed with a paid Apple certificate yet, so macOS stops the first launch of
+              a downloaded copy. Drag VoiceCut to Applications first (a copy opened from the disk image cannot
+              update itself), open it, and close the message. Then open System Settings › Privacy &amp; Security,
+              scroll down to the note that VoiceCut was blocked, choose <em>Open Anyway</em> and confirm. You do
+              this once. In Terminal, <code>xattr -dr com.apple.quarantine /Applications/VoiceCut.app</code> does
+              the same.
+            </p>
+          </details>
+          <details>
+            <summary>And on Windows or Linux?</summary>
+            <p>
+              On Windows, SmartScreen says it protected your PC: choose <em>More info</em> › <em>Run anyway</em>.
+              The installer needs no administrator. On Linux, make the AppImage executable
+              (<code>chmod +x</code>) and run it; if it does not start on Ubuntu, install <code>libfuse2</code>
+              (<code>libfuse2t64</code> on 24.04 and later). The <code>.deb</code> installs with
+              <code>sudo apt install ./VoiceCut-…-amd64.deb</code>.
+            </p>
+          </details>
+          <details>
+            <summary>Does my recording leave my computer?</summary>
+            <p>
+              Transcription, alignment and rendering run locally. The planner receives the transcript of each
+              planning window; Gemini also receives a compressed 16&nbsp;kHz mono copy of that window's audio.
+              Your original file and any video never leave the computer.
+            </p>
+          </details>
+          <details>
+            <summary>Which languages does it understand?</summary>
+            <p>
+              English and Russian, recorded by one main narrator. You choose the language in the toolbar before
+              pressing Voice Cut.
+            </p>
+          </details>
+          <details>
+            <summary>Will it ever cut a word in half?</summary>
+            <p>
+              Cuts are placed where the waveform is silent, between words. Tightly connected speech, with no
+              pause between a kept and a removed word, can occasionally sound abrupt, and the planner can
+              occasionally choose the wrong take. Every cut can be adjusted on the timeline, so listen before
+              you publish.
+            </p>
+          </details>
+          <details>
+            <summary>What does it need to run?</summary>
+            <p>
+              macOS 14 or later on Apple Silicon, Windows 10 or 11 on x64, or Linux on x86_64 with glibc 2.35+,
+              and about 4&nbsp;GB of disk for the engine. Whisper uses the GPU on Apple Silicon and on NVIDIA
+              GPUs; elsewhere it runs on the CPU, about as fast as the recording plays.
+            </p>
+          </details>
+          <details>
+            <summary>How do updates work?</summary>
+            <p>
+              When a new version is out, a download button appears in the toolbar. By default the update
+              downloads in the background and installs when you quit, and your projects open again after the
+              restart. You can switch that off in Settings.
+            </p>
+          </details>
+          <details>
+            <summary>Is there a command line?</summary>
+            <p>
+              Yes: <code>voicecut recording.wav</code> runs the same pipeline from a source checkout. See
+              <a href="https://github.com/vectozavr/voicecut/blob/main/docs/development.md">the development guide</a>.
+            </p>
+          </details>
+        </div>
       </section>
     </main>
 
-    <footer>
-      <a class="brand" href="https://github.com/vectozavr/voicecut">
-        <img
-          class="brand-logo"
-          src="assets/logo.svg"
-          width="36"
-          height="36"
-          alt=""
-        />
-        <span>VoiceCut</span>
-      </a>
-      <p>Open-source automatic narration editing for Apple Silicon.</p>
-      <div>
-        <a href="https://github.com/vectozavr/voicecut">Repository</a>
-        <a href="https://github.com/vectozavr/voicecut/blob/main/examples/README.md"
-          >Reproduce examples</a
-        >
-        <a href="https://github.com/vectozavr/voicecut/blob/main/LICENSE">MIT License</a>
+    <footer class="footer">
+      <div class="footer-inner">
+        <a class="brand" href="#top">
+          <img src="assets/icon-128.png" width="28" height="28" alt="" />
+          <span>VoiceCut</span>
+        </a>
+        <p class="footer-text">Free and open source. Developed by <a href="https://ivanilin.org">Ivan Ilin</a>.</p>
+        <nav class="footer-links" aria-label="Project links">
+          <a href="https://github.com/vectozavr/voicecut">GitHub</a>
+          <a href="https://github.com/vectozavr/voicecut/releases">Releases</a>
+          <a href="https://github.com/vectozavr/voicecut/issues">Report a problem</a>
+          <a href="https://github.com/vectozavr/voicecut/blob/main/LICENSE">MIT License</a>
+        </nav>
       </div>
     </footer>
   </body>

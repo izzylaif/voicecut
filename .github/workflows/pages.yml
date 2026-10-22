@@ -1,4 +1,4 @@
-name: Deploy browser demo to GitHub Pages
+name: Deploy the website to GitHub Pages
 
 on:
   push:
@@ -7,14 +7,18 @@ on:
     paths:
       - ".github/workflows/pages.yml"
       - "docs/demo/**"
+      - "docs/assets/screenshots/**"
+      - "docs/assets/social-card.png"
       - "docs/assets/readme/pipeline.svg"
       - "docs/assets/readme/star-history.json"
       - "docs/assets/readme/video-before.jpg"
       - "docs/assets/readme/video-after.jpg"
       - "examples/media/**"
-      - "logo.svg"
+      - "desktop/src-tauri/icons/**"
       - "scripts/build_pages_demo.py"
       - "scripts/build_star_history.py"
+  # Also refreshes release.json, the page's copy of the latest release (a
+  # release event would run on its tag, which github-pages does not deploy).
   schedule:
     - cron: "23 3 * * *"
   workflow_dispatch:
@@ -42,8 +46,12 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v6
 
-      - name: Assemble demo site
-        run: python3 scripts/build_pages_demo.py --output .pages-site
+      - name: Assemble the site
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python3 scripts/build_pages_demo.py --output .pages-site
+          --repository "${{ github.repository }}"
 
       - name: Build repository star history
         env:
