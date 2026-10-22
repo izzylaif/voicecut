@@ -11,6 +11,9 @@ exporting.
 | Debian, Ubuntu | `VoiceCut-<version>-amd64.deb` | `sudo apt install ./VoiceCut-<version>-amd64.deb` |
 | Windows 10/11 x64 | `VoiceCut-<version>-x64-setup.exe` | Run it; it installs for you alone, no administrator needed. |
 
+The AppImage needs FUSE 2: if it does not start on Ubuntu, install it with
+`sudo apt install libfuse2` (`libfuse2t64` on Ubuntu 24.04 and later).
+
 On first launch VoiceCut downloads and sets up its engine (about 1.5 GB, up
 to 7 GB of disk while installing). Voice Cut itself needs a Gemini API key,
 which VoiceCut keeps in the system's keychain or credential store.

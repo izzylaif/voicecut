@@ -72,9 +72,11 @@ class App:
             **os.environ,
             "VOICECUT_DATA_DIR": str(data),
             "VOICECUT_AUTOMATION_PORT": str(self.port),
-            # No FUSE on CI runners: an AppImage unpacks itself instead.
-            "APPIMAGE_EXTRACT_AND_RUN": "1",
         }
+        if not (Path("/dev/fuse").exists() and shutil.which("fusermount")):
+            # Without FUSE an AppImage unpacks itself to a folder, which every
+            # instance shares: keep it when a second instance exits.
+            self.environment.update(APPIMAGE_EXTRACT_AND_RUN="1", NO_CLEANUP="1")
         self.process: subprocess.Popen[bytes] | None = None
 
     def start(self, *arguments: str) -> subprocess.Popen[bytes]:
@@ -397,8 +399,13 @@ def main() -> int:
         report["ok"] = False
         report["failed_step"] = step
         report["error"] = f"{type(error).__name__}: {error}"
+        if app.process is not None:
+            report["app_exit_status"] = app.process.poll()
         logs = data / "logs"
-        annotate(f"e2e {step}: {type(error).__name__}", str(error))
+        annotate(
+            f"e2e {step}: {type(error).__name__}",
+            f"{error} (app exit status: {report.get('app_exit_status')})",
+        )
         for name, path in (
             ("app output", app.log),
             ("setup.log", logs / "setup.log"),

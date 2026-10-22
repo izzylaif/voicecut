@@ -93,7 +93,8 @@ jobs:
       - name: Find it (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y -q xvfb
+          # FUSE 2, as an AppImage needs on a user's system.
+          sudo apt-get install -y -q xvfb libfuse2
           echo "VOICECUT_APP=$(ls "${PWD}"/desktop/src-tauri/target/release/bundle/appimage/*.AppImage)" >>"${GITHUB_ENV}"
 
       - name: First launch, setup, Whisper and MFA, a project
