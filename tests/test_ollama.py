@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 import textwrap
 import time
@@ -252,3 +253,48 @@ def test_fit_think_maps_a_setting_onto_what_a_model_takes() -> None:
     assert local_models.fit_think(True, ["low", "medium", "high"]) == "medium"
     assert local_models.fit_think(False, ["low", "medium", "high"]) is None
     assert local_models.fit_think("high", None) == "high"
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "memory", "gpu", "backend"),
+    [
+        ("darwin", "arm64", 68.7, None, "ollama"),  # an M1 Max with 64 GB
+        ("darwin", "arm64", 34.4, None, "ollama"),  # 32 GB
+        ("darwin", "arm64", 17.2, None, "openrouter"),  # 16 GB
+        ("darwin", "x86_64", 68.7, None, "openrouter"),  # an Intel Mac
+        ("win32", "AMD64", 68.7, 8.0, "openrouter"),  # an RTX 2080
+        ("win32", "AMD64", 34.4, 23.99, "ollama"),  # an RTX 4090
+        ("linux", "x86_64", 137.4, None, "openrouter"),  # no NVIDIA GPU
+    ],
+)
+def test_new_projects_plan_locally_where_the_model_runs_well(
+    monkeypatch: pytest.MonkeyPatch,
+    system: str,
+    machine: str,
+    memory: float,
+    gpu: float | None,
+    backend: str,
+) -> None:
+    monkeypatch.setattr(local_models.sys, "platform", system)
+    monkeypatch.setattr(local_models.platform, "machine", lambda: machine)
+    monkeypatch.setattr(local_models, "memory_gb", lambda: memory)
+    monkeypatch.setattr(local_models, "nvidia_memory_gb", lambda: gpu)
+    assert local_models.default_planner_backend() == backend
+
+
+def test_nvidia_memory_is_the_largest_gpu_and_none_without_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def smi(stdout: str, returncode: int = 0):
+        return lambda *_, **__: subprocess.CompletedProcess([], returncode, stdout, "")
+
+    monkeypatch.setattr(local_models.subprocess, "run", smi("8192\n24564\n"))
+    assert local_models.nvidia_memory_gb() == pytest.approx(24564 / 1024)
+    monkeypatch.setattr(local_models.subprocess, "run", smi("", 9))
+    assert local_models.nvidia_memory_gb() is None
+
+    def missing(*_: object, **__: object):
+        raise FileNotFoundError("nvidia-smi")
+
+    monkeypatch.setattr(local_models.subprocess, "run", missing)
+    assert local_models.nvidia_memory_gb() is None

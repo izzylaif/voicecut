@@ -160,12 +160,15 @@ you run Voice Cut.
   <img alt="First launch: VoiceCut explains what it will install and how much space it needs, with an Install button" src="docs/assets/screenshots/setup-light.webp">
 </picture>
 
-Last, choose the planner in the toolbar. **Local** runs Gemma 4 on your
-computer: choose it and VoiceCut downloads the model (about 20 GB; it needs
-about 32 GB of memory). For a cloud planner, paste an API key in
-**Settings** — [OpenRouter](https://openrouter.ai/settings/keys) for the
-same Gemma 4, [Gemini](https://aistudio.google.com/apikey), OpenAI or
-DeepSeek. VoiceCut keeps keys in the macOS Keychain, the Windows Credential
+Last, the planner. On a computer that runs Gemma 4 well — a Mac with Apple
+Silicon and 32 GB of memory or more, or a PC with a 24 GB NVIDIA GPU —
+VoiceCut plans on it by default: the first Voice Cut offers to download the
+model (about 20 GB, once) and starts when it is there. Elsewhere it plans
+with the same Gemma 4 through OpenRouter: paste an
+[OpenRouter key](https://openrouter.ai/settings/keys) in **Settings**. Any
+other planner can be chosen in the toolbar, such as
+[Gemini](https://aistudio.google.com/apikey), OpenAI or DeepSeek with their
+keys. VoiceCut keeps keys in the macOS Keychain, the Windows Credential
 Manager or your Linux keyring, never in your projects.
 
 Whisper runs on the GPU on Apple Silicon and on NVIDIA GPUs with a recent
@@ -185,7 +188,9 @@ the button. On Debian and Ubuntu the update asks for your password.
 The planner is the language model that reads the transcript and chooses the
 takes. Its default model is **Gemma 4 31B**, an open model, on your computer
 and through OpenRouter in the cloud alike; it edits nearly the way Gemini 3.1
-Pro does (see below). Other providers work too: with a Gemini key
+Pro does (see below). New projects plan on your computer where it runs the
+model well (Apple Silicon with 32 GB of memory or more, or an NVIDIA GPU with
+24 GB), and through OpenRouter elsewhere. Other providers work too: with a Gemini key
 the default is Gemini 3.8 Flash, and OpenAI and DeepSeek are supported. Pick
 the planner in the toolbar; the list of models comes live from the provider,
 and you can type any other model name.

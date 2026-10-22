@@ -43,9 +43,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_PROJECTS_DIR = PROJECT_ROOT / ".voicecut-cache" / "editor"
 PROJECT_SCHEMA_VERSION = 2
 SETTINGS_KEYS = ("language", "planner_backend", "planner_model", "breath_cleanup")
+# The editor's own defaults (``editor.cli``) choose the planner by what the
+# computer can run; this is what a project without settings falls back to.
 DEFAULT_SETTINGS: dict[str, Any] = {
     "language": "en",
-    "planner_backend": "gemini",
+    "planner_backend": "openrouter",
     "planner_model": None,
     "breath_cleanup": None,
 }

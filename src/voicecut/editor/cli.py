@@ -24,7 +24,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from .. import processes
+from .. import local_models, processes
 from ..language_profiles import SUPPORTED_LANGUAGE_CODES
 from ..planner_backends import PLANNER_BACKENDS
 from .projects import DEFAULT_PROJECTS_DIR, PROJECT_ROOT, ProjectError
@@ -70,8 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--planner-backend",
         choices=PLANNER_BACKENDS,
-        default="gemini",
-        help="Default semantic planner backend for new projects.",
+        default=None,
+        help=(
+            "Default semantic planner backend for new projects (default: "
+            "ollama where its recommended model runs well, else openrouter)."
+        ),
     )
     parser.add_argument(
         "--planner-model",
@@ -120,7 +123,8 @@ def build_parser() -> argparse.ArgumentParser:
 def defaults_from_args(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "language": args.language,
-        "planner_backend": args.planner_backend,
+        "planner_backend": args.planner_backend
+        or local_models.default_planner_backend(),
         "planner_model": args.planner_model,
         "breath_cleanup": args.breath_cleanup,
     }

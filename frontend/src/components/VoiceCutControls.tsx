@@ -299,13 +299,19 @@ function ModelPicker({
   );
 }
 
-/** Ask before a download of many gigabytes, then start it. */
-export async function downloadLocalModel(model: ModelInfo | string): Promise<boolean> {
+/** Ask before a download of many gigabytes, then start it; for a Voice Cut, say it runs once it is there. */
+export async function downloadLocalModel(
+  model: ModelInfo | string,
+  { forVoiceCut = false }: { forVoiceCut?: boolean } = {},
+): Promise<boolean> {
   const id = typeof model === 'string' ? model : model.id;
+  const label = typeof model === 'string' ? model : model.label || model.id;
   const size = typeof model === 'string' ? '' : sizeText(model);
   const ok = await confirmAction(
-    `Download ${id}${size ? ` (${size})` : ''} to run it on this computer? It stays downloaded until you delete it in Settings.`,
-    { title: 'Download the model?', ok: 'Download' },
+    forVoiceCut
+      ? `Voice Cut runs ${label} on this computer: free, and nothing leaves it. Download it now${size ? ` (${size}, once)` : ''}? Voice Cut starts as soon as it is ready. A cloud planner, chosen in the toolbar, needs no download.`
+      : `Download ${id}${size ? ` (${size})` : ''} to run it on this computer? It stays downloaded until you delete it in Settings.`,
+    { title: forVoiceCut ? `Download ${label}?` : 'Download the model?', ok: 'Download' },
   );
   return ok && localModelAction('pull', id);
 }

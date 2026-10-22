@@ -64,9 +64,17 @@ def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(server, "spawn_worker", spawn)
     # A test key so Voice Cut may start; the real environment's keys are hidden.
-    for name in ("GEMINI_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"):
+    for name in (
+        "GEMINI_API_KEY",
+        "OPENAI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "OPENROUTER_API_KEY",
+    ):
         monkeypatch.delenv(name, raising=False)
-    (tmp_path / ".env").write_text("GEMINI_API_KEY=test-key-0000\n", encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "GEMINI_API_KEY=test-key-0000\nOPENROUTER_API_KEY=test-key-0000\n",
+        encoding="utf-8",
+    )
     static = tmp_path / "static"
     static.mkdir()
     (static / "index.html").write_text(

@@ -17,6 +17,7 @@ from __future__ import annotations
 import ctypes
 import os
 import platform
+import subprocess
 import sys
 from dataclasses import dataclass
 
@@ -24,6 +25,10 @@ MLX_MIN_MEMORY_GB = 32
 # What a model good enough for the take planner needs (about 30B parameters
 # at 4 bits, its context, and the rest of the computer).
 MEMORY_NEEDED_GB = 32
+# An NVIDIA GPU that holds the recommended model (about 19 GB) and its context
+# whole; on less of one most of the model runs on the CPU, slowly.  (A 24 GB
+# card reports a little under 24.)
+GPU_MEMORY_NEEDED_GB = 22
 # What planning on this computer costs in time (measured below: on an M1 Max
 # longer than the recording); how long depends on the computer.
 SPEED_NOTE = "Running locally may take longer."
@@ -138,6 +143,60 @@ def recommended() -> list[dict[str, object]]:
 
 def default_model() -> str:
     return str(recommended()[0]["id"])
+
+
+def nvidia_memory_gb() -> float | None:
+    """The memory of this computer's largest NVIDIA GPU, if it has one."""
+
+    try:
+        completed = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+            **(
+                {"creationflags": subprocess.CREATE_NO_WINDOW}
+                if sys.platform == "win32"
+                else {}
+            ),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    sizes = []
+    for line in completed.stdout.splitlines():
+        try:
+            sizes.append(float(line.strip()) / 1024)  # MiB
+        except ValueError:
+            continue
+    return max(sizes) if completed.returncode == 0 and sizes else None
+
+
+def runs_well_here() -> bool:
+    """Whether the recommended model plans at a usable speed on this computer:
+    on Apple Silicon with the memory for it, or on an NVIDIA GPU that holds it."""
+
+    if sys.platform == "darwin":
+        memory = memory_gb()
+        return (
+            platform.machine() == "arm64"
+            and memory is not None
+            and memory >= MEMORY_NEEDED_GB
+        )
+    gpu = nvidia_memory_gb()
+    return gpu is not None and gpu >= GPU_MEMORY_NEEDED_GB
+
+
+def default_planner_backend() -> str:
+    """The planner of new projects: Gemma 4 31B on this computer where it runs
+    well, else the same model through OpenRouter."""
+
+    return "ollama" if runs_well_here() else "openrouter"
 
 
 def recommended_think(model: str) -> Think | None:

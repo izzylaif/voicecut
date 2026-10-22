@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, CircleHelp, Download, FileAudio, FileVideo, Settings, Sparkles } from 'lucide-react';
 import { api, followJob } from '../api';
 import { confirmAction, desktop, documentOpened, editText, invoke, onMenu } from '../desktop';
-import { findLocalModel } from '../localModels';
+import { findLocalModel, useLocalModels } from '../localModels';
 import { EditorStore, errorText } from '../store';
 import { Timeline } from '../timeline/Timeline';
 import type { ProjectState, RunSettings, SettingsState } from '../types';
@@ -46,6 +46,9 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
   const [helpOpen, setHelpOpen] = useState(false);
   const [settings, setSettings] = useState<RunSettings>(initial.settings);
   const [settingsState, setSettingsState] = useState<SettingsState | null>(null);
+  // The local model the Voice Cut button is downloading: Voice Cut runs once it is there.
+  const [awaitedModel, setAwaitedModel] = useState<string | null>(null);
+  const localModels = useLocalModels(false);
   const project = store.project;
 
   useEffect(() => () => store.dispose(), [store]);
@@ -128,8 +131,10 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
     }
     const local = planner?.id === 'ollama' ? findLocalModel(modelOf(settings, settingsState)) : undefined;
     if (local && !local.downloaded) {
-      if (local.pull && !local.pull.done) store.notify(`${local.id} is still downloading`, 'error');
-      else void downloadLocalModel(local);
+      if ((local.pull && !local.pull.done) || (await downloadLocalModel(local, { forVoiceCut: true }))) {
+        setAwaitedModel(local.id);
+        store.notify(`Downloading ${local.label || local.id}: Voice Cut starts when it is ready`);
+      }
       return;
     }
     if (store.proposal && store.isEdited) {
@@ -146,6 +151,19 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
       store.notify(`Cannot start Voice Cut: ${errorText(error)}`, 'error');
     }
   };
+
+  useEffect(() => {
+    if (!awaitedModel) return;
+    const planner = settingsState ? plannerOf(settings, settingsState.planners) : undefined;
+    const model = findLocalModel(awaitedModel);
+    if (planner?.id !== 'ollama' || modelOf(settings, settingsState) !== awaitedModel || model?.pull?.error) {
+      setAwaitedModel(null); // another planner was chosen, or the download failed (the picker says why)
+    } else if (model?.downloaded) {
+      setAwaitedModel(null);
+      void startVoiceCut();
+    }
+    // startVoiceCut is a new function every render; the download decides when it runs.
+  }, [awaitedModel, localModels.list, settings, settingsState]);
 
   const cancelVoiceCut = () => {
     api.cancelVoiceCut(store.id).catch((error: unknown) => store.notify(errorText(error), 'error'));

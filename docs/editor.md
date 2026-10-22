@@ -91,9 +91,14 @@ top bar, then press **Voice Cut**:
   and the ones your Ollama already has; any model of the Ollama library works.
 - *Language* — English or Russian.
 
-The choice is saved with the project and used for new projects too. If the
-planner's API key is missing or the provider rejects it, the model list says so
-and Voice Cut refuses to start until the key is added.
+The choice is saved with the project and used for new projects too. Until you
+choose, new projects plan with Gemma 4 31B on this computer where it runs well
+(Apple Silicon with 32 GB of memory or more, or an NVIDIA GPU with 24 GB), and
+with the same model through OpenRouter elsewhere. Pressing **Voice Cut** with a
+local model that is not downloaded yet offers the download and starts Voice
+Cut when it is there. If the planner's API key is missing or the provider
+rejects it, the model list says so and Voice Cut refuses to start until the key
+is added.
 
 Voice Cut edits what is on the timeline. Split the recording and delete what
 you do not want first, and only the parts that are left are transcribed,
