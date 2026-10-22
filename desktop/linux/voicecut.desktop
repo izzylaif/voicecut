@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name={{name}}
+{{#if comment}}
+Comment={{comment}}
+{{/if}}
+Exec={{exec}} %F
+Icon={{icon}}
+Categories={{categories}}
+MimeType=application/x-voicecut-project;
+StartupWMClass={{exec}}
+Terminal=false

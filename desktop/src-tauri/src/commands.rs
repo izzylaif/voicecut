@@ -64,7 +64,7 @@ pub fn document_opened(
     name: String,
 ) {
     let path = PathBuf::from(&path);
-    let path = path.canonicalize().unwrap_or(path);
+    let path = crate::paths::canonical(&path).unwrap_or(path);
     app.state::<AppState>().roles.lock().unwrap().insert(
         window.label().to_string(),
         Role::Document {
@@ -342,7 +342,15 @@ pub fn pick_document(app: &AppHandle, parent: Option<&WebviewWindow>) -> Option<
         .dialog()
         .file()
         .set_title("Open a VoiceCut project")
-        .add_filter("VoiceCut Project", &["vc"]);
+        // A document is a folder; elsewhere than macOS one opens its launcher.
+        .add_filter(
+            "VoiceCut Project",
+            &[if cfg!(target_os = "macos") {
+                "vc"
+            } else {
+                "vcproj"
+            }],
+        );
     if let Some(parent) = parent {
         dialog = dialog.set_parent(parent);
     }
@@ -388,7 +396,7 @@ fn save_document_panel(
         path.set_extension("vc");
     }
     if path.exists() {
-        let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+        let canonical = crate::paths::canonical(&path).unwrap_or_else(|_| path.clone());
         if document_window(app, &canonical).is_some() {
             return Err(format!(
                 "“{}” is open in VoiceCut. Close it first, or choose another name.",
@@ -420,9 +428,9 @@ pub fn open_in_browser(url: &str) -> Result<(), String> {
     let result = if cfg!(target_os = "macos") {
         Command::new("open").arg(url).spawn()
     } else if cfg!(windows) {
-        Command::new("cmd").args(["/C", "start", "", url]).spawn()
+        crate::process::quiet(Command::new("cmd").args(["/C", "start", "", url])).spawn()
     } else {
-        Command::new("xdg-open").arg(url).spawn()
+        crate::process::quiet(Command::new("xdg-open").arg(url)).spawn()
     };
     result.map(|_| ()).map_err(|error| error.to_string())
 }
@@ -435,12 +443,16 @@ fn open_path(path: &Path) {
     } else {
         "xdg-open"
     };
-    let _ = Command::new(program).arg(path).spawn();
+    let _ = crate::process::quiet(Command::new(program).arg(path)).spawn();
 }
 
 pub fn reveal(path: &Path) {
     if cfg!(target_os = "macos") {
         let _ = Command::new("open").arg("-R").arg(path).spawn();
+    } else if cfg!(windows) {
+        let mut select = std::ffi::OsString::from("/select,");
+        select.push(path);
+        let _ = Command::new("explorer").arg(select).spawn();
     } else if let Some(parent) = path.parent() {
         open_path(parent);
     }

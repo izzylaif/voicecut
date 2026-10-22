@@ -21,7 +21,11 @@ from voicecut.planner_backends import PlannerRuntimeConfiguration
 
 def _args(tmp_path: Path, source: Path):
     mfa_prefix = tmp_path / ".mfa-env"
-    mfa_executable = mfa_prefix / "bin" / "mfa"
+    mfa_executable = (
+        mfa_prefix / "Scripts" / "mfa.exe"
+        if sys.platform == "win32"
+        else mfa_prefix / "bin" / "mfa"
+    )
     mfa_executable.parent.mkdir(parents=True, exist_ok=True)
     mfa_executable.write_text("#!/bin/sh\n", encoding="utf-8")
     mfa_executable.chmod(0o755)

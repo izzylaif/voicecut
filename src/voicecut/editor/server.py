@@ -38,7 +38,7 @@ from fastapi.responses import (
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
-from .. import __version__
+from .. import __version__, processes
 from ..common import read_json
 from ..language_profiles import SUPPORTED_LANGUAGE_CODES
 from ..planner_backends import (
@@ -69,6 +69,7 @@ from .timeline import (
     timeline_revision,
     validate_timeline,
 )
+from .worker import STDIN_CONTROL_ENV
 
 PREVIEW_CACHE_SIZE = 32
 MAX_RENDER_FRAMES = 1 << 20
@@ -87,24 +88,26 @@ FRONTEND_MISSING = """<!doctype html><meta charset="utf-8"><title>VoiceCut edito
 def spawn_worker(
     request_path: Path, environment: dict[str, str] | None = None
 ) -> subprocess.Popen[str]:
-    """Start ``python -m voicecut.editor.worker`` in its own process group.
+    """Start ``python -m voicecut.editor.worker`` as the root of its own tree.
 
     ``environment`` adds variables (a planner key from the Keychain) to the
-    editor's own.
+    editor's own.  The worker stops when it reads "cancel" on its standard
+    input, or when that pipe closes because the editor is gone.
     """
 
-    environment = {**os.environ, **(environment or {})}
+    environment = {**os.environ, **(environment or {}), STDIN_CONTROL_ENV: "1"}
     source = str(PROJECT_ROOT / "src")
     existing = environment.get("PYTHONPATH")
     environment["PYTHONPATH"] = source + (os.pathsep + existing if existing else "")
     return subprocess.Popen(
         [sys.executable, "-m", "voicecut.editor.worker", str(request_path)],
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         cwd=PROJECT_ROOT,
         env=environment,
-        start_new_session=True,
+        **processes.own_group(),
     )
 
 
@@ -290,7 +293,7 @@ class EditorService:
         ]
         for job in jobs:
             job.cancel_requested = True
-            self._signal(job, signal.SIGTERM)
+            self._cancel(job)
         deadline = time.monotonic() + SHUTDOWN_GRACE_SECONDS
         for job in jobs:
             process = job.process
@@ -298,14 +301,21 @@ class EditorService:
                 continue
             with contextlib.suppress(subprocess.TimeoutExpired):
                 process.wait(max(0.0, deadline - time.monotonic()))
-            if process.poll() is None:
-                self._signal(job, signal.SIGKILL)
+            processes.terminate_tree(process, force=True)
 
     @staticmethod
-    def _signal(job: Job, signum: int) -> None:
-        if job.process is not None and job.process.poll() is None:
-            with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
-                os.killpg(os.getpgid(job.process.pid), signum)
+    def _cancel(job: Job) -> None:
+        """Ask a running Voice Cut to stop; its worker ends its stages."""
+
+        process = job.process
+        if process is None or process.poll() is not None:
+            return
+        if process.stdin is not None:
+            with contextlib.suppress(OSError, ValueError):
+                process.stdin.write("cancel\n")
+                process.stdin.flush()
+                return
+        processes.terminate_tree(process)
 
     # -- video preview -------------------------------------------------------------
     def start_prepare(self, project: Project) -> Job | None:
@@ -657,9 +667,7 @@ class EditorService:
         if job is None:
             raise HTTPException(409, "Voice Cut is not running")
         job.cancel_requested = True
-        if job.process is not None and job.process.poll() is None:
-            with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
-                os.killpg(os.getpgid(job.process.pid), signal.SIGTERM)
+        self._cancel(job)
 
     # -- timeline + preview audio ------------------------------------------------------
     def room_tone(
@@ -1027,11 +1035,12 @@ def create_app(
         path = Path(record["output_path"])
         if not path.exists():
             raise HTTPException(404, "the exported file no longer exists")
-        command = (
-            ["open", "-R", str(path)]
-            if sys.platform == "darwin"
-            else ["xdg-open", str(path.parent)]
-        )
+        if sys.platform == "darwin":
+            command = ["open", "-R", str(path)]
+        elif sys.platform == "win32":
+            command = ["explorer", f"/select,{path}"]
+        else:
+            command = ["xdg-open", str(path.parent)]
         with contextlib.suppress(OSError):
             subprocess.Popen(
                 command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL

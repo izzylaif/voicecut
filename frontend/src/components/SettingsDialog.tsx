@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink, KeyRound, Loader2, X } from 'lucide-react';
 import { api, ApiError } from '../api';
-import { confirmAction } from '../desktop';
+import { confirmAction, desktop } from '../desktop';
 import type { PlannerInfo, RunSettings, SettingsState } from '../types';
 
 /**
@@ -41,9 +41,9 @@ export function SettingsDialog({
 
         <section className="settings-section">
           <h3>API keys</h3>
-          {state.key_store?.kind === 'keychain' ? (
+          {state.key_store && (state.key_store.kind !== 'env_file' || desktop) ? (
             <p className="muted small">
-              Keys are kept in your macOS Keychain on this Mac and are sent only to their provider.
+              Keys are kept in {state.key_store.location} on this computer and are sent only to their provider.
             </p>
           ) : (
             <p className="muted small">
@@ -162,7 +162,7 @@ function KeyRow({
             className="button subtle"
             disabled={busy}
             onClick={() => {
-              const where = state.key_store?.kind === 'keychain' ? 'the Keychain' : planner.key_env;
+              const where = state.key_store?.kind === 'env_file' ? planner.key_env : state.key_store?.location;
               void confirmAction(`Remove the ${planner.label} key from ${where}?`, { ok: 'Remove' }).then((ok) => {
                 if (ok) void save('');
               });

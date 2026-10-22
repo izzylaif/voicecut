@@ -1,0 +1,158 @@
+name: Desktop installers
+
+# Builds VoiceCut for macOS (.dmg), Linux (.AppImage and .deb) and Windows
+# (setup .exe) and uploads them as the run's artifacts.  The release workflow
+# reuses it.  With the APPLE_* secrets (see desktop/README.md) the macOS app
+# is signed with a Developer ID and notarized; without them it is signed ad
+# hoc.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/actions/**"
+      - ".github/scripts/**"
+      - ".github/workflows/desktop.yml"
+      - "desktop/**"
+      - "frontend/**"
+      - "src/**"
+      - "pyproject.toml"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    name: Installer (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-15
+            slug: macos
+          - name: Linux
+            os: ubuntu-22.04
+            slug: linux
+          - name: Windows
+            os: windows-2025
+            slug: windows
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TERM_COLOR: never
+      APPLE_SIGNED: ${{ secrets.APPLE_CERTIFICATE != '' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Prepare the build
+        uses: ./.github/actions/prepare-desktop
+        with:
+          cache-key: release
+
+      - name: Check the Rust code
+        working-directory: desktop/src-tauri
+        run: |
+          run=../../.github/scripts/run.sh
+          "${run}" "rustfmt" cargo fmt --check
+          "${run}" "Clippy on ${{ matrix.name }}" \
+            cargo clippy --release --all-targets --features automation -- -D warnings
+          "${run}" "Rust tests on ${{ matrix.name }}" cargo test --release
+
+      - name: Install the macOS build tools
+        if: runner.os == 'macOS'
+        run: cargo install resvg --version 0.48.1 --locked
+
+      - name: Install uv
+        if: runner.os == 'macOS'
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.4"
+
+      - name: Import the Developer ID certificate
+        if: runner.os == 'macOS' && env.APPLE_SIGNED == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+        run: |
+          keychain="${RUNNER_TEMP}/signing.keychain-db"
+          password="$(openssl rand -hex 16)"
+          security create-keychain -p "${password}" "${keychain}"
+          security set-keychain-settings -lut 7200 "${keychain}"
+          security unlock-keychain -p "${password}" "${keychain}"
+          printf '%s' "${APPLE_CERTIFICATE}" | base64 --decode >"${RUNNER_TEMP}/certificate.p12"
+          security import "${RUNNER_TEMP}/certificate.p12" -k "${keychain}" \
+            -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "${password}" "${keychain}" >/dev/null
+          security list-keychains -d user -s "${keychain}" login.keychain
+          rm "${RUNNER_TEMP}/certificate.p12"
+          if [[ -n "${APPLE_API_KEY_CONTENT}" ]]; then
+            printf '%s' "${APPLE_API_KEY_CONTENT}" >"${RUNNER_TEMP}/api-key.p8"
+            echo "APPLE_API_KEY_PATH=${RUNNER_TEMP}/api-key.p8" >>"${GITHUB_ENV}"
+          fi
+
+      - name: Build the disk image
+        if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: .github/scripts/run.sh "macOS build" desktop/scripts/build-macos.sh
+
+      - name: Build the installers
+        if: runner.os != 'macOS'
+        working-directory: desktop
+        run: ../.github/scripts/run.sh "${{ matrix.name }} build" npx tauri build
+
+      - name: Collect the installers
+        run: |
+          version="$(python -c 'import json; print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')"
+          bundle=desktop/src-tauri/target/release/bundle
+          mkdir installers
+          case "${RUNNER_OS}" in
+            macOS)
+              cp "desktop/build/VoiceCut-${version}-arm64.dmg" installers/ ;;
+            Linux)
+              cp "${bundle}"/appimage/*.AppImage "installers/VoiceCut-${version}-x86_64.AppImage"
+              cp "${bundle}"/deb/*.deb "installers/VoiceCut-${version}-amd64.deb" ;;
+            Windows)
+              cp "${bundle}"/nsis/*-setup.exe "installers/VoiceCut-${version}-x64-setup.exe" ;;
+          esac
+          ls -l installers
+
+      - name: Check the .deb
+        if: runner.os == 'Linux'
+        run: |
+          run=.github/scripts/run.sh
+          "${run}" "Install the .deb" sudo apt-get install -y -q ./installers/*.deb
+          package="$(dpkg-deb -f installers/*.deb Package)"
+          dpkg -L "${package}"
+          entry="$(dpkg -L "${package}" | grep '\.desktop$')"
+          "${run}" "The .deb's menu entry" desktop-file-validate "${entry}"
+          "${run}" "The .deb's file type" bash -c "
+            set -e
+            grep -q '^Exec=voicecut %F' '${entry}'
+            grep -q '^MimeType=application/x-voicecut-project;' '${entry}'
+            test -x /usr/bin/voicecut
+            test -f /usr/share/icons/hicolor/256x256/mimetypes/application-x-voicecut-project.png
+            grep -q 'application/x-voicecut-project' /usr/share/mime/globs2
+            dpkg -L '${package}' | grep -q '/runtime/runtime.json$'
+          "
+          sudo apt-get remove -y -q "${package}"
+
+      - name: Upload the installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-${{ matrix.slug }}
+          path: installers/*
+          if-no-files-found: error
+          compression-level: 0

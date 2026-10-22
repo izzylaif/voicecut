@@ -1,0 +1,110 @@
+name: End-to-end
+
+# Installs a test build of VoiceCut (cargo feature `automation`) the way a
+# user would, lets it set itself up from nothing, runs Whisper and MFA in the
+# runtime it installed, and opens a project.  See desktop/tests/e2e.py.  The
+# whole Voice Cut runs only when started by hand with "full" and the
+# GEMINI_API_KEY secret set.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/actions/**"
+      - ".github/workflows/e2e.yml"
+      - "desktop/**"
+      - "frontend/**"
+      - "src/**"
+      - "pyproject.toml"
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Run the whole Voice Cut (needs the GEMINI_API_KEY secret)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: End-to-end (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-22.04
+            bundle: appimage
+          - name: Windows
+            os: windows-2025
+            bundle: nsis
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TERM_COLOR: never
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      E2E_FULL: ${{ inputs.full && '--full' || '' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Prepare the build
+        uses: ./.github/actions/prepare-desktop
+        with:
+          cache-key: automation
+
+      - name: Build the test variant
+        working-directory: desktop
+        run: |
+          ../.github/scripts/run.sh "Test build on ${{ matrix.name }}" \
+            npx tauri build --features automation --bundles ${{ matrix.bundle }} \
+            --config src-tauri/tauri.test.conf.json
+
+      - name: Install it (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem desktop/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+          $app = Join-Path $env:LOCALAPPDATA 'VoiceCut\VoiceCut.exe'
+          if (-not (Test-Path $app)) {
+            Write-Output "::error title=Install::the installer put no VoiceCut.exe in $app"
+            exit 1
+          }
+          $type = (Get-ItemProperty 'HKCU:\Software\Classes\.vcproj' -ErrorAction SilentlyContinue).'(default)'
+          $icon = (Get-ItemProperty 'HKCU:\Software\Classes\VoiceCut.Project\DefaultIcon' -ErrorAction SilentlyContinue).'(default)'
+          $open = (Get-ItemProperty 'HKCU:\Software\Classes\VoiceCut.Project\shell\open\command' -ErrorAction SilentlyContinue).'(default)'
+          Write-Output ".vcproj: $type; icon: $icon; open: $open"
+          if ($type -ne 'VoiceCut.Project' -or $icon -notlike '*VoiceCutDocument.ico*' -or $open -notlike '*VoiceCut.exe*') {
+            Write-Output "::error title=File association::.vcproj is '$type', its icon '$icon', open with '$open'"
+            exit 1
+          }
+          "VOICECUT_APP=$app" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Find it (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y -q xvfb
+          echo "VOICECUT_APP=$(ls "${PWD}"/desktop/src-tauri/target/release/bundle/appimage/*.AppImage)" >>"${GITHUB_ENV}"
+
+      - name: First launch, setup, Whisper and MFA, a project
+        env:
+          # Xvfb has no GPU for WebKitGTK's DMA-BUF renderer.
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+        run: |
+          work="${RUNNER_TEMP}/voicecut e2e"
+          if [[ "${RUNNER_OS}" == Linux ]]; then
+            xvfb-run -a dbus-run-session -- \
+              python desktop/tests/e2e.py --app "${VOICECUT_APP}" --work "${work}" ${E2E_FULL}
+          else
+            python desktop/tests/e2e.py --app "${VOICECUT_APP}" --work "${work}" ${E2E_FULL}
+          fi

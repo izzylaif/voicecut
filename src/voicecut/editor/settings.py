@@ -4,9 +4,11 @@
   pipeline already reads them: the dotenv file it passes to ``voicecut
   --env-file`` (the repository ``.env`` by default); saving a key rewrites
   only that key's line, keeping every other line, comment and the file's
-  permissions.  The desktop app keeps them in the macOS login keychain and
-  hands the planner's key to a Voice Cut run in its environment.  Either way
-  a key is never sent back to the browser in full and never logged.
+  permissions.  The desktop app keeps them in the system's credential store
+  (the macOS login keychain, the Windows Credential Manager, the Secret
+  Service keyring on Linux) and hands the planner's key to a Voice Cut run in
+  its environment.  Either way a key is never sent back to the browser in
+  full and never logged.
 * Model lists come from each provider's models API, called with the saved
   key, and are filtered to text models that can serve as the take planner.
   Failing to list models doubles as a key check: the UI says whether a key is
@@ -15,12 +17,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -255,6 +259,65 @@ class KeychainKeys:
         result = self._run(["-i"], stdin=command)
         if result.returncode != 0:
             raise SettingsError(f"the Keychain refused: {result.stderr.strip()}")
+
+
+class CredentialStoreKeys:
+    """Keys in the Windows Credential Manager or a Secret Service keyring.
+
+    ``keyring`` talks to whichever the system has (on Linux: GNOME Keyring,
+    KWallet or KeePassXC through the Secret Service API).
+    """
+
+    kind = "credential_store"
+
+    def __init__(self, service: str = KEYCHAIN_SERVICE) -> None:
+        import keyring
+
+        self.service = service
+        self.backend = keyring.get_keyring()
+
+    @property
+    def location(self) -> str:
+        if sys.platform == "win32":
+            return "the Windows Credential Manager"
+        return "your keyring (Secret Service)"
+
+    def get(self, name: str) -> str | None:
+        try:
+            value = self.backend.get_password(self.service, name)
+        except Exception:  # noqa: BLE001 - a locked or broken keyring
+            return None
+        return value.strip() or None if value else None
+
+    def set(self, name: str, value: str | None) -> None:
+        import keyring.errors
+
+        try:
+            if value:
+                self.backend.set_password(self.service, name, _check_key(value))
+            else:
+                with contextlib.suppress(keyring.errors.PasswordDeleteError):
+                    self.backend.delete_password(self.service, name)
+        except keyring.errors.KeyringError as error:
+            raise SettingsError(f"the keyring refused: {error}") from error
+
+
+def system_keys(fallback: Path) -> KeyStore:
+    """The credential store of this system, or the dotenv file ``fallback``.
+
+    Linux without a Secret Service (a bare window manager, a container) falls
+    back to a file only its owner can read.
+    """
+
+    if sys.platform == "darwin":
+        return KeychainKeys()
+    with contextlib.suppress(Exception):
+        import keyring
+        from keyring.backends import fail
+
+        if not isinstance(keyring.get_keyring(), fail.Keyring):
+            return CredentialStoreKeys()
+    return EnvFileKeys(fallback)
 
 
 # ---------------------------------------------------------------------------

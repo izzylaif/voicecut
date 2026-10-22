@@ -80,7 +80,8 @@ def test_saving_a_key_keeps_the_rest_of_the_file(tmp_path: Path) -> None:
     assert env.read_text(encoding="utf-8") == (
         "# planner keys\nGEMINI_API_KEY=AIzaNEW123456\nOTHER=1 # note\nOPENAI_API_KEY=sk-abc/def+ghi\n"
     )
-    assert stat.S_IMODE(env.stat().st_mode) == 0o600
+    if os.name != "nt":  # Windows has no POSIX permission bits
+        assert stat.S_IMODE(env.stat().st_mode) == 0o600
     assert settings.read_env_file(env)["OTHER"] == "1"
     settings.save_key(env, "GEMINI_API_KEY", None)
     assert "GEMINI_API_KEY" not in env.read_text(encoding="utf-8")
@@ -91,7 +92,8 @@ def test_saving_a_key_keeps_the_rest_of_the_file(tmp_path: Path) -> None:
 def test_a_new_env_file_is_private(tmp_path: Path) -> None:
     env = tmp_path / "keys.env"
     settings.save_key(env, "DEEPSEEK_API_KEY", "ds-1234567890")
-    assert stat.S_IMODE(env.stat().st_mode) == 0o600
+    if os.name != "nt":  # Windows has no POSIX permission bits
+        assert stat.S_IMODE(env.stat().st_mode) == 0o600
     assert settings.key_value(env, "DEEPSEEK_API_KEY") == ("ds-1234567890", "env_file")
 
 

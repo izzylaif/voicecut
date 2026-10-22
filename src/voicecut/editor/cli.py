@@ -14,27 +14,26 @@ import argparse
 import contextlib
 import os
 import shutil
-import signal
 import sys
 import threading
 import time
 import urllib.error
 import urllib.request
 import webbrowser
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+from .. import processes
 from ..language_profiles import SUPPORTED_LANGUAGE_CODES
 from ..planner_backends import PLANNER_BACKENDS
 from .projects import DEFAULT_PROJECTS_DIR, PROJECT_ROOT, ProjectError
-from .settings import KEYCHAIN_SERVICE, EnvFileKeys, KeychainKeys
+from .settings import KEYCHAIN_SERVICE, EnvFileKeys, system_keys
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HEALTH_TIMEOUT_SECONDS = 30.0
-PARENT_POLL_SECONDS = 1.0
 GRACEFUL_SHUTDOWN_SECONDS = 2
 
 
@@ -95,8 +94,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--keys",
         choices=("env-file", "keychain"),
         default="env-file",
-        help="Where API keys are kept: the --env-file (default) or the macOS "
-        f"Keychain ({KEYCHAIN_SERVICE!r} items).",
+        help="Where API keys are kept: the --env-file (default), or the system's "
+        f"credential store ({KEYCHAIN_SERVICE!r} items in the macOS Keychain, the "
+        "Windows Credential Manager or a Secret Service keyring).",
     )
     parser.add_argument(
         "--dev",
@@ -154,22 +154,18 @@ def open_browser_when_ready(base_url: str, page_url: str) -> threading.Thread:
     return thread
 
 
-def exit_with_parent(parent_pid: int) -> threading.Thread:
-    """Stop this server (and so Voice Cut) once ``parent_pid`` has exited.
+def exit_with_parent(parent_pid: int, stop: Callable[[], None]) -> threading.Thread:
+    """Stop Voice Cut and exit once ``parent_pid`` has exited.
 
     The desktop app normally stops its engine itself; this covers the app
-    crashing or being force-quit.  SIGTERM runs uvicorn's graceful shutdown,
-    which cancels running Voice Cut jobs.
+    crashing or being force-quit.
     """
 
-    def watch() -> None:
-        while os.getppid() == parent_pid:
-            time.sleep(PARENT_POLL_SECONDS)
-        os.kill(os.getpid(), signal.SIGTERM)
+    def leave() -> None:
+        stop()
+        os._exit(0)
 
-    thread = threading.Thread(target=watch, daemon=True, name="watch-parent")
-    thread.start()
-    return thread
+    return processes.when_parent_exits(parent_pid, leave)
 
 
 def ensure_media_tools() -> None:
@@ -177,8 +173,9 @@ def ensure_media_tools() -> None:
 
     if shutil.which("ffmpeg") and shutil.which("ffprobe"):
         return
-    bundled = PROJECT_ROOT / ".mfa-env" / "bin"
-    if (bundled / "ffmpeg").is_file():
+    environment = PROJECT_ROOT / ".mfa-env"
+    bundled = environment / ("Library/bin" if sys.platform == "win32" else "bin")
+    if any((bundled / name).is_file() for name in ("ffmpeg", "ffmpeg.exe")):
         os.environ["PATH"] = f"{bundled}{os.pathsep}{os.environ.get('PATH', '')}"
 
 
@@ -203,7 +200,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         env_file=env_file,
         defaults=defaults_from_args(args),
         static_dir=None if args.dev else STATIC_DIR,
-        keys=KeychainKeys() if args.keys == "keychain" else EnvFileKeys(env_file),
+        keys=(
+            system_keys(args.projects_dir / "keys.env")
+            if args.keys == "keychain"
+            else EnvFileKeys(env_file)
+        ),
         desktop=args.desktop,
     )
     base_url = f"http://{args.host}:{args.port}"
@@ -228,7 +229,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if not (args.no_browser or args.dev or args.desktop):
         open_browser_when_ready(base_url, page_url)
     if args.parent_pid is not None:
-        exit_with_parent(args.parent_pid)
+        exit_with_parent(args.parent_pid, app.state.service.stop_jobs)
     uvicorn.run(
         app,
         host=args.host,

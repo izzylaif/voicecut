@@ -51,16 +51,7 @@ fi
 npm run build --prefix "${ROOT}/frontend"
 
 step "Staging VoiceCut's runtime"
-rm -rf "${BUILD}/runtime"
-mkdir -p "${BUILD}/runtime/source/src"
-cp "${DESKTOP}"/runtime/{runtime.json,requirements-main.txt,requirements-mlx.txt,mfa-osx-arm64.txt} \
-  "${BUILD}/runtime/"
-rsync -a --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store' \
-  "${ROOT}/src/voicecut" "${BUILD}/runtime/source/src/"
-cp "${ROOT}"/{pyproject.toml,README.md,LICENSE} "${BUILD}/runtime/source/"
-# The app updates the installed source when this hash changes.
-(cd "${BUILD}/runtime/source" && find . -type f | LC_ALL=C sort | xargs shasum -a 256) \
-  | shasum -a 256 | cut -d' ' -f1 >"${BUILD}/runtime/source.sha256"
+python3 "${DESKTOP}/scripts/stage_runtime.py" --platform macos-aarch64
 
 step "Rendering the icons"
 "${DESKTOP}/scripts/make-icons.sh"
@@ -70,7 +61,10 @@ if [[ ! -d "${DESKTOP}/node_modules" ]]; then
   npm ci --prefix "${DESKTOP}" --no-audit --no-fund
 fi
 if [[ -n "${VOICECUT_TEST_BUILD:-}" ]]; then
-  (cd "${DESKTOP}" && npx tauri build --bundles app --features automation)
+  # Its own identifier: the Finder and Launch Services must not mistake it for
+  # the VoiceCut you use and send it your documents.
+  (cd "${DESKTOP}" && npx tauri build --bundles app --features automation \
+    --config src-tauri/tauri.test.conf.json)
   codesign --verify --deep --strict "${APP}"
   echo "test build: ${APP}"
   exit 0

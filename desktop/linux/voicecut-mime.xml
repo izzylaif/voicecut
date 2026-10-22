@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The file type of a VoiceCut project's launcher (<name>.vc/<name>.vcproj),
+     whose icon is application-x-voicecut-project.  Installed by the .deb, and
+     by the AppImage itself into ~/.local/share/mime (src-tauri/src/linux.rs). -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-voicecut-project">
+    <comment>VoiceCut Project</comment>
+    <glob pattern="*.vcproj"/>
+  </mime-type>
+</mime-info>

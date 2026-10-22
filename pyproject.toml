@@ -22,6 +22,8 @@ keywords = [
 classifiers = [
   "Development Status :: 4 - Beta",
   "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Topic :: Multimedia :: Sound/Audio :: Speech",
@@ -62,6 +64,9 @@ editor = [
   "fastapi>=0.115,<1",
   "uvicorn>=0.30,<1",
   "python-multipart>=0.0.9,<1",
+  # API keys in the Windows Credential Manager or a Secret Service keyring
+  # (macOS uses its Keychain through /usr/bin/security).
+  "keyring>=25,<26; platform_system != 'Darwin'",
 ]
 dev = [
   "build>=1.2.2,<2",

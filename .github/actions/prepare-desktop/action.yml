@@ -1,0 +1,61 @@
+name: Prepare the desktop app build
+description: >-
+  Node.js, Python and Rust, the Linux system libraries, the built editor
+  frontend, VoiceCut's staged runtime and the Tauri CLI.
+inputs:
+  cache-key:
+    description: What the Rust build cache is for (release or test builds).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: "22"
+        cache: npm
+        cache-dependency-path: |
+          frontend/package-lock.json
+          desktop/package-lock.json
+
+    - name: Set up Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: "3.12"
+
+    - name: Set up Rust
+      shell: bash
+      run: |
+        rustup toolchain install stable --profile minimal --component clippy,rustfmt
+        rustup default stable
+
+    - name: Cache the Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: desktop/src-tauri -> target
+        key: ${{ inputs.cache-key }}
+
+    - name: Install the Linux libraries
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update -q
+        sudo apt-get install -y -q --no-install-recommends \
+          libwebkit2gtk-4.1-dev libxdo-dev libssl-dev librsvg2-dev \
+          libayatana-appindicator3-dev file xdg-utils desktop-file-utils \
+          gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+          gstreamer1.0-plugins-bad gstreamer1.0-libav
+
+    - name: Build the editor frontend
+      shell: bash
+      run: |
+        npm ci --prefix frontend --no-audit --no-fund
+        .github/scripts/run.sh "Frontend build" npm run build --prefix frontend
+
+    - name: Stage VoiceCut's runtime
+      shell: bash
+      run: python desktop/scripts/stage_runtime.py
+
+    - name: Install the Tauri CLI
+      shell: bash
+      run: npm ci --prefix desktop --no-audit --no-fund

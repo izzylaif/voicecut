@@ -187,14 +187,14 @@ export interface PlannerInfo {
   default_model: string;
   key_env: string | null;
   key_page: string | null;
-  key: { set: boolean; masked: string | null; source: 'environment' | 'env_file' | 'keychain' | null } | null;
+  key: { set: boolean; masked: string | null; source: 'environment' | 'env_file' | 'keychain' | 'credential_store' | null } | null;
   available: boolean;
 }
 
 export interface SettingsState {
   env_file: string;
   /** Where saved keys live: the dotenv file, or the macOS Keychain (absent from older servers). */
-  key_store?: { kind: 'env_file' | 'keychain'; location: string };
+  key_store?: { kind: 'env_file' | 'keychain' | 'credential_store'; location: string };
   planners: PlannerInfo[];
   default_models: Record<string, string>;
   languages: string[];

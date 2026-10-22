@@ -9,10 +9,9 @@ and relays the pipeline's ``progress_callback`` stages to the editor UI.
 
 from __future__ import annotations
 
-import contextlib
+import _thread
 import json
 import os
-import shutil
 import signal
 import subprocess
 import sys
@@ -21,6 +20,8 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import IO, Any
+
+from .. import processes
 
 STAGE_LABELS: dict[str, str] = {
     "preflight": "Checking runtimes",
@@ -35,7 +36,8 @@ STAGE_LABELS: dict[str, str] = {
 }
 STAGE_STATUSES = frozenset({"started", "completed", "cached", "skipped", "failed"})
 CANCELLED_EXIT_STATUS = 130
-PARENT_POLL_SECONDS = 1.0
+# Set by the editor: "cancel" on standard input (or its end) stops the run.
+STDIN_CONTROL_ENV = "VOICECUT_WORKER_STDIN_CONTROL"
 
 
 class WorkerCancelled(BaseException):
@@ -93,15 +95,8 @@ class ChildRegistry:
     def terminate(self) -> None:
         with self._lock:
             process = self._current
-        if process is None or process.poll() is not None:
-            return
-        try:
-            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        except (ProcessLookupError, PermissionError, OSError):
-            try:
-                process.terminate()
-            except OSError:
-                return
+        if process is not None:
+            processes.terminate_tree(process)
 
 
 def _pump(
@@ -137,7 +132,8 @@ def make_streaming_runner(
         kwargs.pop("stderr", None)
         kwargs.pop("text", None)
         kwargs.pop("capture_output", None)
-        kwargs.setdefault("start_new_session", True)
+        for key, value in processes.own_group().items():
+            kwargs.setdefault(key, value)
         stderr_lines: list[str] = []
 
         def on_stdout(line: str) -> None:
@@ -233,12 +229,46 @@ def load_request(path: Path) -> dict[str, Any]:
     return request
 
 
+_registry = ChildRegistry()
+_cancel_requested = threading.Event()
+
+
+def request_cancel() -> None:
+    """Stop the run as SIGTERM does, also where there is no SIGTERM to send.
+
+    Windows cannot signal a process; there the stage's process tree is ended
+    first, so the main thread stops waiting for it, then the SIGTERM handler
+    runs in the main thread.
+    """
+
+    _cancel_requested.set()
+    if processes.WINDOWS:
+        _registry.terminate()
+        _thread.interrupt_main(signal.SIGTERM)
+    else:
+        os.kill(os.getpid(), signal.SIGTERM)
+
+
+def cancel_on_stdin() -> threading.Thread:
+    """Stop when the editor writes "cancel" or goes away (standard input ends)."""
+
+    def watch() -> None:
+        for line in sys.stdin:
+            if line.strip() == "cancel":
+                break
+        request_cancel()
+
+    thread = threading.Thread(target=watch, daemon=True, name="worker-control")
+    thread.start()
+    return thread
+
+
 def run_job(request: dict[str, Any], sink: EventSink) -> dict[str, Any]:
     """Run the pipeline described by ``request`` and return its ledger."""
 
     from .. import full_pipeline
 
-    registry = ChildRegistry()
+    registry = _registry
     tracker = StageTracker(sink)
 
     def on_sigterm(signum: int, frame: object) -> None:
@@ -246,6 +276,8 @@ def run_job(request: dict[str, Any], sink: EventSink) -> dict[str, Any]:
         raise WorkerCancelled
 
     signal.signal(signal.SIGTERM, on_sigterm)
+    if _cancel_requested.is_set():
+        raise WorkerCancelled
     parser = full_pipeline.build_parser()
     args = parser.parse_args(list(request["argv"]))
     try:
@@ -261,43 +293,6 @@ def run_job(request: dict[str, Any], sink: EventSink) -> dict[str, Any]:
         raise
 
 
-def cancel_when_orphaned(parent_pid: int) -> threading.Thread:
-    """Cancel the run (as SIGTERM does) once the editor server is gone.
-
-    The worker runs in its own session, so nothing else stops it when the
-    server dies without cancelling it first.
-    """
-
-    def watch() -> None:
-        while os.getppid() == parent_pid:
-            time.sleep(PARENT_POLL_SECONDS)
-        os.kill(os.getpid(), signal.SIGTERM)
-
-    thread = threading.Thread(target=watch, daemon=True, name="watch-parent")
-    thread.start()
-    return thread
-
-
-def keep_awake() -> subprocess.Popen[bytes] | None:
-    """Keep the Mac from idle sleep until this run ends (macOS ``caffeinate``).
-
-    A long recording can take longer to edit than the display stays on;
-    ``caffeinate -w`` lets go when this process exits, however it exits.
-    """
-
-    tool = shutil.which("caffeinate")
-    if tool is None:
-        return None
-    with contextlib.suppress(OSError):
-        return subprocess.Popen(
-            [tool, "-i", "-w", str(os.getpid())],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    return None
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point for ``python -m voicecut.editor.worker``."""
 
@@ -306,8 +301,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("usage: python -m voicecut.editor.worker REQUEST_JSON", file=sys.stderr)
         return 2
     if argv is None:
-        cancel_when_orphaned(os.getppid())
-        keep_awake()
+        if os.environ.get(STDIN_CONTROL_ENV) == "1":
+            cancel_on_stdin()
+        processes.keep_awake()
     events_fd = os.dup(1)
     os.dup2(2, 1)
     sys.stdout = sys.stderr

@@ -1,10 +1,11 @@
 //! The engine: `voicecut-editor --desktop`, the VoiceCut editor's server, on
 //! a free port of the loopback interface.
 //!
-//! It runs in its own process group with the app's pid as `--parent-pid`, so
-//! it stops itself (and any Voice Cut run) if the app dies.  Stopping it asks
-//! it to cancel running jobs first, then sends SIGTERM to the group and, if
-//! anything is left after a grace period, SIGKILL.
+//! It runs as the root of its own process tree with the app's pid as
+//! `--parent-pid`, so it stops itself (and any Voice Cut run) if the app dies.
+//! Stopping it asks it to cancel running jobs first, then ends the tree
+//! (SIGTERM to the process group and, after a grace period, SIGKILL; on
+//! Windows `taskkill /T`).
 
 use std::fs::{self, OpenOptions};
 use std::net::TcpListener;
@@ -15,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::paths::Paths;
-use crate::setup::kill_group;
+use crate::process;
 
 /// Tried first so the editor keeps one origin (and its remembered playback
 /// speed) from launch to launch.
@@ -71,9 +72,17 @@ impl Engine {
             .append(true)
             .open(&log_path)
             .map_err(|error| error.to_string())?;
-        let mut search: Vec<PathBuf> = vec![paths.tools(), paths.mfa_env().join("bin")];
-        search.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from));
-        if paths.development {
+        let mut search: Vec<PathBuf> = vec![paths.tools()];
+        search.extend(paths.mfa_tools());
+        if cfg!(windows) {
+            // The system's own folders (taskkill, explorer, ...).
+            search.extend(std::env::split_paths(
+                &std::env::var_os("PATH").unwrap_or_default(),
+            ));
+        } else {
+            search.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from));
+        }
+        if paths.development && !cfg!(windows) {
             // A checkout finds micromamba where its developer put it.
             search.extend(std::env::split_paths(
                 &std::env::var_os("PATH").unwrap_or_default(),
@@ -109,11 +118,7 @@ impl Engine {
             .stdin(Stdio::null())
             .stdout(log.try_clone().map_err(|error| error.to_string())?)
             .stderr(log);
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            command.process_group(0);
-        }
+        process::detach(&mut command);
         let child = command
             .spawn()
             .map_err(|error| format!("Cannot start the VoiceCut engine: {error}"))?;
@@ -201,7 +206,12 @@ impl Engine {
             serde_json::json!({}),
             Duration::from_secs(15),
         );
-        kill_group(self.pid, libc::SIGTERM);
+        if cfg!(windows) {
+            // Nothing to ask politely on Windows: the jobs are stopped already.
+            self.kill();
+            return;
+        }
+        process::stop_tree(self.pid, false);
         let deadline = Instant::now() + STOP_GRACE;
         while Instant::now() < deadline {
             if !matches!(self.child.lock().unwrap().try_wait(), Ok(None)) {
@@ -214,7 +224,7 @@ impl Engine {
 
     fn kill(&self) {
         self.stopping.store(true, Ordering::SeqCst);
-        kill_group(self.pid, libc::SIGKILL);
+        process::stop_tree(self.pid, true);
         let _ = self.child.lock().unwrap().wait();
     }
 }

@@ -4,8 +4,12 @@
 This script intentionally runs each atom without previous-text conditioning.
 That prevents a whole-file decoder from silently normalizing away restarts.
 
-Two engines are available.  ``mlx-whisper`` (default) runs Whisper on MLX.
-``crisperwhisper`` runs CrisperWhisper 2.0, a verbatim Whisper fine-tune that
+Three engines are available.  ``mlx-whisper`` runs Whisper on MLX (Apple
+Silicon, the default there).  ``faster-whisper`` runs the same Whisper model
+with CTranslate2 on an NVIDIA GPU or the CPU (the default on Linux, Windows and
+Intel Macs), decoding exactly as ``mlx-whisper`` does: greedy, temperature 0,
+no conditioning on previous text.  ``crisperwhisper`` runs CrisperWhisper 2.0,
+a verbatim Whisper fine-tune that
 keeps false starts, repetitions and fillers ("In a tr- in a transformer") as
 separate timed words; Whisper tends to merge such restarts into one word, which
 leaves the take planner nothing to cut.  CrisperWhisper's weights are released
@@ -15,11 +19,15 @@ for non-commercial research use only.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import hashlib
 import json
 import math
+import os
+import platform
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -36,11 +44,38 @@ ARTIFACT_ROLES = (
 )
 DEFAULT_MODELS = {
     "mlx-whisper": "mlx-community/whisper-large-v3-turbo",
+    "faster-whisper": "large-v3-turbo",
     "crisperwhisper": "nyralabs/CrisperWhisper2.0_large",
 }
 SAMPLE_RATE = 16000
+# float32 reproduces mlx-whisper's words and timings; int8 is faster on x86
+# but invented a repeated phrase inside a cut-off take in testing.
+FASTER_WHISPER_CPU_COMPUTE = "float32"
 SOURCE_ATOM_STRATEGY = "analysis_acoustic_atoms_v1"
 WHOLE_FILE_STRATEGY = "whole_file_v1"
+
+
+def default_whisper_engine() -> str:
+    """MLX Whisper on Apple Silicon, faster-whisper (CTranslate2) elsewhere."""
+
+    if sys.platform == "darwin" and platform.machine() == "arm64":
+        return "mlx-whisper"
+    return "faster-whisper"
+
+
+def load_audio(path: Path) -> np.ndarray:
+    """Mono 16 kHz float32 audio, decoded by FFmpeg as Whisper does it."""
+
+    command = [
+        "ffmpeg", "-nostdin", "-i", str(path),
+        "-threads", "0", "-f", "s16le", "-ac", "1", "-acodec", "pcm_s16le",
+        "-ar", str(SAMPLE_RATE), "-",
+    ]  # fmt: skip
+    try:
+        output = subprocess.run(command, capture_output=True, check=True).stdout
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"Failed to load audio: {error.stderr.decode()}") from error
+    return np.frombuffer(output, np.int16).astype(np.float32) / 32768.0
 
 
 def read_json(path: Path) -> Any:
@@ -255,6 +290,14 @@ def run_asr(
         if prompt:
             raise ValueError("CrisperWhisper does not take a decoding prompt")
         return run_crisperwhisper(waveform, model=model, language=language)
+    if engine == "faster-whisper":
+        return run_faster_whisper(
+            waveform,
+            model=model,
+            language=language,
+            word_timestamps=word_timestamps,
+            prompt=prompt,
+        )
     # Keep the optional MLX runtime out of module import so metadata and
     # checkpoint helpers can be tested in a regular Python environment.
     from mlx_whisper import transcribe as mlx_transcribe
@@ -272,6 +315,95 @@ def run_asr(
         verbose=None,
         hallucination_silence_threshold=0.5,
     )
+
+
+def _load_pip_cuda_libraries() -> None:
+    """Make cuBLAS and cuDNN from the ``nvidia-*`` wheels findable, if installed.
+
+    CTranslate2 opens them by name.  On Linux, loading them first lets the
+    dynamic linker find them without ``LD_LIBRARY_PATH``; on Windows their
+    folders join the DLL search path.
+    """
+
+    import ctypes
+    import importlib
+
+    for package in ("nvidia.cublas", "nvidia.cudnn"):
+        with contextlib.suppress(ImportError, OSError):
+            root = Path(importlib.import_module(package).__path__[0])
+            if sys.platform == "win32":
+                folder = root / "bin"
+                os.environ["PATH"] = f"{folder}{os.pathsep}{os.environ.get('PATH', '')}"
+                os.add_dll_directory(str(folder))
+            else:
+                for library in sorted((root / "lib").glob("lib*.so*")):
+                    ctypes.CDLL(str(library), mode=ctypes.RTLD_GLOBAL)
+
+
+@functools.lru_cache(maxsize=1)
+def _faster_whisper_model(model: str) -> Any:
+    """The model on an NVIDIA GPU when CUDA really works there, else the CPU."""
+
+    from faster_whisper import WhisperModel
+
+    with contextlib.suppress(Exception):
+        import ctranslate2
+
+        if ctranslate2.get_cuda_device_count() > 0:
+            _load_pip_cuda_libraries()
+            gpu = WhisperModel(model, device="cuda", compute_type="float16")
+            # cuBLAS and cuDNN load on first use: decode a second of silence.
+            segments, _ = gpu.transcribe(np.zeros(SAMPLE_RATE, np.float32))
+            list(segments)
+            return gpu
+    return WhisperModel(model, device="cpu", compute_type=FASTER_WHISPER_CPU_COMPUTE)
+
+
+def run_faster_whisper(
+    waveform: np.ndarray,
+    *,
+    model: str,
+    language: str,
+    word_timestamps: bool,
+    prompt: str | None,
+) -> dict[str, Any]:
+    """Whisper on CTranslate2, decoded like ``mlx_whisper.transcribe`` above."""
+
+    segments, info = _faster_whisper_model(model).transcribe(
+        waveform,
+        language=language,
+        beam_size=1,
+        temperature=0.0,
+        condition_on_previous_text=False,
+        word_timestamps=word_timestamps,
+        initial_prompt=prompt,
+        hallucination_silence_threshold=0.5,
+        vad_filter=False,
+    )
+    serialized = [
+        {
+            "start": segment.start,
+            "end": segment.end,
+            "text": segment.text,
+            "avg_logprob": segment.avg_logprob,
+            "no_speech_prob": segment.no_speech_prob,
+            "words": [
+                {
+                    "word": word.word,
+                    "start": word.start,
+                    "end": word.end,
+                    "probability": word.probability,
+                }
+                for word in segment.words or []
+            ],
+        }
+        for segment in segments
+    ]
+    return {
+        "text": "".join(segment["text"] for segment in serialized),
+        "segments": serialized,
+        "language": info.language,
+    }
 
 
 @functools.lru_cache(maxsize=1)
@@ -339,7 +471,7 @@ def main() -> None:
         help="'source' transcribes the whole recording and every analysis atom.",
     )
     parser.add_argument(
-        "--engine", choices=tuple(DEFAULT_MODELS), default="mlx-whisper"
+        "--engine", choices=tuple(DEFAULT_MODELS), default=default_whisper_engine()
     )
     parser.add_argument("--model", help="default: the engine's standard model")
     parser.add_argument("--language", default="en")
@@ -378,15 +510,7 @@ def main() -> None:
         analysis_sha256=analysis_sha256,
     )
     analysis = read_json(args.analysis) if args.analysis else None
-    from mlx_whisper.audio import load_audio
-
-    # mlx-whisper versions differ here: some return a NumPy array and newer
-    # releases return an mlx.core.array.  Converting explicitly keeps the
-    # remainder of the pipeline version-independent.
-    waveform = np.asarray(
-        load_audio(str(args.audio), sr=SAMPLE_RATE),
-        dtype=np.float32,
-    )
+    waveform = load_audio(args.audio)
     duration = len(waveform) / float(SAMPLE_RATE)
     started = time.time()
 

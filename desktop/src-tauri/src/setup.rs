@@ -20,6 +20,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::paths::Paths;
+use crate::process;
 use crate::runtime::{Bundle, Installed, Step};
 
 const LOG_TAIL: usize = 14;
@@ -43,6 +44,27 @@ const KEPT_VARIABLES: &[&str] = &[
     "no_proxy",
     "SSL_CERT_FILE",
     "SSL_CERT_DIR",
+    // Windows cannot start programs without these.
+    "SYSTEMROOT",
+    "SystemRoot",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "USERNAME",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "ProgramFiles",
+    "ProgramFiles(x86)",
+    "CommonProgramFiles",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "OS",
 ];
 
 #[derive(Serialize, Clone)]
@@ -120,19 +142,12 @@ impl Control {
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
         if let Some(pid) = *self.child.lock().unwrap() {
-            kill_group(pid, libc::SIGTERM);
+            process::stop_tree(pid, false);
         }
     }
 
     fn cancelled(&self) -> bool {
         self.cancelled.load(Ordering::SeqCst)
-    }
-}
-
-pub fn kill_group(pid: u32, signal: i32) {
-    #[cfg(unix)]
-    unsafe {
-        libc::killpg(pid as libc::pid_t, signal);
     }
 }
 
@@ -151,8 +166,21 @@ pub fn free_gigabytes(path: &Path) -> Option<f64> {
         }
         Some(stat.f_bavail as f64 * stat.f_frsize as f64 / 1e9)
     }
-    #[cfg(not(unix))]
-    None
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let wide: Vec<u16> = probe.as_os_str().encode_wide().chain(Some(0)).collect();
+        let mut available: u64 = 0;
+        let ok = unsafe {
+            windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
+                wide.as_ptr(),
+                &mut available,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        (ok != 0).then(|| available as f64 / 1e9)
+    }
 }
 
 /// What the tools of the running step have reported, to estimate its share
@@ -285,7 +313,14 @@ impl Run<'_> {
             .collect();
         let paths = self.paths;
         let mut search = vec![paths.tools()];
-        search.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from));
+        if cfg!(windows) {
+            // The system's own folders (cmd, taskkill, ...).
+            search.extend(std::env::split_paths(
+                &std::env::var_os("PATH").unwrap_or_default(),
+            ));
+        } else {
+            search.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from));
+        }
         let entries: Vec<(&str, OsString)> = vec![
             ("PATH", std::env::join_paths(search).unwrap_or_default()),
             ("NO_COLOR", "1".into()),
@@ -335,11 +370,7 @@ impl Run<'_> {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            command.process_group(0);
-        }
+        process::detach(&mut command);
         let mut child = command
             .spawn()
             .map_err(|error| format!("Cannot start {name}: {error}"))?;
@@ -483,28 +514,14 @@ impl Run<'_> {
         let spec = &self.bundle.spec;
         let paths = self.paths;
         fs::create_dir_all(paths.tools()).map_err(|error| error.to_string())?;
-        let archive = paths.cache().join("uv.tar.gz");
+        let archive = paths
+            .cache()
+            .join(if cfg!(windows) { "uv.zip" } else { "uv.tar.gz" });
         self.download(&spec.uv.url, &spec.uv.sha256, &archive, (0.0, 0.5))?;
-        let file = File::open(&archive).map_err(|error| error.to_string())?;
-        let mut entries = tar::Archive::new(flate2::read::GzDecoder::new(file));
-        let mut found = false;
-        for entry in entries.entries().map_err(|error| error.to_string())? {
-            let mut entry = entry.map_err(|error| error.to_string())?;
-            let path = entry
-                .path()
-                .map_err(|error| error.to_string())?
-                .into_owned();
-            if path.file_name().is_some_and(|name| name == "uv") {
-                let partial = paths.uv().with_extension("part");
-                entry.unpack(&partial).map_err(|error| error.to_string())?;
-                make_executable(&partial)?;
-                fs::rename(&partial, paths.uv()).map_err(|error| error.to_string())?;
-                found = true;
-            }
-        }
-        if !found {
-            return Err("the uv download does not contain uv".into());
-        }
+        let partial = paths.uv().with_extension("part");
+        extract_uv(&archive, &partial)?;
+        make_executable(&partial)?;
+        fs::rename(&partial, paths.uv()).map_err(|error| error.to_string())?;
         let micromamba = &spec.micromamba;
         self.download(
             &micromamba.url,
@@ -518,15 +535,18 @@ impl Run<'_> {
     fn python(&self) -> Result<(), String> {
         let python = &self.bundle.spec.python;
         let install_dir = self.paths.python_installs();
-        self.uv(&[
+        let mut args: Vec<&std::ffi::OsStr> = vec![
             "python".as_ref(),
             "install".as_ref(),
             "--no-bin".as_ref(),
             "--install-dir".as_ref(),
             install_dir.as_os_str(),
             python.main.as_ref(),
-            python.mlx.as_ref(),
-        ])
+        ];
+        if self.bundle.applies(Step::MlxEnv) {
+            args.push(python.mlx.as_ref());
+        }
+        self.uv(&args)
     }
 
     fn source(&self) -> Result<(), String> {
@@ -626,16 +646,18 @@ impl Run<'_> {
         }
         let cache = paths.mfa_cache();
         fs::create_dir_all(cache.join("huggingface")).map_err(|error| error.to_string())?;
-        let output = Command::new(paths.micromamba())
-            .args(["run", "--prefix"])
-            .arg(&prefix)
-            .args(["mfa", "version"])
-            .env_clear()
-            .envs(self.environment())
-            .env("MFA_ROOT_DIR", &cache)
-            .env("HF_HOME", cache.join("huggingface"))
-            .output()
-            .map_err(|error| format!("Cannot run MFA: {error}"))?;
+        let output = process::quiet(
+            Command::new(paths.micromamba())
+                .args(["run", "--prefix"])
+                .arg(&prefix)
+                .args(["mfa", "version"])
+                .env_clear()
+                .envs(self.environment())
+                .env("MFA_ROOT_DIR", &cache)
+                .env("HF_HOME", cache.join("huggingface")),
+        )
+        .output()
+        .map_err(|error| format!("Cannot run MFA: {error}"))?;
         let text = String::from_utf8_lossy(&output.stdout);
         self.line(&format!("mfa version: {}", text.trim()));
         if !text.contains(&mfa.version) {
@@ -677,6 +699,24 @@ impl Run<'_> {
         Ok(())
     }
 
+    /// CUDA and cuDNN for faster-whisper on an NVIDIA GPU (Linux, Windows).
+    fn gpu(&self) -> Result<(), String> {
+        let Some(lock) = self.bundle.spec.requirements.cuda.as_deref() else {
+            return Ok(());
+        };
+        let python = self.paths.venv_python(&self.paths.venv());
+        let lock = self.bundle.file(lock);
+        self.uv(&[
+            "pip".as_ref(),
+            "install".as_ref(),
+            "--python".as_ref(),
+            python.as_os_str(),
+            "--require-hashes".as_ref(),
+            "--requirement".as_ref(),
+            lock.as_os_str(),
+        ])
+    }
+
     fn verify(&self) -> Result<(), String> {
         let paths = self.paths;
         let main = paths.venv_python(&paths.venv());
@@ -691,16 +731,31 @@ impl Run<'_> {
         self.fraction(0.4);
         self.run(&paths.editor_command(), &["--help".as_ref()], &[])?;
         self.fraction(0.6);
-        let mlx = paths.venv_python(&paths.mlx_venv());
-        self.run(
-            &mlx,
-            &[
-                "-c".as_ref(),
-                "import mlx.core, mlx_lm, mlx_whisper, voicecut.transcribe_mlx".as_ref(),
-            ],
-            &[],
-        )?;
-        let ffmpeg = paths.mfa_env().join("bin/ffmpeg");
+        if self.bundle.applies(Step::MlxEnv) {
+            let mlx = paths.venv_python(&paths.mlx_venv());
+            self.run(
+                &mlx,
+                &[
+                    "-c".as_ref(),
+                    "import mlx.core, mlx_lm, mlx_whisper, voicecut.transcribe_mlx".as_ref(),
+                ],
+                &[],
+            )?;
+        } else {
+            self.run(
+                &main,
+                &[
+                    "-c".as_ref(),
+                    "import faster_whisper, voicecut.transcribe_mlx".as_ref(),
+                ],
+                &[],
+            )?;
+        }
+        let ffmpeg = paths.mfa_tools()[0].join(if cfg!(windows) {
+            "ffmpeg.exe"
+        } else {
+            "ffmpeg"
+        });
         self.run(
             &ffmpeg,
             &["-hide_banner".as_ref(), "-version".as_ref()],
@@ -730,9 +785,12 @@ impl Run<'_> {
             Step::MainEnv => {
                 self.environment_step(&paths.venv(), &spec.python.main, &spec.requirements.main)
             }
-            Step::MlxEnv => {
-                self.environment_step(&paths.mlx_venv(), &spec.python.mlx, &spec.requirements.mlx)
-            }
+            Step::MlxEnv => self.environment_step(
+                &paths.mlx_venv(),
+                &spec.python.mlx,
+                spec.requirements.mlx.as_deref().unwrap_or_default(),
+            ),
+            Step::Gpu => self.gpu(),
             Step::Aligner => self.aligner(),
             Step::Respiro => self.respiro(),
             Step::Verify => self.verify(),
@@ -854,6 +912,41 @@ fn make_executable(path: &Path) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+/// Take the `uv` executable out of its release archive (zip on Windows).
+fn extract_uv(archive: &Path, destination: &Path) -> Result<(), String> {
+    let file = File::open(archive).map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    {
+        let mut zip = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
+        for index in 0..zip.len() {
+            let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
+            if entry.name().rsplit('/').next() == Some("uv.exe") {
+                let mut output = File::create(destination).map_err(|error| error.to_string())?;
+                std::io::copy(&mut entry, &mut output).map_err(|error| error.to_string())?;
+                return Ok(());
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let mut entries = tar::Archive::new(flate2::read::GzDecoder::new(file));
+        for entry in entries.entries().map_err(|error| error.to_string())? {
+            let mut entry = entry.map_err(|error| error.to_string())?;
+            let path = entry
+                .path()
+                .map_err(|error| error.to_string())?
+                .into_owned();
+            if path.file_name().is_some_and(|name| name == "uv") {
+                entry
+                    .unpack(destination)
+                    .map_err(|error| error.to_string())?;
+                return Ok(());
+            }
+        }
+    }
+    Err("the uv download does not contain uv".into())
 }
 
 fn copy_dir(source: &Path, destination: &Path) -> std::io::Result<()> {

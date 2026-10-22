@@ -11,7 +11,6 @@ stages are content-addressed and reused on an identical rerun.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import os
@@ -72,6 +71,8 @@ from .take_planner import (
     PLAN_FILENAME,
     PLANNER_NAME,
 )
+from .transcribe_mlx import DEFAULT_MODELS as WHISPER_MODELS
+from .transcribe_mlx import default_whisper_engine
 from .video_render import render_edited_video
 
 PACKAGE_PARENT = Path(__file__).resolve().parents[1]
@@ -113,6 +114,34 @@ def _implementation_fingerprint() -> str:
     return digest.hexdigest()
 
 
+if sys.platform == "win32":
+    import msvcrt
+
+    # Windows locks byte ranges, and a locked range cannot be read: lock one
+    # byte far past the owner line so another run can still say who owns it.
+    _LOCK_OFFSET = 1 << 30
+
+    def _lock_file(handle: Any) -> None:
+        os.lseek(handle.fileno(), _LOCK_OFFSET, os.SEEK_SET)
+        try:
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError as error:
+            raise BlockingIOError(str(error)) from error
+
+    def _unlock_file(handle: Any) -> None:
+        os.lseek(handle.fileno(), _LOCK_OFFSET, os.SEEK_SET)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+else:
+    import fcntl
+
+    def _lock_file(handle: Any) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def _unlock_file(handle: Any) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 class _WorkDirectoryLock:
     """Hold a non-blocking process lock for one cache directory."""
 
@@ -121,10 +150,7 @@ class _WorkDirectoryLock:
         self.path = work_dir / ".voicecut.lock"
         self._handle = self.path.open("a+", encoding="utf-8")
         try:
-            fcntl.flock(
-                self._handle.fileno(),
-                fcntl.LOCK_EX | fcntl.LOCK_NB,
-            )
+            _lock_file(self._handle)
         except BlockingIOError:
             self._handle.seek(0)
             owner = self._handle.read().strip() or "another process"
@@ -141,7 +167,7 @@ class _WorkDirectoryLock:
         handle = getattr(self, "_handle", None)
         if handle is None or handle.closed:
             return
-        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        _unlock_file(handle)
         handle.close()
 
     def __del__(self) -> None:
@@ -561,7 +587,11 @@ def _validate_mfa_runtime(
             f"MFA environment prefix does not exist: {resolved_prefix}; "
             "run scripts/install.sh"
         )
-    mfa_executable = resolved_prefix / "bin" / "mfa"
+    mfa_executable = (
+        resolved_prefix / "Scripts" / "mfa.exe"
+        if sys.platform == "win32"
+        else resolved_prefix / "bin" / "mfa"
+    )
     if not mfa_executable.is_file() or not os.access(mfa_executable, os.X_OK):
         raise FullPipelineError(
             "MFA executable is missing from the configured prefix: "
@@ -610,6 +640,7 @@ def _configuration(
             "default_breath_cleanup": language_profile.default_breath_cleanup,
         },
         "asr": args.asr,
+        "whisper_engine": args.whisper_engine,
         "whisper_model": args.whisper_model,
         "planner_backend": args.planner_backend,
         "planner_model": planner_model,
@@ -773,6 +804,11 @@ def run_full_pipeline(
     """Run or resume the complete pipeline and return its provenance ledger."""
 
     _notify_progress(progress_callback, "preflight", "started")
+    # Whisper runs on MLX on Apple Silicon and on CTranslate2 elsewhere.
+    args.whisper_engine = getattr(args, "whisper_engine", None) or (
+        default_whisper_engine()
+    )
+    args.whisper_model = args.whisper_model or WHISPER_MODELS[args.whisper_engine]
     input_path = args.input.resolve()
     if not input_path.is_file():
         raise FileNotFoundError(input_path)
@@ -975,7 +1011,7 @@ def run_full_pipeline(
         if args.asr == "crisperwhisper":
             engine, asr_model = "crisperwhisper", CRISPERWHISPER_MODEL
         else:
-            engine, asr_model = "mlx-whisper", args.whisper_model
+            engine, asr_model = args.whisper_engine, args.whisper_model
         _run(
             "02 TRANSCRIPTION",
             [
@@ -1169,6 +1205,8 @@ def run_full_pipeline(
                 str(semantic_transcript_path),
                 "--output",
                 str(gap_path),
+                "--engine",
+                args.whisper_engine,
                 "--model",
                 args.whisper_model,
                 "--language",
@@ -1489,7 +1527,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--asr-python",
         type=Path,
         default=DEFAULT_ASR_PYTHON,
-        help="Python executable containing mlx-whisper.",
+        help="Python executable that runs Whisper (the MLX environment on Apple "
+        "Silicon).",
     )
     parser.add_argument(
         "--alignment-backend",
@@ -1559,7 +1598,19 @@ def build_parser() -> argparse.ArgumentParser:
             "(default: whisper)."
         ),
     )
-    parser.add_argument("--whisper-model", default=DEFAULT_WHISPER_MODEL)
+    parser.add_argument(
+        "--whisper-engine",
+        choices=("mlx-whisper", "faster-whisper"),
+        default=None,
+        help="Whisper runtime (default: mlx-whisper on Apple Silicon, "
+        "faster-whisper elsewhere).",
+    )
+    parser.add_argument(
+        "--whisper-model",
+        default=None,
+        help=f"Whisper model (default: {DEFAULT_WHISPER_MODEL} on MLX, "
+        f"{WHISPER_MODELS['faster-whisper']} on faster-whisper).",
+    )
     parser.add_argument(
         "--language",
         choices=SUPPORTED_LANGUAGE_CODES,

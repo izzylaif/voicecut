@@ -10,9 +10,12 @@
 mod automation;
 mod commands;
 mod engine;
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 mod paths;
+mod process;
 mod runtime;
 mod setup;
 
@@ -42,6 +45,13 @@ const RECENT_LIMIT: usize = 12;
 /// state exists (a double-clicked document starts the app this way).
 static EARLY_PATHS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 const FLUSH_TIMEOUT: Duration = Duration::from_secs(3);
+const REVEAL_LABEL: &str = if cfg!(target_os = "macos") {
+    "Show in Finder"
+} else if cfg!(windows) {
+    "Show in File Explorer"
+} else {
+    "Show in Folder"
+};
 const HELP_URL: &str = "https://github.com/vectozavr/voicecut/blob/main/docs/editor.md";
 pub const MEDIA_EXTENSIONS: &[&str] = &[
     "aac", "aif", "aiff", "flac", "m4a", "mp3", "oga", "ogg", "opus", "wav", "mkv", "mov", "mp4",
@@ -478,6 +488,21 @@ pub fn send_command(app: &AppHandle, label: &str, command: Value) {
 
 // -- documents -------------------------------------------------------------------------
 
+/// The document a launcher file (`<name>.vcproj`, what Linux and Windows
+/// users double-click) stands for; any other path unchanged.
+pub fn document_path(path: PathBuf) -> PathBuf {
+    if path.is_file()
+        && path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("vcproj"))
+    {
+        if let Some(parent) = path.parent() {
+            return parent.to_path_buf();
+        }
+    }
+    path
+}
+
 pub fn is_document(path: &Path) -> bool {
     path.is_dir()
         && (path
@@ -514,7 +539,7 @@ fn document_window(app: &AppHandle, path: &Path) -> Option<String> {
 /// window) or a new window.  Blocks on the engine; call it off the main thread.
 pub fn open_document(app: &AppHandle, path: &Path, reuse: Option<String>) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let path = path.canonicalize().map_err(|error| error.to_string())?;
+    let path = paths::canonical(path).map_err(|error| error.to_string())?;
     if let Some(window) =
         document_window(app, &path).and_then(|label| app.get_webview_window(&label))
     {
@@ -624,6 +649,7 @@ pub fn new_project(app: &AppHandle, source: Option<PathBuf>) {
 /// Files from the Finder, the Dock or a drop: documents open, recordings
 /// start new projects.
 pub fn open_paths(app: &AppHandle, paths: Vec<PathBuf>) {
+    let paths: Vec<PathBuf> = paths.into_iter().map(document_path).collect();
     let app = app.clone();
     std::thread::spawn(move || {
         let state = app.state::<AppState>();
@@ -886,6 +912,7 @@ fn stop_engine(app: &AppHandle) {
 
 // -- menus -----------------------------------------------------------------------------
 
+#[cfg(target_os = "macos")]
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let item = |id: &str, text: &str, accelerator: Option<&str>| {
         let builder = MenuItemBuilder::with_id(id, text);
@@ -927,7 +954,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("save-as", "Save As…", Some("CmdOrCtrl+Shift+S"))?)
         .separator()
         .item(&item("export", "Export…", Some("CmdOrCtrl+E"))?)
-        .item(&item("reveal", "Show in Finder", None)?)
+        .item(&item("reveal", REVEAL_LABEL, None)?)
         .build()?;
     // Undo and Select All act on the timeline, or on the text field in focus.
     let edit = SubmenuBuilder::new(app, "Edit")
@@ -966,6 +993,68 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Ok(menu)
 }
 
+/// Windows and Linux: a menu bar in each window, laid out as there.  The
+/// editor handles Ctrl+Z, Ctrl+A and the clipboard itself, so the Edit menu
+/// shows those commands without taking their keys.
+#[cfg(not(target_os = "macos"))]
+fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+    let item = |id: &str, text: &str, accelerator: Option<&str>| {
+        let builder = MenuItemBuilder::with_id(id, text);
+        match accelerator {
+            Some(accelerator) => builder.accelerator(accelerator),
+            None => builder,
+        }
+        .build(app)
+    };
+    let recent = SubmenuBuilder::with_id(app, "recent", "Open &Recent").build()?;
+    let file = SubmenuBuilder::new(app, "&File")
+        .item(&item("new", "&New Project…", Some("Ctrl+N"))?)
+        .item(&item("open", "&Open…", Some("Ctrl+O"))?)
+        .item(&recent)
+        .separator()
+        .item(&item("save", "&Save", Some("Ctrl+S"))?)
+        .item(&item("save-as", "Save &As…", Some("Ctrl+Shift+S"))?)
+        .separator()
+        .item(&item("export", "&Export…", Some("Ctrl+E"))?)
+        .item(&item("reveal", REVEAL_LABEL, None)?)
+        .separator()
+        .item(&item("settings", "Se&ttings…", Some("Ctrl+,"))?)
+        .separator()
+        .item(&item("close-window", "&Close Window", Some("Ctrl+W"))?)
+        .item(&item("quit", "&Quit VoiceCut", Some("Ctrl+Q"))?)
+        .build()?;
+    let edit = SubmenuBuilder::new(app, "&Edit")
+        .item(&item("undo", "&Undo", None)?)
+        .item(&item("redo", "&Redo", None)?)
+        .separator()
+        .item(&item("select-all", "Select &All", None)?)
+        .build()?;
+    let view = SubmenuBuilder::new(app, "&View")
+        .item(&item("zoom-in", "Zoom &In", None)?)
+        .item(&item("zoom-out", "Zoom &Out", None)?)
+        .item(&item("zoom-fit", "Show the &Whole Edit", None)?)
+        .separator()
+        .item(&item("fullscreen", "&Full Screen", Some("F11"))?)
+        .build()?;
+    let about = AboutMetadata {
+        name: Some("VoiceCut".into()),
+        version: Some(env!("CARGO_PKG_VERSION").into()),
+        copyright: Some("© 2026 VoiceCut contributors · MIT License".into()),
+        website: Some("https://github.com/vectozavr/voicecut".into()),
+        website_label: Some("github.com/vectozavr/voicecut".into()),
+        ..Default::default()
+    };
+    let help = SubmenuBuilder::new(app, "&Help")
+        .item(&item("shortcuts", "&Keyboard Shortcuts", None)?)
+        .item(&item("help", "VoiceCut &Help", None)?)
+        .separator()
+        .about(Some(about))
+        .build()?;
+    let menu = Menu::with_items(app, &[&file, &edit, &view, &help])?;
+    *app.state::<AppState>().recent_menu.lock().unwrap() = Some(recent);
+    Ok(menu)
+}
+
 fn on_menu(app: &AppHandle, id: &str) {
     let focused = focused_window(app);
     match id {
@@ -981,6 +1070,17 @@ fn on_menu(app: &AppHandle, id: &str) {
             });
         }
         "recent-clear" => clear_recents(app),
+        "close-window" => {
+            if let Some(window) = focused {
+                let _ = window.close();
+            }
+        }
+        "fullscreen" => {
+            if let Some(window) = focused {
+                let on = window.is_fullscreen().unwrap_or(false);
+                let _ = window.set_fullscreen(!on);
+            }
+        }
         "help" => {
             let _ = commands::open_in_browser(HELP_URL);
         }
@@ -1060,15 +1160,39 @@ macro_rules! handlers {
 }
 
 pub fn run() {
-    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    #[cfg(target_os = "linux")]
+    linux::prepare_webkit();
+    let builder = tauri::Builder::default();
+    // Linux and Windows start a new process for every file opened from the
+    // file manager; the first one opens it and the new one quits.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+        let paths: Vec<PathBuf> = argv
+            .iter()
+            .skip(1)
+            .map(|argument| Path::new(&cwd).join(argument))
+            .filter(|path| path.exists())
+            .collect();
+        if paths.is_empty() {
+            show_welcome(app);
+        } else {
+            open_paths(app, paths);
+        }
+    }));
+    let builder = builder.plugin(tauri_plugin_dialog::init());
     #[cfg(feature = "automation")]
     let builder = builder.invoke_handler(handlers!(automation::automation_result));
     #[cfg(not(feature = "automation"))]
     let builder = builder.invoke_handler(handlers!());
     let app = builder
         .setup(|app| {
-            let resources = app.path().resource_dir()?.join("runtime");
-            let paths = Paths::new(resources);
+            let resources = app.path().resource_dir()?;
+            #[cfg(target_os = "linux")]
+            {
+                let resources = resources.clone();
+                std::thread::spawn(move || linux::integrate_appimage(&resources));
+            }
+            let paths = Paths::new(resources.join("runtime"));
             let bundle = Bundle::load(&paths);
             let recents = load_recents(&paths);
             app.manage(AppState {

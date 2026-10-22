@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "mainBinaryName": "VoiceCut",
+  "bundle": {
+    "targets": ["nsis"],
+    "resources": {
+      "../build/runtime/": "runtime/",
+      "icons/VoiceCutDocument.icns": null,
+      "icons/VoiceCutDocument.ico": "VoiceCutDocument.ico"
+    },
+    "fileAssociations": [
+      {
+        "ext": ["vcproj"],
+        "name": "VoiceCut.Project",
+        "description": "VoiceCut Project",
+        "role": "Editor"
+      }
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "../windows/installer-hooks.nsh"
+      }
+    }
+  }
+}

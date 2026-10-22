@@ -2,16 +2,21 @@
 //! installed already.
 //!
 //! The bundle carries `runtime/runtime.json` (tool versions, URLs and
-//! SHA-256s), the hashed lock files and VoiceCut's Python source with the
-//! built editor (`runtime/source`, hashed into `runtime/source.sha256` at
-//! build time).  Each setup step has a fingerprint of exactly the pins it
-//! installs; `setup.json` records the fingerprint of every finished step, so a
-//! new app version updates only what changed and a failed setup resumes at the
-//! step that failed.
+//! SHA-256s for each system), the hashed lock files and VoiceCut's Python
+//! source with the built editor (`runtime/source`, hashed into
+//! `runtime/source.sha256` at build time).  Each setup step has a fingerprint
+//! of exactly the pins it installs; `setup.json` records the fingerprint of
+//! every finished step, so a new app version updates only what changed and a
+//! failed setup resumes at the step that failed.
+//!
+//! macOS gets Whisper on MLX in a second environment; Linux and Windows run
+//! faster-whisper in the main one, plus NVIDIA's CUDA libraries when an NVIDIA
+//! GPU is present.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -34,7 +39,10 @@ pub struct Pythons {
 #[derive(Deserialize, Clone)]
 pub struct Requirements {
     pub main: String,
-    pub mlx: String,
+    /// MLX Whisper (Apple Silicon).
+    pub mlx: Option<String>,
+    /// CUDA libraries for faster-whisper, used next to an NVIDIA GPU.
+    pub cuda: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -44,10 +52,11 @@ pub struct Patch {
     pub remove: String,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Clone)]
 pub struct Mfa {
     pub version: String,
     pub lock: String,
+    /// Paths relative to the environment's prefix.
     pub patches: Vec<Patch>,
 }
 
@@ -65,7 +74,8 @@ pub struct Space {
     pub needed_gb: f64,
 }
 
-#[derive(Deserialize, Clone)]
+/// The runtime of this system.
+#[derive(Clone)]
 pub struct Spec {
     pub uv: Download,
     pub micromamba: Download,
@@ -74,6 +84,67 @@ pub struct Spec {
     pub mfa: Mfa,
     pub respiro: Respiro,
     pub space: Space,
+}
+
+#[derive(Deserialize)]
+struct RawMfa {
+    version: String,
+    patches: Vec<Patch>,
+}
+
+#[derive(Deserialize)]
+struct Platform {
+    uv: Download,
+    micromamba: Download,
+    requirements: Requirements,
+    mfa_lock: String,
+    space: Space,
+}
+
+#[derive(Deserialize)]
+struct RawSpec {
+    python: Pythons,
+    mfa: RawMfa,
+    respiro: Respiro,
+    platforms: BTreeMap<String, Platform>,
+}
+
+/// This system's key in `runtime.json`.
+pub const PLATFORM: &str = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+    "macos-aarch64"
+} else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+    "linux-x86_64"
+} else if cfg!(all(windows, target_arch = "x86_64")) {
+    "windows-x86_64"
+} else {
+    "unsupported"
+};
+
+/// Where the MFA environment's Python packages live.
+const MFA_SITE_PACKAGES: &str = if cfg!(windows) {
+    "Lib/site-packages"
+} else {
+    "lib/python3.11/site-packages"
+};
+
+/// An NVIDIA GPU with a working driver (`nvidia-smi` lists it).
+pub fn nvidia_gpu() -> bool {
+    static FOUND: OnceLock<bool> = OnceLock::new();
+    *FOUND.get_or_init(|| {
+        let mut command = std::process::Command::new("nvidia-smi");
+        command.arg("-L");
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        command
+            .output()
+            .map(|output| {
+                output.status.success() && String::from_utf8_lossy(&output.stdout).contains("GPU")
+            })
+            .unwrap_or(false)
+    })
 }
 
 /// The pinned runtime of this app version.
@@ -91,6 +162,7 @@ pub enum Step {
     Source,
     MainEnv,
     MlxEnv,
+    Gpu,
     Aligner,
     Respiro,
     Verify,
@@ -98,12 +170,13 @@ pub enum Step {
 }
 
 impl Step {
-    pub const ALL: [Step; 9] = [
+    pub const ALL: [Step; 10] = [
         Step::Tools,
         Step::Python,
         Step::Source,
         Step::MainEnv,
         Step::MlxEnv,
+        Step::Gpu,
         Step::Aligner,
         Step::Respiro,
         Step::Verify,
@@ -117,6 +190,7 @@ impl Step {
             Step::Source => "source",
             Step::MainEnv => "main-env",
             Step::MlxEnv => "mlx-env",
+            Step::Gpu => "gpu",
             Step::Aligner => "aligner",
             Step::Respiro => "respiro",
             Step::Verify => "verify",
@@ -131,6 +205,7 @@ impl Step {
             Step::Source => "Installing VoiceCut",
             Step::MainEnv => "Installing the audio engine",
             Step::MlxEnv => "Installing speech recognition",
+            Step::Gpu => "Installing GPU acceleration",
             Step::Aligner => "Installing the aligner and FFmpeg",
             Step::Respiro => "Downloading the breath detector",
             Step::Verify => "Checking the installation",
@@ -141,10 +216,23 @@ impl Step {
     pub fn detail(self) -> &'static str {
         match self {
             Step::Tools => "uv and micromamba",
-            Step::Python => "Python 3.12 and 3.11",
+            Step::Python => {
+                if cfg!(target_os = "macos") {
+                    "Python 3.12 and 3.11"
+                } else {
+                    "Python 3.12"
+                }
+            }
             Step::Source => "the editor and the Voice Cut pipeline",
-            Step::MainEnv => "PyTorch, WhisperX, Silero VAD, Gemini and OpenAI clients",
+            Step::MainEnv => {
+                if cfg!(target_os = "macos") {
+                    "PyTorch, WhisperX, Silero VAD, Gemini and OpenAI clients"
+                } else {
+                    "PyTorch, WhisperX, faster-whisper, Gemini and OpenAI clients"
+                }
+            }
             Step::MlxEnv => "MLX Whisper for Apple Silicon",
+            Step::Gpu => "NVIDIA CUDA and cuDNN libraries for faster-whisper",
             Step::Aligner => "Montreal Forced Aligner 3.4.1, FFmpeg",
             Step::Respiro => "Respiro-en",
             Step::Verify => "starting every part once",
@@ -160,6 +248,7 @@ impl Step {
             Step::Source => 1.0,
             Step::MainEnv => 40.0,
             Step::MlxEnv => 15.0,
+            Step::Gpu => 20.0,
             Step::Aligner => 25.0,
             Step::Respiro => 3.0,
             Step::Verify => 7.0,
@@ -186,8 +275,38 @@ impl Bundle {
             fs::read_to_string(dir.join(name))
                 .map_err(|error| format!("the app is damaged: cannot read {name}: {error}"))
         };
-        let spec: Spec = serde_json::from_str(&read("runtime.json")?)
+        let raw: RawSpec = serde_json::from_str(&read("runtime.json")?)
             .map_err(|error| format!("the app is damaged: runtime.json: {error}"))?;
+        let RawSpec {
+            python,
+            mfa,
+            respiro,
+            mut platforms,
+        } = raw;
+        let platform = platforms
+            .remove(PLATFORM)
+            .ok_or("VoiceCut does not run on this kind of computer yet.")?;
+        let patches = mfa
+            .patches
+            .into_iter()
+            .map(|patch| Patch {
+                file: format!("{MFA_SITE_PACKAGES}/{}", patch.file),
+                ..patch
+            })
+            .collect();
+        let spec = Spec {
+            uv: platform.uv,
+            micromamba: platform.micromamba,
+            python,
+            requirements: platform.requirements,
+            mfa: Mfa {
+                version: mfa.version,
+                lock: platform.mfa_lock,
+                patches,
+            },
+            respiro,
+            space: platform.space,
+        };
         let source_sha256 = read("source.sha256")?.trim().to_string();
         Ok(Self {
             dir,
@@ -202,6 +321,15 @@ impl Bundle {
 
     pub fn source(&self) -> PathBuf {
         self.dir.join("source")
+    }
+
+    /// Whether the step belongs to this computer's runtime.
+    pub fn applies(&self, step: Step) -> bool {
+        match step {
+            Step::MlxEnv => self.spec.requirements.mlx.is_some(),
+            Step::Gpu => self.spec.requirements.cuda.is_some() && nvidia_gpu(),
+            _ => true,
+        }
     }
 
     fn file_hash(&self, name: &str) -> String {
@@ -228,7 +356,12 @@ impl Bundle {
             Step::MlxEnv => format!(
                 "{} {}",
                 spec.python.mlx,
-                self.file_hash(&spec.requirements.mlx)
+                self.file_hash(spec.requirements.mlx.as_deref().unwrap_or_default())
+            ),
+            Step::Gpu => format!(
+                "{} {}",
+                spec.python.main,
+                self.file_hash(spec.requirements.cuda.as_deref().unwrap_or_default())
             ),
             Step::Aligner => format!(
                 "{} {}",
@@ -236,9 +369,11 @@ impl Bundle {
                 serde_json::to_string(&spec.mfa.patches).unwrap_or_default()
             ),
             Step::Respiro => format!("{} {:?}", spec.respiro.commit, spec.respiro.files),
-            // Checking and cleaning up follow any change.
-            Step::Verify | Step::Cleanup => Step::ALL[..7]
+            // Checking and cleaning up follow any change (but GPU libraries).
+            Step::Verify | Step::Cleanup => Step::ALL
                 .iter()
+                .filter(|step| !matches!(step, Step::Gpu | Step::Verify | Step::Cleanup))
+                .filter(|step| self.applies(**step))
                 .map(|step| self.fingerprint(*step))
                 .collect::<Vec<_>>()
                 .join(" "),
@@ -292,11 +427,12 @@ pub fn pending_steps(paths: &Paths, bundle: &Bundle) -> Vec<Step> {
             paths.editor_command().is_file() && paths.venv_python(&paths.venv()).exists()
         }
         Step::MlxEnv => paths.venv_python(&paths.mlx_venv()).exists(),
-        Step::Aligner => paths.mfa_env().join("bin/mfa").is_file(),
+        Step::Aligner => paths.mfa_executable().is_file(),
         _ => true,
     };
     Step::ALL
         .into_iter()
+        .filter(|step| bundle.applies(*step))
         .filter(|step| !installed.is_current(bundle, *step) || !present(*step))
         .collect()
 }

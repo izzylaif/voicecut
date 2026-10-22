@@ -6,10 +6,12 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
+from voicecut import processes
 from voicecut.editor import worker
 from voicecut.editor.worker import (
     STAGE_LABELS,
@@ -83,12 +85,14 @@ def test_streaming_runner_returns_completed_process_on_success() -> None:
 def test_child_registry_terminates_process_group() -> None:
     process = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(30)"],
-        start_new_session=True,
+        **processes.own_group(),
     )
     registry = ChildRegistry()
     registry.set(process)
     registry.terminate()
-    assert process.wait(timeout=10) == -signal.SIGTERM
+    status = process.wait(timeout=10)
+    # POSIX asks the group to stop; Windows ends the tree.
+    assert status == (1 if processes.WINDOWS else -signal.SIGTERM)
 
 
 def test_event_sink_stage_events_carry_labels() -> None:
@@ -216,7 +220,8 @@ def test_run_job_marks_stage_failed_and_handles_sigterm(
 
     def cancelled(args, *, runner, progress_callback):
         progress_callback({"stage": "transcription", "status": "started"})
-        os.kill(os.getpid(), signal.SIGTERM)
+        worker.request_cancel()
+        time.sleep(1)  # the handler runs in this (main) thread
         raise AssertionError("SIGTERM handler should have interrupted")
 
     previous = signal.getsignal(signal.SIGTERM)
@@ -237,6 +242,7 @@ def test_run_job_marks_stage_failed_and_handles_sigterm(
         assert _stage_pairs(_events(buffer)) == [("transcription", "started")]
     finally:
         signal.signal(signal.SIGTERM, previous)
+        worker._cancel_requested.clear()
 
 
 def test_load_request_rejects_malformed_requests(tmp_path: Path) -> None:

@@ -1,0 +1,4 @@
+# Requirements the runtime drops (uv pip compile --override).
+# WhisperX declares Triton on Linux x86_64 for GPU kernels it never imports;
+# it would add about 150 MB to a CPU install.
+triton; sys_platform == "never"

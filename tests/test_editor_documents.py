@@ -3,6 +3,7 @@ and the engine's guard against other web pages."""
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,7 @@ import pytest
 import soundfile as sf
 from fastapi.testclient import TestClient
 
+from voicecut import processes
 from voicecut.common import read_json
 from voicecut.editor import documents, server, settings
 from voicecut.editor.projects import Project
@@ -280,6 +282,7 @@ store.write_text(json.dumps(items))
 """
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="a POSIX shell stands in")
 def test_keys_in_the_keychain_reach_the_run_not_the_page(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -328,8 +331,67 @@ def test_stopping_the_engine_stops_voice_cut(app, tmp_path: Path) -> None:
     service = app.state.service
     job = service.jobs.create("voicecut", "talk-1")
     job.process = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True
+        [sys.executable, "-c", "import time; time.sleep(60)"], **processes.own_group()
     )
     service.stop_jobs()
     assert job.process.poll() is not None
     assert job.cancel_requested
+
+
+def test_a_document_can_be_opened_from_its_launcher(tmp_path: Path) -> None:
+    """Linux and Windows open a document by its ``.vcproj`` file."""
+
+    source = write_wav(tmp_path / "talk.wav", source_audio())
+    store = documents.DocumentStore(tmp_path / "engine")
+    created = store.create_document(source, tmp_path / "Talk.vc")
+    launcher = tmp_path / "Talk.vc" / "Talk.vcproj"
+    assert launcher.is_file()
+    store.close_document(created.id)
+    renamed = tmp_path / "Renamed.vc"
+    shutil.move(tmp_path / "Talk.vc", renamed)
+    opened = store.open_document(renamed / "Talk.vcproj")
+    assert opened.root == renamed.resolve()
+    assert sorted(path.name for path in renamed.glob("*.vcproj")) == ["Renamed.vcproj"]
+
+
+def test_paths_of_a_document_made_on_another_system_are_rebased() -> None:
+    record = {"canonical": "C:\\Users\\me\\Talk.vc\\media\\a.wav", "other": "x"}
+    rebased = documents.rebase(record, "C:\\Users\\me\\Talk.vc", "/home/me/Talk.vc")
+    assert rebased["canonical"].replace(os.sep, "/") == "/home/me/Talk.vc/media/a.wav"
+    assert rebased["other"] == "x"
+
+
+def test_keys_in_a_credential_store(monkeypatch) -> None:
+    """Windows and Linux keep keys with ``keyring`` (an in-memory one here)."""
+
+    keyring = pytest.importorskip("keyring")
+    from keyring.backend import KeyringBackend
+
+    class Memory(KeyringBackend):
+        priority = 1
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.items: dict[tuple[str, str], str] = {}
+
+        def get_password(self, service, username):
+            return self.items.get((service, username))
+
+        def set_password(self, service, username, password):
+            self.items[(service, username)] = password
+
+        def delete_password(self, service, username):
+            if self.items.pop((service, username), None) is None:
+                raise keyring.errors.PasswordDeleteError(username)
+
+    monkeypatch.setattr(keyring, "get_keyring", lambda: Memory())
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    keys = settings.CredentialStoreKeys("VoiceCut-test")
+    keys.set("GEMINI_API_KEY", "AIzaSTORE5678")
+    assert settings.key_value(keys, "GEMINI_API_KEY") == (
+        "AIzaSTORE5678",
+        "credential_store",
+    )
+    keys.set("GEMINI_API_KEY", None)
+    keys.set("GEMINI_API_KEY", None)  # removing twice is fine
+    assert keys.get("GEMINI_API_KEY") is None

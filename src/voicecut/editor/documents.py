@@ -33,14 +33,18 @@ paths the editor keeps in ``project.json`` and ``media/media_input.json`` are
 rebased onto the new location.  The pipeline's own stage files are left
 alone: they are sealed by hashes and matter only to a later run.
 
-Nothing here is specific to macOS except the APFS clone that makes Save As
-instant; on Linux and Windows a document is an ordinary folder.
+The format is the same on every system.  macOS shows the folder as one file;
+Linux and Windows show a folder, so a document also holds ``<name>.vcproj``,
+a small file the system associates with VoiceCut: double-clicking it opens
+the document around it.  Nothing else is specific to a system except the APFS
+clone that makes Save As instant on macOS.
 """
 
 from __future__ import annotations
 
 import contextlib
 import ctypes
+import json
 import os
 import re
 import secrets
@@ -60,6 +64,7 @@ from .projects import (
 )
 
 DOCUMENT_EXTENSION = ".vc"
+LAUNCHER_EXTENSION = ".vcproj"
 DOCUMENT_SCHEMA_VERSION = 1
 PROJECT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 # Files whose absolute paths are rebased when a document moves.
@@ -109,13 +114,18 @@ def clone_file(source: Path, destination: Path) -> bool:
 
 
 def rebase(value: Any, old: str, new: str) -> Any:
-    """Replace the path prefix ``old`` with ``new`` in every string of ``value``."""
+    """Replace the path prefix ``old`` with ``new`` in every string of ``value``.
+
+    A document made on another system keeps that system's separators after
+    the prefix; they become this system's.
+    """
 
     if isinstance(value, str):
         if value == old:
             return new
-        if value.startswith(old + os.sep):
-            return new + value[len(old) :]
+        if value.startswith(old) and value[len(old) : len(old) + 1] in ("/", "\\"):
+            rest = value[len(old) :]
+            return new + rest.replace(rest[0], os.sep)
         return value
     if isinstance(value, list):
         return [rebase(item, old, new) for item in value]
@@ -155,6 +165,38 @@ def relocate(root: Path, previous: Path) -> None:
         path = root / relative
         if path.is_file():
             write_json_atomic(path, rebase(read_json(path), str(previous), str(root)))
+
+
+def write_launcher(root: Path) -> Path:
+    """``<name>.vcproj``: what Linux and Windows users double-click."""
+
+    launcher = root / f"{root.stem}{LAUNCHER_EXTENSION}"
+    for stale in root.glob(f"*{LAUNCHER_EXTENSION}"):
+        if stale != launcher:
+            stale.unlink(missing_ok=True)
+    if not launcher.is_file():
+        launcher.write_text(
+            json.dumps(
+                {
+                    "voicecut_document": DOCUMENT_SCHEMA_VERSION,
+                    "about": "Open this file with VoiceCut. The project is the "
+                    "folder it is in.",
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    return launcher
+
+
+def document_root(path: Path) -> Path:
+    """The document a path names: the folder itself, or the one around a launcher."""
+
+    path = Path(path)
+    if path.suffix.lower() == LAUNCHER_EXTENSION and path.is_file():
+        return path.parent
+    return path
 
 
 def _remember_source(project: Project) -> None:
@@ -261,7 +303,7 @@ class DocumentStore(ProjectStore):
     def open_document(self, path: Path) -> Project:
         """Open (or return the already open) document at ``path``."""
 
-        root = Path(path).expanduser().resolve()
+        root = document_root(Path(path).expanduser()).resolve()
         if not (root / "project.json").is_file():
             raise ProjectError(f"{root.name} is not a VoiceCut project")
         with self._lock:
@@ -292,6 +334,7 @@ class DocumentStore(ProjectStore):
             _remember_source(project)
             try:
                 self.save(project)
+                write_launcher(root)
             except OSError as error:
                 raise ProjectError(f"cannot write to {root}: {error}") from error
             self._documents[project.id] = root
@@ -321,9 +364,11 @@ class DocumentStore(ProjectStore):
             info["source_relative"] = os.path.relpath(source, root.parent)
         info["source_size"] = source.stat().st_size
         try:
-            return self._create(
+            project = self._create(
                 project_id, root, source.name, source, sha, False, document=info
             )
+            write_launcher(root)
+            return project
         except BaseException:
             with self._lock:
                 self._documents.pop(project_id, None)
@@ -350,6 +395,7 @@ class DocumentStore(ProjectStore):
                 )
                 _remember_source(copy)
                 write_json_atomic(target / "project.json", copy.to_record())
+                write_launcher(target)
             except BaseException:
                 shutil.rmtree(target, ignore_errors=True)
                 raise

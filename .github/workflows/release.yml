@@ -1,0 +1,64 @@
+name: Release
+
+# Builds the installers for every system and attaches them to a DRAFT GitHub
+# Release named after the app's version (desktop/src-tauri/tauri.conf.json).
+# Nothing is published: review the draft on GitHub and publish it by hand.
+# Runs by hand, or when a tag like v0.2.0 is pushed.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  installers:
+    uses: ./.github/workflows/desktop.yml
+    secrets: inherit
+
+  draft:
+    name: Draft release
+    needs: installers
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: installer-*
+          path: installers
+          merge-multiple: true
+
+      - name: Create or update the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(python3 -c 'import json; print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')"
+          tag="v${version}"
+          if [[ "${GITHUB_REF_TYPE}" == tag && "${GITHUB_REF_NAME}" != "${tag}" ]]; then
+            echo "::error title=Version::tag ${GITHUB_REF_NAME} does not match the app's version ${version}"
+            exit 1
+          fi
+          ls -l installers
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            if [[ "$(gh release view "${tag}" --json isDraft --jq .isDraft)" != true ]]; then
+              echo "::error title=Release::${tag} is already published; raise the version first"
+              exit 1
+            fi
+            gh release upload "${tag}" installers/* --clobber
+          else
+            gh release create "${tag}" installers/* --draft \
+              --target "${GITHUB_SHA}" \
+              --title "VoiceCut ${version}" \
+              --notes-file desktop/RELEASE_NOTES.md
+          fi
+          echo "::notice title=Draft release::${tag} has $(ls installers | wc -l) installers; publish it on GitHub when ready"

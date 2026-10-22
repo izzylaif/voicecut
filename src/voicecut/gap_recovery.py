@@ -9,8 +9,8 @@ published as part of the edit.
 
 This stage finds speech-level stretches of the waveform that no transcript
 word covers, transcribes each stretch on its own, and inserts the recovered
-words chronologically.  It runs in the MLX environment and needs only NumPy and
-mlx-whisper.
+words chronologically.  It runs with the same Whisper engine as transcription
+(mlx-whisper in the MLX environment, or faster-whisper).
 """
 
 from __future__ import annotations
@@ -25,7 +25,10 @@ from typing import Any
 import numpy as np
 
 from .transcribe_mlx import (
+    DEFAULT_MODELS,
     SAMPLE_RATE,
+    default_whisper_engine,
+    load_audio,
     read_json,
     run_asr,
     serialize_result,
@@ -177,14 +180,13 @@ def recover_gaps(
     output_path: Path,
     model: str,
     language: str,
+    engine: str = "mlx-whisper",
 ) -> dict[str, Any]:
-    from mlx_whisper.audio import load_audio
-
     started = time.time()
     transcript = read_json(transcript_path)
     if not isinstance(transcript, dict):
         raise TypeError("transcript root must be an object")
-    waveform = np.asarray(load_audio(str(audio_path), sr=SAMPLE_RATE), np.float32)
+    waveform = load_audio(audio_path)
     words = transcript_words(transcript)
     regions = uncovered_speech(frame_levels(waveform, SAMPLE_RATE), words)
     recovered: list[dict[str, Any]] = []
@@ -200,6 +202,7 @@ def recover_gaps(
                 language=language,
                 word_timestamps=True,
                 prompt=None,
+                engine=engine,
             ),
             offset=crop_start,
             clip_start=crop_start,
@@ -264,15 +267,21 @@ def main() -> None:
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--transcript", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--model", default="mlx-community/whisper-large-v3-turbo")
+    parser.add_argument(
+        "--engine",
+        choices=("mlx-whisper", "faster-whisper"),
+        default=default_whisper_engine(),
+    )
+    parser.add_argument("--model", help="default: the engine's standard model")
     parser.add_argument("--language", default="en")
     args = parser.parse_args()
     report = recover_gaps(
         audio_path=args.audio,
         transcript_path=args.transcript,
         output_path=args.output,
-        model=args.model,
+        model=args.model or DEFAULT_MODELS[args.engine],
         language=args.language,
+        engine=args.engine,
     )
     summary = {key: report[key] for key in ("status", "recovered_words")}
     summary["regions"] = len(report["regions"])

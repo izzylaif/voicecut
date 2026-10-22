@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-15
+            lock: requirements-main.txt
+          - name: Linux
+            os: ubuntu-24.04
+            lock: requirements-linux-x86_64.txt
+          - name: Windows
+            os: windows-2025
+            lock: requirements-windows-x86_64.txt
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.4"
+          enable-cache: true
+          cache-dependency-glob: desktop/runtime/${{ matrix.lock }}
+
+      - name: Install FFmpeg
+        run: |
+          case "${RUNNER_OS}" in
+            Linux) sudo apt-get update -q && sudo apt-get install -y -q ffmpeg ;;
+            macOS) brew install ffmpeg ;;
+            Windows) choco install ffmpeg -y --no-progress ;;
+          esac
+          ffmpeg -version | head -1
+
+      # The locks the desktop app installs from, so this also checks that
+      # they install on each system.
+      - name: Install VoiceCut from the app's lock
+        run: |
+          uv venv --python 3.12 .venv
+          .github/scripts/run.sh "Install the lock" \
+            uv pip install --python .venv -r "desktop/runtime/${{ matrix.lock }}"
+          uv pip install --python .venv --no-deps -e .
+          uv pip install --python .venv "pytest>=8.4,<9" "httpx>=0.27,<1" "ruff>=0.12,<1"
+
+      # Ruff's classic rules (errors, not style): newer Ruff releases enable
+      # more by default than this code base follows.
+      - name: Lint
+        run: |
+          .github/scripts/run.sh "Ruff" uv run --no-sync \
+            ruff check --select E4,E7,E9,F src tests desktop/scripts desktop/tests
+
+      - name: Test
+        run: |
+          .github/scripts/run.sh "Python tests on ${{ matrix.name }}" \
+            uv run --no-sync pytest -q -p no:cacheprovider --tb=line -rfE
+
+  frontend:
+    name: Editor frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci --prefix frontend --no-audit --no-fund
+
+      - name: Type-check
+        run: .github/scripts/run.sh "Type-check" npm run typecheck --prefix frontend
+
+      - name: Test
+        run: .github/scripts/run.sh "Frontend tests" npm test --prefix frontend
+
+      - name: Build
+        run: .github/scripts/run.sh "Frontend build" npm run build --prefix frontend
