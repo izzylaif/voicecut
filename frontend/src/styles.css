@@ -1427,6 +1427,24 @@ select:focus {
   gap: 6px;
 }
 
+.segmented.small button {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.model-think {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+  padding: 6px 8px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .context-menu {
   position: fixed;
   z-index: 50;

@@ -2,8 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioLines, Check, ChevronDown, Download, FileText, KeyRound, Loader2, RefreshCw, X } from 'lucide-react';
 import { api } from '../api';
 import { confirmAction } from '../desktop';
-import { localModelAction, pullText, refreshLocalModels, sizeText, useLocalModels } from '../localModels';
-import type { ModelInfo, ModelList, PlannerInfo, RunSettings, SettingsState } from '../types';
+import {
+  localModelAction,
+  memoryText,
+  pullText,
+  refreshLocalModels,
+  sizeText,
+  thinkText,
+  useLocalModels,
+} from '../localModels';
+import type { ModelInfo, ModelList, PlannerInfo, RunSettings, SettingsState, Think } from '../types';
 
 const LANGUAGE_NAMES: Record<string, string> = { en: 'English', ru: 'Русский' };
 /** Local planners of earlier versions (MLX-LM); they run through Ollama now. */
@@ -357,7 +365,7 @@ function LocalModelPicker({
               : model.downloaded
                 ? [sizeText(model), 'downloaded'].filter(Boolean).join(' · ')
                 : `${sizeText(model)} download`}
-            {model.can_think ? (model.think ? ' · reasons first' : ' · answers directly') : ''}
+            {thinkText(model) ? ` · ${thinkText(model)}` : ''}
           </span>
           {pulling && <PullBar fraction={model.pull?.fraction ?? null} />}
           {model.id === value && <Check size={14} className="model-check" />}
@@ -459,12 +467,58 @@ function LocalModelPicker({
             {others.map(row)}
             {!loading && models.length === 0 && !error && <li className="model-empty">No models listed</li>}
           </ul>
+          {current?.think_options && (
+            <div className="model-think" title={`How ${current.label} reasons before it answers`}>
+              <span>Reasoning</span>
+              <ThinkControl model={current} />
+            </div>
+          )}
           <p className="model-footnote">
-            These run on this computer through Ollama and never send the recording anywhere. Whether a model reasons first
-            is set in Settings.
+            These run on this computer through Ollama and never send the recording anywhere. {memoryText(list)}
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+const THINK_LABELS: Record<string, string> = { false: 'Off', true: 'On', low: 'Low', medium: 'Medium', high: 'High' };
+
+/**
+ * How a local model reasons before it answers: a checkbox for a model that
+ * reasons or not, a choice of levels for one that takes them.
+ */
+export function ThinkControl({ model, disabled = false }: { model: ModelInfo; disabled?: boolean }) {
+  const options = model.think_options ?? [];
+  const set = (think: Think) => void localModelAction('think', model.id, { think });
+  if (options.every((option) => typeof option === 'boolean')) {
+    return (
+      <label className="checkbox small">
+        <input
+          type="checkbox"
+          checked={model.think === true}
+          disabled={disabled || options.length < 2}
+          onChange={(event) => set(event.target.checked)}
+        />
+        Reason before answering
+      </label>
+    );
+  }
+  return (
+    <div className="segmented small" role="radiogroup" aria-label={`Reasoning of ${model.label}`}>
+      {options.map((option) => (
+        <button
+          key={String(option)}
+          type="button"
+          role="radio"
+          aria-checked={model.think === option}
+          className={model.think === option ? 'selected' : undefined}
+          disabled={disabled}
+          onClick={() => set(option)}
+        >
+          {THINK_LABELS[String(option)] ?? String(option)}
+        </button>
+      ))}
     </div>
   );
 }

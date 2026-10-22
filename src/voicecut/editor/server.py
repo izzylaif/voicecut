@@ -539,8 +539,10 @@ class EditorService:
         if chosen["planner_model"]:
             argv += ["--planner-model", str(chosen["planner_model"])]
         if chosen["planner_backend"] == "ollama":
-            think = self.local.think(self.planner_model(chosen))
-            argv += ["--planner-think", "on" if think else "off"]
+            argv += [
+                "--planner-think",
+                self.local.think_argument(self.planner_model(chosen)),
+            ]
         if chosen["breath_cleanup"]:
             argv += ["--breath-cleanup", str(chosen["breath_cleanup"])]
         return argv

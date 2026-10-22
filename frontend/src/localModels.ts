@@ -4,7 +4,7 @@
  */
 import { useEffect, useSyncExternalStore } from 'react';
 import { api, ApiError } from './api';
-import type { ModelInfo, ModelList } from './types';
+import type { ModelInfo, ModelList, Think } from './types';
 
 export interface LocalModelsState {
   list: ModelList | null;
@@ -55,7 +55,7 @@ export async function refreshLocalModels(): Promise<void> {
 export async function localModelAction(
   action: 'pull' | 'cancel' | 'delete' | 'think',
   model: string,
-  extra: { think?: boolean } = {},
+  extra: { think?: Think } = {},
 ): Promise<boolean> {
   try {
     adopt(await api.localModel(action, model, extra));
@@ -81,6 +81,22 @@ export function findLocalModel(id: string): ModelInfo | undefined {
 
 export function sizeText(model: ModelInfo): string {
   return model.size_gb ? `${model.size_gb.toFixed(1)} GB` : '';
+}
+
+export function thinkText(model: ModelInfo): string {
+  if (!model.think_options) return '';
+  if (model.think === false) return 'answers directly';
+  return model.think === true ? 'reasons first' : `reasons first (${model.think})`;
+}
+
+/** What the recommended models need, and whether this computer has it. */
+export function memoryText(list: ModelList | null): string {
+  const memory = list?.memory;
+  if (!memory) return '';
+  if (memory.gb !== null && memory.gb < memory.needed_gb) {
+    return `This computer has ${Math.round(memory.gb)} GB of memory; the recommended models need about ${memory.needed_gb} GB, and smaller models plan badly.`;
+  }
+  return `The recommended models need about ${memory.needed_gb} GB of memory.`;
 }
 
 export function pullText(model: ModelInfo): string {

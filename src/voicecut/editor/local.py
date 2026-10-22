@@ -4,8 +4,10 @@ The editor owns one :class:`~voicecut.ollama.OllamaServer`: a running Ollama
 when there is one, else one it starts (and stops when it exits).  The model
 list puts VoiceCut's recommendations first, then every other model Ollama
 has; a model downloads in the background (``/api/pull``) while the list
-reports its progress.  Whether a model reasons before answering is a setting
-of that model, kept in ``local_models.json`` next to the editor's projects.
+reports its progress.  How a model reasons before answering (off, on, or a
+level for models that take one) is a setting of that model, kept in
+``local_models.json`` next to the editor's projects; a recommended model
+starts from the setting that planned best.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ class LocalModelError(ValueError):
 
 def check_name(model: Any) -> str:
     if not isinstance(model, str) or not MODEL_NAME.fullmatch(model.strip()):
-        raise LocalModelError("a model name such as qwen3.6:27b")
+        raise LocalModelError("a model name such as gemma4:31b")
     return model.strip()
 
 
@@ -71,6 +73,8 @@ class LocalModels:
         self.server = ollama.OllamaServer(log_path=log_path)
         self._lock = threading.Lock()
         self._pulls: dict[str, _Pull] = {}
+        # The think values each downloaded model takes, by its digest.
+        self._choices: dict[str, list[local_models.Think]] = {}
 
     # -- per-model settings -----------------------------------------------------
     def _settings(self) -> dict[str, Any]:
@@ -80,19 +84,30 @@ class LocalModels:
             return {}
         return value if isinstance(value, dict) else {}
 
-    def think(self, model: str) -> bool:
-        """Whether ``model`` reasons before answering in a Voice Cut."""
+    def think(self, model: str) -> local_models.Think:
+        """How ``model`` reasons before answering in a Voice Cut.
+
+        Unless set, a recommended model's best setting; any other model
+        reasons, since a model that plans badly without reasoning is far
+        worse off than one that is slower with it.
+        """
 
         saved = (self._settings().get("think") or {}).get(ollama.canonical_name(model))
-        if isinstance(saved, bool):
+        if local_models.is_think(saved):
             return saved
         recommended = local_models.recommended_think(model)
         return True if recommended is None else recommended
 
+    def think_argument(self, model: str) -> str:
+        """The setting as the pipeline's ``--planner-think``."""
+
+        value = self.think(model)
+        return {True: "on", False: "off"}.get(value, value)  # type: ignore[arg-type]
+
     def set_think(self, model: Any, value: Any) -> dict[str, Any]:
         model = check_name(model)
-        if not isinstance(value, bool):
-            raise LocalModelError("think must be true or false")
+        if not local_models.is_think(value):
+            raise LocalModelError("think must be true, false, low, medium or high")
         from .projects import write_json_atomic
 
         with self._lock:
@@ -148,6 +163,7 @@ class LocalModels:
                     recommended=True,
                     pull=pulls.get(name),
                     default=str(entry["id"]) == default,
+                    url=status["url"],
                 )
             )
         for name, have in sorted(installed.items()):
@@ -169,6 +185,7 @@ class LocalModels:
                     recommended=False,
                     pull=pulls.get(name),
                     default=False,
+                    url=status["url"],
                 )
             )
         # Downloads of models not listed yet (a name typed in).
@@ -185,6 +202,7 @@ class LocalModels:
                         recommended=False,
                         pull=pull,
                         default=False,
+                        url=None,
                     )
                 )
         return {
@@ -192,7 +210,38 @@ class LocalModels:
             "default": default,
             "error": error,
             "ollama": status,
+            "memory": {
+                "gb": local_models.memory_gb(),
+                "needed_gb": local_models.MEMORY_NEEDED_GB,
+            },
         }
+
+    def _think_choices(
+        self, model: str, have: dict[str, Any] | None, url: str | None
+    ) -> list[local_models.Think] | None:
+        """The think values ``model`` takes (None: it cannot reason)."""
+
+        if have is None:
+            recommended = local_models.recommended_think(model)
+            if recommended is None:
+                return None
+            if isinstance(recommended, str):
+                return [False, *local_models.THINK_LEVELS]
+            return [False, True]
+        if "thinking" not in (have.get("capabilities") or []):
+            return None
+        digest = str(have.get("digest") or model)
+        with self._lock:
+            cached = self._choices.get(digest)
+        if cached is None and url:
+            try:
+                shown = ollama.OllamaClient(url).show(model)
+            except ollama.OllamaError:
+                shown = {}
+            cached = ollama.think_choices(shown) or [False, True]
+            with self._lock:
+                self._choices[digest] = cached
+        return cached or [False, True]
 
     def _entry(
         self,
@@ -205,13 +254,18 @@ class LocalModels:
         recommended: bool,
         pull: dict[str, Any] | None,
         default: bool,
+        url: str | None,
     ) -> dict[str, Any]:
         # Known from Ollama once downloaded; before, only for recommendations.
-        can_think: bool | None = None
-        if have is not None:
-            can_think = "thinking" in (have.get("capabilities") or [])
-        elif local_models.recommended_think(model) is not None:
-            can_think = True
+        choices = self._think_choices(model, have, url)
+        can_think: bool | None = choices is not None
+        if have is None and choices is None:
+            can_think = None
+        think: local_models.Think = False
+        if choices is not None:
+            wanted = self.think(model)
+            fitted = local_models.fit_think(wanted, choices)
+            think = wanted if fitted is None else fitted
         parts = [part for part in (engine,) if part]
         if size_gb:
             parts.append(f"{size_gb:.1f} GB")
@@ -227,7 +281,8 @@ class LocalModels:
             "engine": engine,
             "recommended": recommended,
             "can_think": can_think,
-            "think": self.think(model) if can_think is not False else False,
+            "think": think,
+            "think_options": choices,
             "pull": pull,
         }
 

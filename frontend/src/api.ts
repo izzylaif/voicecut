@@ -7,6 +7,7 @@ import type {
   ProjectSummary,
   RunSettings,
   SettingsState,
+  Think,
   WireTimeline,
 } from './types';
 
@@ -117,7 +118,7 @@ export const api = {
   models: (backend: string, refresh = false) =>
     call<ModelList>(`/api/planners/${encodeURIComponent(backend)}/models${refresh ? '?refresh=true' : ''}`),
   /** Download, stop downloading or delete a local model, or set whether it reasons. */
-  localModel: (action: 'pull' | 'cancel' | 'delete' | 'think', model: string, extra: { think?: boolean } = {}) =>
+  localModel: (action: 'pull' | 'cancel' | 'delete' | 'think', model: string, extra: { think?: Think } = {}) =>
     call<ModelList>(`/api/local-models/${action}`, json('POST', { model, ...extra })),
   saveSettings: (id: string, settings: RunSettings) =>
     call<RunSettings>(`${project(id)}/settings`, json('PUT', settings)),

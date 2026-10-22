@@ -126,7 +126,8 @@ def test_parse_rejects_lossy_repairs_until_the_last_attempt() -> None:
         parse_window_response(reversed_range, **common)
     with pytest.raises(WindowResponseError, match="precedes the editable"):
         parse_window_response(before_zone, **common)
-    assert parse_window_response(reversed_range, strict=False, **common).items == []
+    swapped = parse_window_response(reversed_range, strict=False, **common).items
+    assert [(item.first_id, item.last_id) for item in swapped] == [(2, 3)]
     kept = parse_window_response(before_zone, strict=False, **common).items
     assert [(item.first_id, item.last_id) for item in kept] == [(2, 3)]
 

@@ -14,11 +14,11 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { confirmAction, desktop } from '../desktop';
-import { localModelAction, pullText, sizeText, useLocalModels } from '../localModels';
+import { localModelAction, memoryText, pullText, sizeText, useLocalModels } from '../localModels';
 import { type Appearance, appearance, setAppearance, subscribe } from '../theme';
 import type { ModelInfo, PlannerInfo, RunSettings, SettingsState } from '../types';
 import { setAutomaticUpdates, useUpdate } from '../updates';
-import { downloadLocalModel, PullBar } from './VoiceCutControls';
+import { downloadLocalModel, PullBar, ThinkControl } from './VoiceCutControls';
 
 const APPEARANCE_OPTIONS: { value: Appearance; label: string; icon: LucideIcon }[] = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -273,7 +273,8 @@ function LocalModelsSection() {
           ? `${status.source === 'voicecut' ? `Ollama ${status.version ?? ''}, installed by VoiceCut,` : `Your Ollama ${status.version ?? ''} (${status.url})`}` +
             ' runs these models on this computer; the recording never leaves it.'
           : (list?.error?.message ?? 'Looking for Ollama…')}{' '}
-        A model that reasons first is slower and often more accurate.
+        {memoryText(list)} Reasoning before answering makes a model slower; the recommended models start with the
+        setting that planned best.
       </p>
       {actionError && <p className="error-text small">{actionError}</p>}
       <ul className="local-models">
@@ -349,16 +350,10 @@ function LocalModelRow({ model, usable }: { model: ModelInfo; usable: boolean })
         </span>
       </div>
       {pulling && <PullBar fraction={model.pull?.fraction ?? null} />}
-      {model.can_think !== false && (
-        <label className="checkbox small">
-          <input
-            type="checkbox"
-            checked={Boolean(model.think)}
-            disabled={!usable}
-            onChange={(event) => void localModelAction('think', model.id, { think: event.target.checked })}
-          />
-          Reason before answering
-        </label>
+      {model.think_options && (
+        <div className="local-model-think">
+          <ThinkControl model={model} disabled={!usable} />
+        </div>
       )}
     </li>
   );

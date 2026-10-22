@@ -415,11 +415,11 @@ def parse_window_response(
     always made: items are put in source order, an item overlapping the one
     before it starts after it, words before the editable zone are cut off,
     and an item reaching past the zone is left to the next window (cut at
-    the end of the recording).  Repairs that drop something the model meant
-    to keep -- a reversed range, an item entirely before the zone, a
-    malformed item -- reject the answer while ``strict``, so the model gets
-    another try; otherwise they are made too.  A changed item's text becomes
-    its source words'.
+    the end of the recording).  Repairs that guess, or drop something the
+    model meant to keep -- a reversed range (swapped), an item entirely
+    before the zone, a malformed item (both dropped) -- reject the answer
+    while ``strict``, so the model gets another try; otherwise they are made
+    too.  A changed item's text becomes its source words'.
     """
 
     try:
@@ -445,9 +445,14 @@ def parse_window_response(
         if type(first) is not int or type(last) is not int:
             lossy(f"keep[{index}] IDs must be integers")
             continue
+        text = str(raw_item.get("text", "")).strip()
         if first > last:
-            lossy(f"keep[{index}] has first_id {first} after last_id {last}")
-            continue
+            message = f"keep[{index}] has first_id {first} after last_id {last}"
+            if strict:
+                raise WindowResponseError(message)
+            warnings.append(f"{message}; swapped")
+            first, last = last, first
+            text = _source_text(words, first, last) or text
         if last < zone_first_id:
             lossy(
                 f"keep[{index}] range {first}-{last} precedes the editable IDs "
@@ -462,7 +467,7 @@ def parse_window_response(
             KeptItem(
                 first_id=first,
                 last_id=last,
-                text=str(raw_item.get("text", "")).strip(),
+                text=text,
                 break_after=str(break_after),
                 origin=origin,
             )

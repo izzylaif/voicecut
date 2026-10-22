@@ -136,8 +136,9 @@ installs its own copy during setup when the system has none; see
 
 ```bash
 ollama pull gemma4:31b           # 20.4 GB, once
-voicecut input.wav --planner-backend ollama
-voicecut input.wav --planner-backend ollama --planner-model qwen3.6:27b
+voicecut input.wav --planner-backend ollama --planner-think off
+voicecut input.wav --planner-backend ollama --planner-model qwen3.8:27b \
+  --planner-think low
 ```
 
 Any model of the [Ollama library](https://ollama.com/library) or a GGUF on
@@ -145,22 +146,33 @@ Hugging Face (`hf.co/<user>/<repo>:<quant>`) works. On Apple Silicon Ollama
 runs safetensors models through MLX (tags ending in `-mlx`; Ollama recommends
 more than 32 GB of memory for them) and GGUF models through llama.cpp on the
 GPU; on Windows and Linux it uses an NVIDIA GPU through CUDA when there is
-one. VoiceCut recommends:
+one. VoiceCut recommends two models:
 
-| Model | GGUF tag | MLX tag (Apple Silicon, > 32 GB) |
-| --- | --- | --- |
-| Gemma 4 31B (default) | `gemma4:31b`, 20.4 GB | `gemma4:31b-mlx`, 19.4 GB |
-| Gemma 4 26B-A4B | `gemma4:26b`, 18.7 GB | `gemma4:26b-mlx`, 18.3 GB |
-| Qwen 3.6 27B | `qwen3.6:27b`, 17.8 GB | `qwen3.6:27b-mlx`, 18.8 GB |
-| Qwen 3.6 35B-A3B | `qwen3.6:35b-a3b`, 22.6 GB | `qwen3.6:35b-mlx`, 23.6 GB |
-| gpt-oss 20B | `gpt-oss:20b`, 13.8 GB | — |
+| Model | Reasoning | GGUF tag | MLX tag (Apple Silicon, > 32 GB) |
+| --- | --- | --- | --- |
+| Gemma 4 31B (default) | off | `gemma4:31b`, 20.4 GB | `gemma4:31b-mlx`, 19.4 GB |
+| Qwen 3.8 27B | low | `qwen3.8:27b`, 17.7 GB | `qwen3.8:27b-mlx`, 18.2 GB |
+
+They come from a comparison on a 64-minute narration, text only, scored by
+agreement with Gemini 3.1 Pro listening to the audio on the words it removed
+(F1). Gemma 4 31B scored 0.92 with no retries, and reasoning did not improve
+it (0.91). Qwen 3.8 27B scored 0.90 with the fewest repeats left in the edit,
+reasoning at `low` (about 1,300 reasoning tokens per request, so it is
+slower); without reasoning its reviews broke the answer's format. Every model
+of 14B parameters or less scored 0.57–0.65 and left 39–79 repeats, Qwen 3.6
+35B-A3B 0.76 and Qwen 3.5 122B-A10B 0.78. A usable local planner therefore
+needs a model of about 30B parameters and about 32 GB of memory.
 
 Each request uses Ollama's structured outputs: the answer is constrained to
-the planner's JSON schema. A model that can reason does so before it answers
-unless `--planner-think off` is given (`on` asks for it, `auto`, the default,
-lets every model that can reason do so; in the editor it is a setting of each
-model). If the reasoning fills the request's output budget, the request is
-asked again without reasoning. Every request gets a context of at least
+the planner's JSON schema. `--planner-think` sets how a model reasons before
+it answers: `off`, `on`, or a level (`low`, `medium`, `high`) for models that
+take one; `auto`, the default, leaves it to the model. In the editor it is a
+setting of each model, which starts at the recommendation's setting, or `on`
+for any other model, since small models plan far worse without reasoning. A
+setting the model does not take is mapped onto one it does (a level becomes
+`on`, `on` becomes `medium`, `off` the model's own default for one that
+always reasons). If the reasoning fills the request's output budget, the
+request is asked again with as little reasoning as the model allows. Every request gets a context of at least
 32,768 tokens (more for a longer prompt, within the model's limit) and an
 explicit output budget, because Ollama otherwise keeps generating past a full
 context. Requests stream, so a long answer is never cut off: only a
@@ -172,13 +184,16 @@ The planner therefore repairs, generically, what cannot lose narration: items
 are put in source order, an item that overlaps the one before it starts after
 it, word IDs before the editable zone are cut off, and an item that reaches
 past the zone is left to the next window (cut at the end of the recording).
-A repair that would drop something the model meant to keep — a reversed
-range, an item entirely before the zone — makes the planner ask again; on the
-third and last attempt it is applied, so a plan fails only on an answer that
-is not JSON at all. The plan's `windows[].warnings` list every repair.
+A repair that guesses or drops something the model meant to keep — a
+reversed range (swapped), an item entirely before the zone (dropped) — makes
+the planner ask again; on the third and last attempt it is applied, so a
+window fails only on an answer that is not JSON at all, and a review that
+gets no usable answer leaves its region as the windows decided it. The plan's
+`windows[].warnings` list every repair. Repairs let small models finish; they
+do not make their choices good (see the recommendations above).
 
-Local models need memory: a recommended model needs about its download size
-free, plus a few GB for the context. They are slow without a fast GPU — each
+Local models need memory: a recommended model needs about 32 GB in all (its
+download size, a few GB for the context, and the rest of the computer). They are slow without a fast GPU — each
 four-minute window can take minutes — so a long recording can take hours.
 
 ## Privacy and data flow
@@ -444,10 +459,10 @@ accepted for compatibility and adds nothing. See
 | `--env-file PATH` | dotenv file; default `.env` |
 | `--language en\|ru` | Source language; default `en` |
 | `--planner-backend NAME` | `gemini`, `openai`, `deepseek`, or `ollama` |
-| `--planner-model NAME` | Provider model, or an Ollama model such as `qwen3.6:27b` |
+| `--planner-model NAME` | Provider model, or an Ollama model such as `gemma4:31b` |
 | `--planner-base-url URL` | OpenAI/DeepSeek endpoint override |
 | `--planner-api-key-env NAME` | Credential environment-variable name |
-| `--planner-think auto\|on\|off` | Whether an Ollama model reasons before it answers; default `auto` |
+| `--planner-think auto\|on\|off\|low\|medium\|high` | How an Ollama model reasons before it answers; default `auto` |
 | `--window-seconds N` | Recording time decided per planner request |
 | `--lookahead-seconds N` | Undecided look-ahead shown to the planner |
 | `--planner-audio auto\|on\|off` | Whether the planner listens to each window |

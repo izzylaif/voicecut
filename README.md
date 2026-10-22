@@ -202,12 +202,14 @@ with a link to get one, and are sent only to their own provider.
 
 **Local** planners run open models on your Mac or PC through Ollama, on
 macOS, Windows and Linux alike, so nothing leaves the computer. The model list
-shows VoiceCut's recommendations first, then the other models your Ollama
-has; choose one and it downloads (15–25 GB for the recommended ones) with its
-progress. Any other model of the [Ollama library](https://ollama.com/library)
-can be typed in. **Settings › Local models** deletes models and sets, for
-each, whether it reasons before answering (slower, often more accurate). If
-you already use Ollama, VoiceCut uses yours and its models.
+shows VoiceCut's two recommendations first — Gemma 4 31B, which planned best
+in our comparison with Gemini, and Qwen 3.8 27B — then the other models your
+Ollama has; choose one and it downloads (about 18–20 GB) with its progress.
+Any other model of the [Ollama library](https://ollama.com/library) can be
+typed in. Each model has a **Reasoning** switch (off, on, or a level): the
+recommended ones start with the setting that planned best. **Settings ›
+Local models** lists them too and deletes them. If you already use Ollama,
+VoiceCut uses yours and its models.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/settings-dark.webp">
@@ -285,11 +287,11 @@ plan, so you can always see why a cut was made.
   supported.
 - **Cloud planner:** the recommended planners need an internet connection and
   an API key from their provider.
-- **Local planner:** a recommended model needs 15–25 GB of disk and about as
-  much free memory, and it is slow without a fast GPU: each four-minute
-  window can take minutes, so a long recording can take hours. Local models
-  read the transcript only; Gemini, which also hears the audio, remains the
-  recommended planner.
+- **Local planner:** it needs about 32 GB of memory and 20 GB of disk: models
+  small enough for less (14B parameters or fewer) choose takes far worse. It
+  is slow without a fast GPU — each four-minute window can take minutes, so a
+  long recording can take hours. Local models read the transcript only;
+  Gemini, which also hears the audio, remains the recommended planner.
 - **Judgement:** the planner is a language model and can occasionally choose
   the wrong take, and a cut inside tightly connected speech (no pause
   between a kept and a removed word) can sound abrupt. Listen to the edit
@@ -302,7 +304,7 @@ plan, so you can always see why a cut was made.
   macOS the "VoiceCut would like to access files in…" questions come back
   once after each update until builds are signed with a Developer ID.
 - **First launch** downloads about 1.7 GB on a Mac and 2.9 GB on Windows and
-  Linux, and the first Voice Cut about 2 GB more (a local model 15–25 GB).
+  Linux, and the first Voice Cut about 2 GB more (a local model about 20 GB).
 
 ## Command line and development
 

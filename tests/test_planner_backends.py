@@ -19,6 +19,7 @@ from voicecut.planner_backends import (
     preflight_planner_backend,
     resolve_planner_base_url,
     sanitize_planner_base_url,
+    think_setting,
 )
 from voicecut.take_planner import build_parser as build_take_parser
 
@@ -136,17 +137,25 @@ class FakeOllama:
         *,
         capabilities: tuple[str, ...] = ("completion", "thinking"),
         context: int | None = 40960,
+        think_values: list[object] | None = None,
     ) -> None:
         self.answers = answers
         self.capabilities = capabilities
         self.context = context
+        self.think_values = think_values
         self.calls: list[dict[str, object]] = []
 
     def show(self, model: str) -> dict[str, object]:
         if model == "missing:1b":
             raise ollama.OllamaError("model 'missing:1b' not found", status=404)
         info = {"qwen3.context_length": self.context} if self.context else {}
-        return {"capabilities": list(self.capabilities), "model_info": info}
+        shown: dict[str, object] = {
+            "capabilities": list(self.capabilities),
+            "model_info": info,
+        }
+        if self.think_values is not None:
+            shown["thinking"] = {"values": self.think_values}
+        return shown
 
     def chat(self, **kwargs: object) -> ollama.ChatResult:
         self.calls.append(kwargs)
@@ -204,6 +213,24 @@ def test_ollama_backend_follows_the_model_and_the_setting_on_reasoning() -> None
         "p", response_schema={}, request_id="w"
     )
     assert reasoning.calls[0]["think"] is False
+
+
+def test_ollama_reasoning_levels_fit_what_the_model_takes() -> None:
+    levels = FakeOllama(
+        [_answer("", "length"), _answer("{}")], think_values=["low", "medium", "high"]
+    )
+    OllamaPlannerBackend(model="gpt-oss:20b", think="high", client=levels).generate(  # type: ignore[arg-type]
+        "p", response_schema={}, request_id="w"
+    )
+    # A model that always reasons falls back to its lowest level, not "off".
+    assert [call["think"] for call in levels.calls] == ["high", "low"]
+    plain = FakeOllama([_answer("{}")], think_values=[False, True])
+    OllamaPlannerBackend(model="qwen3:8b", think="low", client=plain).generate(  # type: ignore[arg-type]
+        "p", response_schema={}, request_id="w"
+    )
+    assert plain.calls[0]["think"] is True
+    assert think_setting("low") == "low"
+    assert think_setting("off") is False and think_setting("auto") is None
 
 
 def test_ollama_context_grows_for_a_long_prompt_within_the_model() -> None:

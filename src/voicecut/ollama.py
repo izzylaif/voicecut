@@ -186,7 +186,7 @@ class OllamaClient:
         model: str,
         messages: Sequence[dict[str, str]],
         format: dict[str, Any] | None,
-        think: bool | None,
+        think: bool | str | None,
         options: dict[str, Any],
         on_progress: Callable[[str, int], None] | None = None,
     ) -> ChatResult:
@@ -227,6 +227,16 @@ class OllamaClient:
             prompt_tokens=last.get("prompt_eval_count"),
             output_tokens=last.get("eval_count"),
         )
+
+
+def think_choices(shown: dict[str, Any]) -> list[bool | str] | None:
+    """The ``think`` values a model takes, from its ``/api/show``."""
+
+    thinking = shown.get("thinking")
+    values = thinking.get("values") if isinstance(thinking, dict) else None
+    if not isinstance(values, list):
+        return None
+    return [value for value in values if isinstance(value, (bool, str))] or None
 
 
 def _error_text(error: urllib.error.HTTPError) -> str:

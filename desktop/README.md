@@ -143,13 +143,16 @@ free loopback port with `OLLAMA_CONTEXT_LENGTH=32768` and `OLLAMA_NO_CLOUD=1`
 stops with it; its log is `logs/ollama.log`.
 
 Models are not part of setup: the planner's model list in the toolbar shows
-VoiceCut's recommendations first (MLX tags on Apple Silicon with more than
-32 GB, GGUF elsewhere), then every other model Ollama has, and downloads one
-(15–25 GB for the recommended ones) with its progress when it is chosen; any
-other Ollama model can be typed in. **Settings › Local models** lists them
-too, deletes them, and sets for each model whether it reasons before
-answering (`local_models.json` in `editor/`). Voice Cut with a model that is
-not downloaded offers the download instead of starting.
+VoiceCut's recommendations first (Gemma 4 31B and Qwen 3.8 27B; MLX tags on
+Apple Silicon with more than 32 GB, GGUF elsewhere), then every other model
+Ollama has, and downloads one (about 18–20 GB) with its progress when it is
+chosen; any other Ollama model can be typed in. Under the list, and in
+**Settings › Local models**, each model has its reasoning setting — off, on,
+or a level for models that take one (Ollama's `/api/show` says which) —
+starting from the recommendation's best (`local_models.json` in `editor/`).
+Both say the recommended models need about 32 GB of memory, and warn on a
+computer with less. Voice Cut with a model that is not downloaded offers the
+download instead of starting.
 
 ## Whisper on Intel Macs, Linux and Windows
 

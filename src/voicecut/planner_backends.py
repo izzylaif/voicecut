@@ -47,7 +47,7 @@ DEFAULT_MODEL_BY_BACKEND = {
     "deepseek": DEFAULT_DEEPSEEK_MODEL,
     "ollama": DEFAULT_OLLAMA_MODEL,
 }
-THINK_CHOICES = ("auto", "on", "off")
+THINK_CHOICES = ("auto", "on", "off", *local_models.THINK_LEVELS)
 # A prompt's length in tokens, estimated from its characters on the safe
 # side: word IDs ("[123]word") make the window prompts dense.
 CHARACTERS_PER_TOKEN = 2.5
@@ -554,7 +554,7 @@ class OllamaPlannerBackend:
         self,
         *,
         model: str = DEFAULT_OLLAMA_MODEL,
-        think: bool | None = None,
+        think: bool | str | None = None,
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         system_instruction: str = NARRATION_SYSTEM_INSTRUCTION,
         context_tokens: int = ollama.CONTEXT_TOKENS,
@@ -569,7 +569,9 @@ class OllamaPlannerBackend:
         self.context_tokens = context_tokens
         self._client = client
         self._server: ollama.OllamaServer | None = None
-        self._model_info: tuple[set[str], int | None] | None = None
+        self._model_info: (
+            tuple[set[str], int | None, list[bool | str] | None] | None
+        ) = None
 
     def _connect(self) -> ollama.OllamaClient:
         if self._client is None:
@@ -581,8 +583,8 @@ class OllamaPlannerBackend:
             self._client = ollama.OllamaClient(url)
         return self._client
 
-    def _info(self) -> tuple[set[str], int | None]:
-        """The model's capabilities and longest context."""
+    def _info(self) -> tuple[set[str], int | None, list[bool | str] | None]:
+        """The model's capabilities, longest context and ``think`` values."""
 
         if self._model_info is None:
             try:
@@ -598,13 +600,13 @@ class OllamaPlannerBackend:
                 ),
                 None,
             )
-            self._model_info = (capabilities, context)
+            self._model_info = (capabilities, context, ollama.think_choices(shown))
         return self._model_info
 
     def options(self, prompt: str) -> dict[str, int]:
         """The context and output budget of one request."""
 
-        _, model_context = self._info()
+        _, model_context, _ = self._info()
         estimate = math.ceil(
             len(self.system_instruction + prompt) / CHARACTERS_PER_TOKEN
         )
@@ -623,21 +625,30 @@ class OllamaPlannerBackend:
         response_schema: dict[str, Any],
         request_id: str,
     ) -> str:
-        capabilities, _ = self._info()
-        # A model without reasoning refuses the parameter.
+        capabilities, _, choices = self._info()
+        # A model without reasoning refuses the parameter; one with levels
+        # may refuse a plain "on", one that always reasons "off".
         think = None
         if "thinking" in capabilities:
-            think = True if self.think is None else self.think
+            wanted = True if self.think is None else self.think
+            think = local_models.fit_think(wanted, choices)
         options = self.options(prompt)
         result = self._chat(prompt, response_schema, think, options, request_id)
-        if think and result.done_reason == "length" and not result.content.strip():
+        least = local_models.fit_think(False, choices)
+        if least is None and choices and "low" in choices:
+            least = "low"
+        if (
+            think not in (None, False, least)
+            and result.done_reason == "length"
+            and not result.content.strip()
+        ):
             print(
                 f"{request_id}: the reasoning filled the output budget; asking "
-                "again without reasoning",
+                "again with as little reasoning as the model allows",
                 file=sys.stderr,
                 flush=True,
             )
-            result = self._chat(prompt, response_schema, False, options, request_id)
+            result = self._chat(prompt, response_schema, least, options, request_id)
         if result.done_reason == "length":
             print(
                 f"{request_id}: the answer reached the output budget "
@@ -651,7 +662,7 @@ class OllamaPlannerBackend:
         self,
         prompt: str,
         response_schema: dict[str, Any],
-        think: bool | None,
+        think: bool | str | None,
         options: dict[str, int],
         request_id: str,
     ) -> ollama.ChatResult:
@@ -727,7 +738,7 @@ def create_planner_backend(
     system_instruction: str = NARRATION_SYSTEM_INSTRUCTION,
     base_url: str | None = None,
     api_key_env: str | None = None,
-    think: bool | None = None,
+    think: bool | str | None = None,
     gemini_temperature: float | None = 0.0,
 ) -> PlannerBackend:
     """Create one planner transport from provider-neutral configuration."""
@@ -789,7 +800,7 @@ def add_planner_backend_arguments(
     )
     parser.add_argument(
         "--planner-model",
-        help="Provider model name, or an Ollama model (e.g. qwen3.6:27b).",
+        help="Provider model name, or an Ollama model (e.g. gemma4:31b).",
     )
     parser.add_argument(
         "--planner-base-url",
@@ -809,11 +820,16 @@ def add_planner_backend_arguments(
         "--planner-think",
         choices=THINK_CHOICES,
         default="auto",
-        help=("Let an Ollama model reason before it answers (auto: when it can)."),
+        help=(
+            "How an Ollama model reasons before it answers: on, off, or a "
+            "level for models that take one (auto: the model's default)."
+        ),
     )
 
 
-def think_setting(value: str) -> bool | None:
+def think_setting(value: str) -> bool | str | None:
     """``--planner-think`` as the backend's ``think`` argument."""
 
+    if value in local_models.THINK_LEVELS:
+        return value
     return {"on": True, "off": False}.get(value)

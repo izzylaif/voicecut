@@ -215,10 +215,14 @@ export interface ModelInfo {
   recommended?: boolean;
   /** Whether the model can reason before answering (null: not known yet). */
   can_think?: boolean | null;
-  /** Whether it reasons in a Voice Cut (a setting of the model). */
-  think?: boolean;
+  /** How it reasons in a Voice Cut (a setting of the model): off, on, or a level. */
+  think?: Think;
+  /** The settings it takes (null: it cannot reason). */
+  think_options?: Think[] | null;
   pull?: PullState | null;
 }
+
+export type Think = boolean | 'low' | 'medium' | 'high';
 
 /** A model download in progress (or one that failed). */
 export interface PullState {
@@ -246,4 +250,6 @@ export interface ModelList {
   error: { kind: 'missing_key' | 'invalid_key' | 'network' | 'unavailable'; message: string } | null;
   /** Local models only. */
   ollama?: OllamaStatus;
+  /** This computer's memory and what a recommended local model needs. */
+  memory?: { gb: number | null; needed_gb: number };
 }

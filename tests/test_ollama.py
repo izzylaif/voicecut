@@ -227,9 +227,28 @@ def test_reasoning_is_a_setting_of_each_model(
 ) -> None:
     monkeypatch.setenv("OLLAMA_HOST", fake.url)
     local = LocalModels(tmp_path)
-    assert local.think("qwen3:0.6b") is True
+    assert local.think("qwen3:0.6b") is True  # not recommended: it reasons
     local.set_think("qwen3:0.6b", False)
     assert LocalModels(tmp_path).think("qwen3:0.6b") is False
-    assert LocalModels(tmp_path).think("qwen3:8b") is True
+    assert LocalModels(tmp_path).think_argument("qwen3:0.6b") == "off"
+    local.set_think("qwen3:0.6b", "low")
+    tiny = next(m for m in local.listing()["models"] if m["id"] == "qwen3:0.6b")
+    # It takes only on and off: a level means on.
+    assert tiny["think_options"] == [False, True] and tiny["think"] is True
+    assert local.think_argument("qwen3:0.6b") == "low"
     with pytest.raises(LocalModelError):
         local.set_think("qwen3:0.6b", "yes")
+    # Recommendations start from the setting that planned best.
+    for item in local_models.RECOMMENDED:
+        assert local.think(item.gguf) == item.think
+    listing = local.listing()
+    assert listing["memory"]["needed_gb"] == local_models.MEMORY_NEEDED_GB
+    levels = [m for m in listing["models"] if isinstance(m["think"], str)]
+    assert all(m["think_options"][0] is False for m in levels)
+
+
+def test_fit_think_maps_a_setting_onto_what_a_model_takes() -> None:
+    assert local_models.fit_think("low", [False, True]) is True
+    assert local_models.fit_think(True, ["low", "medium", "high"]) == "medium"
+    assert local_models.fit_think(False, ["low", "medium", "high"]) is None
+    assert local_models.fit_think("high", None) == "high"
