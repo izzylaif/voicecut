@@ -1,0 +1,3080 @@
+{
+ "sample_rate": 48000,
+ "source_frames": 480000,
+ "proposal": {
+  "plan_sha256": "fixture",
+  "pause_policy": "semantic",
+  "sample_rate": 48000,
+  "source_frames": 480000,
+  "output_frames": 345488,
+  "segments": [
+   {
+    "id": "vc-0000",
+    "start": 24000,
+    "end": 72000,
+    "fade_in": 480,
+    "fade_out": 480
+   },
+   {
+    "id": "vc-0001",
+    "start": 90000,
+    "end": 140000,
+    "fade_in": 480,
+    "fade_out": 192
+   },
+   {
+    "id": "vc-0002",
+    "start": 200000,
+    "end": 260000,
+    "fade_in": 192,
+    "fade_out": 1440
+   },
+   {
+    "id": "vc-0003",
+    "start": 300000,
+    "end": 420000,
+    "fade_in": 480,
+    "fade_out": 480
+   }
+  ],
+  "joins": [
+   {
+    "length": 19680,
+    "fade_in": 480,
+    "fade_out": 480
+   },
+   null,
+   {
+    "length": 5760,
+    "fade_in": 1440,
+    "fade_out": 480
+   }
+  ],
+  "lead": {
+   "length": 16800,
+   "fade_in": 2400,
+   "fade_out": 480
+  },
+  "tail": {
+   "length": 29280,
+   "fade_in": 480,
+   "fade_out": 4800
+  },
+  "words": [
+   {
+    "text": "Lead",
+    "start": 24960,
+    "end": 38400,
+    "kept": true
+   },
+   {
+    "text": "in.",
+    "start": 67200,
+    "end": 71040,
+    "kept": true
+   },
+   {
+    "text": "Dropped",
+    "start": 74400,
+    "end": 88800,
+    "kept": false
+   },
+   {
+    "text": "Second",
+    "start": 91200,
+    "end": 139200,
+    "kept": true
+   },
+   {
+    "text": "third",
+    "start": 201600,
+    "end": 259200,
+    "kept": true
+   },
+   {
+    "text": "fourth",
+    "start": 302400,
+    "end": 417600,
+    "kept": true
+   }
+  ]
+ },
+ "cases": [
+  {
+   "name": "untouched",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 63840,
+     "output_end_sample": 83520,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 132848,
+     "output_end_sample": 192848,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 191408,
+     "output_end_sample": 197168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 196688,
+     "output_end_sample": 316688,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 316208,
+     "output_end_sample": 345488,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 64320,
+     "output_end_sample": 83040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 133040,
+     "output_end_sample": 192848,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 192848,
+     "output_end_sample": 196688,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 196688,
+     "output_end_sample": 316688,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 316688,
+     "output_end_sample": 345488,
+     "join_id": "lead"
+    }
+   ],
+   "total": 345488
+  },
+  {
+   "name": "extended end keeps the pause",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 80000,
+     "start_origin": "voicecut",
+     "end_origin": "manual"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 72320,
+     "source_start_sample": 24000,
+     "source_end_sample": 80000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 96,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 72224,
+     "output_end_sample": 91520,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 96,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 91040,
+     "output_end_sample": 141040,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 140848,
+     "output_end_sample": 200848,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 199408,
+     "output_end_sample": 205168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 204688,
+     "output_end_sample": 324688,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 324208,
+     "output_end_sample": 353488,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 72320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 80000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 72320,
+     "output_end_sample": 91040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 91040,
+     "output_end_sample": 141040,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 141040,
+     "output_end_sample": 200848,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 200848,
+     "output_end_sample": 204688,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 204688,
+     "output_end_sample": 324688,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 324688,
+     "output_end_sample": 353488,
+     "join_id": "lead"
+    }
+   ],
+   "total": 353488
+  },
+  {
+   "name": "trimmed start",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 95000,
+     "source_end_sample": 140000,
+     "start_origin": "manual",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 63840,
+     "output_end_sample": 83136,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 96,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 128040,
+     "source_start_sample": 95000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 96,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 127848,
+     "output_end_sample": 187848,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 186408,
+     "output_end_sample": 192168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 191688,
+     "output_end_sample": 311688,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 311208,
+     "output_end_sample": 340488,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 64320,
+     "output_end_sample": 83040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 128040,
+     "source_interval_index": 1,
+     "source_start_sample": 95000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 128040,
+     "output_end_sample": 187848,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 187848,
+     "output_end_sample": 191688,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 191688,
+     "output_end_sample": 311688,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 311688,
+     "output_end_sample": 340488,
+     "join_id": "lead"
+    }
+   ],
+   "total": 340488
+  },
+  {
+   "name": "deleted clip and its pause",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 63840,
+     "output_end_sample": 83520,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 132848,
+     "output_end_sample": 252848,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 480,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 252368,
+     "output_end_sample": 281648,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 64320,
+     "output_end_sample": 83040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 133040,
+     "output_end_sample": 252848,
+     "source_interval_index": 2,
+     "source_start_sample": 300192,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 252848,
+     "output_end_sample": 281648,
+     "join_id": "lead"
+    }
+   ],
+   "total": 281648
+  },
+  {
+   "name": "split",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 360000,
+     "start_origin": "voicecut",
+     "end_origin": "manual"
+    },
+    {
+     "kind": "clip",
+     "id": "m-split",
+     "source_start_sample": 360000,
+     "source_end_sample": 420000,
+     "start_origin": "manual",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 63840,
+     "output_end_sample": 83520,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 132848,
+     "output_end_sample": 192848,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 191408,
+     "output_end_sample": 197168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 196688,
+     "output_end_sample": 256688,
+     "source_start_sample": 300000,
+     "source_end_sample": 360000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 0,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 256688,
+     "output_end_sample": 316688,
+     "source_start_sample": 360000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 0,
+     "fade_out_samples": 480,
+     "source_interval_index": 4
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 316208,
+     "output_end_sample": 345488,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 64320,
+     "output_end_sample": 83040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 133040,
+     "output_end_sample": 192848,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 192848,
+     "output_end_sample": 196688,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 196688,
+     "output_end_sample": 256688,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 360000
+    },
+    {
+     "segment_index": 7,
+     "kind": "source",
+     "output_start_sample": 256688,
+     "output_end_sample": 316688,
+     "source_interval_index": 4,
+     "source_start_sample": 360000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 8,
+     "kind": "room_tone",
+     "output_start_sample": 316688,
+     "output_end_sample": 345488,
+     "join_id": "lead"
+    }
+   ],
+   "total": 345488
+  },
+  {
+   "name": "pause inserted inside a clip",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 360000,
+     "start_origin": "voicecut",
+     "end_origin": "manual"
+    },
+    {
+     "kind": "pause",
+     "id": "m-pause",
+     "length": 48000,
+     "origin": "manual",
+     "join": null
+    },
+    {
+     "kind": "clip",
+     "id": "m-split",
+     "source_start_sample": 360000,
+     "source_end_sample": 420000,
+     "start_origin": "manual",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 63840,
+     "output_end_sample": 83520,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 132848,
+     "output_end_sample": 192848,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 191408,
+     "output_end_sample": 197168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 196688,
+     "output_end_sample": 256688,
+     "source_start_sample": 300000,
+     "source_end_sample": 360000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 96,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 256592,
+     "output_end_sample": 304784,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 96,
+     "fade_out_samples": 96,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 304688,
+     "output_end_sample": 364688,
+     "source_start_sample": 360000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 96,
+     "fade_out_samples": 480,
+     "source_interval_index": 4
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 364208,
+     "output_end_sample": 393488,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 64320,
+     "output_end_sample": 83040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 133040,
+     "output_end_sample": 192848,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 192848,
+     "output_end_sample": 196688,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 196688,
+     "output_end_sample": 256688,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 360000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 256688,
+     "output_end_sample": 304688,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 8,
+     "kind": "source",
+     "output_start_sample": 304688,
+     "output_end_sample": 364688,
+     "source_interval_index": 4,
+     "source_start_sample": 360000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 9,
+     "kind": "room_tone",
+     "output_start_sample": 364688,
+     "output_end_sample": 393488,
+     "join_id": "lead"
+    }
+   ],
+   "total": 393488
+  },
+  {
+   "name": "resized pauses",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 40000,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 9000,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 40480,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 40000,
+     "output_end_sample": 88000,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 87520,
+     "output_end_sample": 97480,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 97000,
+     "output_end_sample": 147000,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 146808,
+     "output_end_sample": 206808,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 205368,
+     "output_end_sample": 211128,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 210648,
+     "output_end_sample": 330648,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 330168,
+     "output_end_sample": 359448,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 40000,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 40000,
+     "output_end_sample": 88000,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 88000,
+     "output_end_sample": 97000,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 97000,
+     "output_end_sample": 147000,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 147000,
+     "output_end_sample": 206808,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 206808,
+     "output_end_sample": 210648,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 210648,
+     "output_end_sample": 330648,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 330648,
+     "output_end_sample": 359448,
+     "join_id": "lead"
+    }
+   ],
+   "total": 359448
+  },
+  {
+   "name": "lead-in shorter than its fade",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 1000,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 1480,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1000,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 1000,
+     "output_end_sample": 49000,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 48520,
+     "output_end_sample": 68200,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 67720,
+     "output_end_sample": 117720,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 117528,
+     "output_end_sample": 177528,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 176088,
+     "output_end_sample": 181848,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 181368,
+     "output_end_sample": 301368,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 300888,
+     "output_end_sample": 330168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 1000,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 1000,
+     "output_end_sample": 49000,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 49000,
+     "output_end_sample": 67720,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 67720,
+     "output_end_sample": 117720,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 117720,
+     "output_end_sample": 177528,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 177528,
+     "output_end_sample": 181368,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 181368,
+     "output_end_sample": 301368,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 301368,
+     "output_end_sample": 330168,
+     "join_id": "lead"
+    }
+   ],
+   "total": 330168
+  },
+  {
+   "name": "deleted pause",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 63840,
+     "output_end_sample": 113840,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 113648,
+     "output_end_sample": 173648,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 172208,
+     "output_end_sample": 177968,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 177488,
+     "output_end_sample": 297488,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 297008,
+     "output_end_sample": 326288,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "source",
+     "output_start_sample": 64320,
+     "output_end_sample": 113840,
+     "source_interval_index": 1,
+     "source_start_sample": 90480,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 113840,
+     "output_end_sample": 173648,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 4,
+     "kind": "room_tone",
+     "output_start_sample": 173648,
+     "output_end_sample": 177488,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 5,
+     "kind": "source",
+     "output_start_sample": 177488,
+     "output_end_sample": 297488,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 6,
+     "kind": "room_tone",
+     "output_start_sample": 297488,
+     "output_end_sample": 326288,
+     "join_id": "lead"
+    }
+   ],
+   "total": 326288
+  },
+  {
+   "name": "extended to the start of the recording",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 0,
+     "source_end_sample": 72000,
+     "start_origin": "source",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16416,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 96,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 88320,
+     "source_start_sample": 0,
+     "source_end_sample": 72000,
+     "fade_in_samples": 96,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 87840,
+     "output_end_sample": 107520,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 107040,
+     "output_end_sample": 157040,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 156848,
+     "output_end_sample": 216848,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 215408,
+     "output_end_sample": 221168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 220688,
+     "output_end_sample": 340688,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 340208,
+     "output_end_sample": 369488,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 88320,
+     "source_interval_index": 0,
+     "source_start_sample": 0,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 88320,
+     "output_end_sample": 107040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 107040,
+     "output_end_sample": 157040,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 157040,
+     "output_end_sample": 216848,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 216848,
+     "output_end_sample": 220688,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 220688,
+     "output_end_sample": 340688,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 340688,
+     "output_end_sample": 369488,
+     "join_id": "lead"
+    }
+   ],
+   "total": 369488
+  },
+  {
+   "name": "extended up to the next clip across a pause",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 300000,
+     "start_origin": "voicecut",
+     "end_origin": "manual"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 63840,
+     "output_end_sample": 83520,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 132848,
+     "output_end_sample": 232848,
+     "source_start_sample": 200000,
+     "source_end_sample": 300000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 96,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 232752,
+     "output_end_sample": 237168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 96,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 236688,
+     "output_end_sample": 356688,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 356208,
+     "output_end_sample": 385488,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 64320,
+     "output_end_sample": 83040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 133040,
+     "output_end_sample": 232848,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 300000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 232848,
+     "output_end_sample": 236688,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 236688,
+     "output_end_sample": 356688,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 356688,
+     "output_end_sample": 385488,
+     "join_id": "lead"
+    }
+   ],
+   "total": 385488
+  },
+  {
+   "name": "very short clip",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 139000,
+     "source_end_sample": 140000,
+     "start_origin": "manual",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 63840,
+     "output_end_sample": 83136,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 96,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 84040,
+     "source_start_sample": 139000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 96,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83848,
+     "output_end_sample": 143848,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 142408,
+     "output_end_sample": 148168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 147688,
+     "output_end_sample": 267688,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 267208,
+     "output_end_sample": 296488,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 64320,
+     "output_end_sample": 83040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 84040,
+     "source_interval_index": 1,
+     "source_start_sample": 139000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 84040,
+     "output_end_sample": 143848,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 143848,
+     "output_end_sample": 147688,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 147688,
+     "output_end_sample": 267688,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 267688,
+     "output_end_sample": 296488,
+     "join_id": "lead"
+    }
+   ],
+   "total": 296488
+  },
+  {
+   "name": "very short clip with a long fade",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 259000,
+     "source_end_sample": 260000,
+     "start_origin": "manual",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 63840,
+     "output_end_sample": 83520,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 96,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 132944,
+     "output_end_sample": 133944,
+     "source_start_sample": 259000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 96,
+     "fade_out_samples": 904,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 133040,
+     "output_end_sample": 138264,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 904,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 137784,
+     "output_end_sample": 257784,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 257304,
+     "output_end_sample": 286584,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 64320,
+     "output_end_sample": 83040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 133040,
+     "output_end_sample": 133944,
+     "source_interval_index": 2,
+     "source_start_sample": 259096,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "room_tone",
+     "output_start_sample": 133944,
+     "output_end_sample": 137784,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 6,
+     "kind": "source",
+     "output_start_sample": 137784,
+     "output_end_sample": 257784,
+     "source_interval_index": 3,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 7,
+     "kind": "room_tone",
+     "output_start_sample": 257784,
+     "output_end_sample": 286584,
+     "join_id": "lead"
+    }
+   ],
+   "total": 286584
+  },
+  {
+   "name": "whole recording before Voice Cut",
+   "with_proposal": false,
+   "items": [
+    {
+     "kind": "clip",
+     "id": "src-0000",
+     "source_start_sample": 0,
+     "source_end_sample": 480000,
+     "start_origin": "source",
+     "end_origin": "source"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "source",
+     "output_start_sample": 0,
+     "output_end_sample": 480000,
+     "source_start_sample": 0,
+     "source_end_sample": 480000,
+     "fade_in_samples": 0,
+     "fade_out_samples": 0,
+     "source_interval_index": 0
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "source",
+     "output_start_sample": 0,
+     "output_end_sample": 480000,
+     "source_interval_index": 0,
+     "source_start_sample": 0,
+     "source_end_sample": 480000
+    }
+   ],
+   "total": 480000
+  },
+  {
+   "name": "edited before Voice Cut",
+   "with_proposal": false,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "m-lead",
+     "length": 12000,
+     "origin": "manual",
+     "join": null
+    },
+    {
+     "kind": "clip",
+     "id": "src-0000",
+     "source_start_sample": 0,
+     "source_end_sample": 100000,
+     "start_origin": "source",
+     "end_origin": "manual"
+    },
+    {
+     "kind": "clip",
+     "id": "m-1",
+     "source_start_sample": 150000,
+     "source_end_sample": 300000,
+     "start_origin": "manual",
+     "end_origin": "manual"
+    },
+    {
+     "kind": "pause",
+     "id": "m-gap",
+     "length": 24000,
+     "origin": "manual",
+     "join": null
+    },
+    {
+     "kind": "clip",
+     "id": "m-2",
+     "source_start_sample": 300000,
+     "source_end_sample": 480000,
+     "start_origin": "manual",
+     "end_origin": "source"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 12096,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 96,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 12000,
+     "output_end_sample": 112000,
+     "source_start_sample": 0,
+     "source_end_sample": 100000,
+     "fade_in_samples": 96,
+     "fade_out_samples": 96,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 111904,
+     "output_end_sample": 261904,
+     "source_start_sample": 150000,
+     "source_end_sample": 300000,
+     "fade_in_samples": 96,
+     "fade_out_samples": 96,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 261808,
+     "output_end_sample": 286000,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 96,
+     "fade_out_samples": 96,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 285904,
+     "output_end_sample": 465904,
+     "source_start_sample": 300000,
+     "source_end_sample": 480000,
+     "fade_in_samples": 96,
+     "fade_out_samples": 0,
+     "source_interval_index": 2
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 12000,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 12000,
+     "output_end_sample": 112000,
+     "source_interval_index": 0,
+     "source_start_sample": 0,
+     "source_end_sample": 100000
+    },
+    {
+     "segment_index": 2,
+     "kind": "source",
+     "output_start_sample": 112000,
+     "output_end_sample": 261904,
+     "source_interval_index": 1,
+     "source_start_sample": 150096,
+     "source_end_sample": 300000
+    },
+    {
+     "segment_index": 3,
+     "kind": "room_tone",
+     "output_start_sample": 261904,
+     "output_end_sample": 285904,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 285904,
+     "output_end_sample": 465904,
+     "source_interval_index": 2,
+     "source_start_sample": 300000,
+     "source_end_sample": 480000
+    }
+   ],
+   "total": 465904
+  }
+ ]
+}

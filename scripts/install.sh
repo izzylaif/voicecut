@@ -74,6 +74,18 @@ if ! command -v ffmpeg >/dev/null 2>&1 \
   fi
 fi
 
+if ! command -v node >/dev/null 2>&1 \
+  || ! command -v npm >/dev/null 2>&1; then
+  if command -v brew >/dev/null 2>&1; then
+    echo "Installing Node.js with Homebrew for the editor frontend..."
+    brew install node
+  else
+    echo "Node.js and npm are required to build the VoiceCut editor." >&2
+    echo "Install Homebrew, then run: brew install node" >&2
+    exit 1
+  fi
+fi
+
 cd "${PROJECT_DIR}"
 
 sha256_file() {
@@ -182,9 +194,9 @@ for version_and_path in \
   fi
 done
 
-echo "Installing VoiceCut audio, alignment, and cloud-provider support..."
+echo "Installing VoiceCut audio, alignment, cloud-provider, and editor support..."
 "${VENV_PYTHON}" -m pip install --upgrade pip setuptools wheel
-"${VENV_PYTHON}" -m pip install --editable ".[audio,cloud]"
+"${VENV_PYTHON}" -m pip install --editable ".[audio,cloud,editor]"
 
 # mlx-lm currently requires Transformers 5 / Hugging Face Hub 1.x, while
 # WhisperX requires Hugging Face Hub below 1. Keep that upstream conflict out
@@ -206,7 +218,16 @@ else
   chmod 600 .env
 fi
 
+echo "Building the VoiceCut editor frontend..."
+if [[ -f frontend/package-lock.json ]]; then
+  npm ci --prefix frontend
+else
+  npm install --prefix frontend
+fi
+npm run build --prefix frontend
+
 "${VENV_DIR}/bin/voicecut" --help >/dev/null
+"${VENV_DIR}/bin/voicecut-editor" --help >/dev/null
 "${MLX_VENV_PYTHON}" -c \
   'import mlx, mlx_lm, mlx_whisper, voicecut.transcribe_mlx'
 
@@ -217,6 +238,9 @@ echo "  source \"${VENV_DIR}/bin/activate\""
 echo
 echo "Then add an API key to ${PROJECT_DIR}/.env and run:"
 echo "  voicecut input.wav -o input_edited.wav --planner-backend gemini"
+echo
+echo "Or open the browser editor with:"
+echo "  voicecut-editor input.wav"
 echo
 echo "Local MLX planners are available for experimentation but are not yet"
 echo "recommended for production semantic editing."

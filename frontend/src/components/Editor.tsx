@@ -1,0 +1,286 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowLeft, CircleHelp, Download, FileAudio, FileVideo, Settings, Sparkles } from 'lucide-react';
+import { api, followJob } from '../api';
+import { EditorStore, errorText } from '../store';
+import { Timeline } from '../timeline/Timeline';
+import type { ProjectState, RunSettings, SettingsState } from '../types';
+import { useStore } from '../useStore';
+import { ExportDialog } from './ExportDialog';
+import { reduceProgress, RunPanel, startProgress, type JobProgress } from './RunPanel';
+import { SettingsDialog } from './SettingsDialog';
+import { Transcript } from './Transcript';
+import { Transport } from './Transport';
+import { Viewer } from './Viewer';
+import { plannerOf, VoiceCutControls } from './VoiceCutControls';
+
+const mod = navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl+';
+
+const SHORTCUTS: [string, string][] = [
+  ['Space', 'Play / pause'],
+  ['< / >', 'Slower / faster preview (0.5× to 2.5×, same pitch)'],
+  ['Drag a clip edge', 'Trim or extend it; later clips follow'],
+  ['⌥ while dragging', 'Ignore snapping'],
+  ['S or ' + mod + 'B', 'Split at the playhead'],
+  ['P', 'Insert a 1 s pause at the playhead (splits a clip)'],
+  ['Drag a pause edge', 'Make the pause longer or shorter'],
+  ['Right-click', 'Pause, split and delete at that spot'],
+  ['Delete', 'Delete the selected clips or pauses'],
+  [mod + 'Z / ⇧' + mod + 'Z', 'Undo / redo'],
+  ['⌥[ / ⌥]', 'Trim the clip under the playhead to the playhead'],
+  ['← / →', 'Move the playhead 10 ms (⇧: 1 s)'],
+  ['↑ / ↓', 'Previous / next cut'],
+  [mod + '+ / ' + mod + '−, pinch', 'Zoom'],
+  ['⇧Z', 'Fit the whole edit'],
+  ['N', 'Snapping on / off'],
+];
+
+export function Editor({ initial, onClose }: { initial: ProjectState; onClose: () => void }) {
+  const [store] = useState(() => new EditorStore(initial));
+  useStore(store);
+  const [run, setRun] = useState<JobProgress | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [settings, setSettings] = useState<RunSettings>(initial.settings);
+  const [settingsState, setSettingsState] = useState<SettingsState | null>(null);
+  const project = store.project;
+
+  useEffect(() => () => store.dispose(), [store]);
+
+  useEffect(() => {
+    api.settings().then(setSettingsState, (error: unknown) => store.notify(`Cannot load settings: ${errorText(error)}`, 'error'));
+  }, [store]);
+
+  /** Change the Voice Cut settings and remember them for this project. */
+  const changeSettings = useCallback(
+    (next: RunSettings) => {
+      setSettings(next);
+      api.saveSettings(store.id, next).catch((error: unknown) => store.notify(errorText(error), 'error'));
+    },
+    [store],
+  );
+
+  const refresh = useCallback(async () => {
+    try {
+      store.updateProject(await api.project(store.id));
+    } catch (error) {
+      store.notify(`Cannot refresh the project: ${errorText(error)}`, 'error');
+    }
+  }, [store]);
+
+  const followRun = useCallback(
+    (jobId: string) => {
+      setRun(startProgress(jobId));
+      return followJob(jobId, (event) => {
+        setRun((current) => (current ? reduceProgress(current, event) : current));
+        if (event.type === 'complete') {
+          void refresh().then(() => store.notify('Voice Cut’s edit is on the timeline'));
+        } else if (event.type === 'error' || event.type === 'cancelled') {
+          void refresh();
+        }
+      });
+    },
+    [refresh, store],
+  );
+
+  // Follow jobs that were already running when the project was opened.
+  useEffect(() => {
+    const stops: (() => void)[] = [];
+    if (initial.jobs.voicecut) stops.push(followRun(initial.jobs.voicecut));
+    return () => stops.forEach((stop) => stop());
+  }, [initial, followRun]);
+
+  const prepareJob = project.jobs.prepare;
+  const videoStatus = project.media.video?.status;
+  useEffect(() => {
+    if (!prepareJob || videoStatus === 'ready' || videoStatus === 'failed') return;
+    let lastProgress = 0;
+    return followJob(prepareJob, (event) => {
+      if (event.type === 'progress' && store.project.media.video) {
+        const now = performance.now();
+        if (now - lastProgress < 250) return;
+        lastProgress = now;
+        store.project = {
+          ...store.project,
+          media: { ...store.project.media, video: { ...store.project.media.video, status: 'preparing', progress: event.fraction } },
+        };
+        store.changed();
+      } else if (event.type === 'complete' || event.type === 'error') {
+        void refresh();
+      }
+    });
+  }, [prepareJob, videoStatus, refresh, store]);
+
+  const startVoiceCut = async () => {
+    const planner = settingsState ? plannerOf(settings, settingsState.planners) : undefined;
+    if (planner?.key_env && !planner.key?.set) {
+      store.notify(`Add your ${planner.label} API key first`, 'error');
+      setSettingsOpen(true);
+      return;
+    }
+    if (store.proposal && store.isEdited) {
+      const ok = window.confirm('Running Voice Cut again replaces your manual edits with a new automatic edit. Continue?');
+      if (!ok) return;
+    }
+    try {
+      const { job_id } = await api.runVoiceCut(store.id, settings);
+      followRun(job_id);
+    } catch (error) {
+      store.notify(`Cannot start Voice Cut: ${errorText(error)}`, 'error');
+    }
+  };
+
+  const cancelVoiceCut = () => {
+    api.cancelVoiceCut(store.id).catch((error: unknown) => store.notify(errorText(error), 'error'));
+  };
+
+  // Keyboard shortcuts.
+  const modal = exporting || settingsOpen;
+  const modalRef = useRef(modal);
+  modalRef.current = modal;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (modalRef.current) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
+      const command = event.metaKey || event.ctrlKey;
+      const key = event.key;
+      // Letters by physical key, so shortcuts work with any keyboard layout
+      // (on a Russian layout S types "ы").
+      const code = event.code;
+      let handled = true;
+      if (key === ' ' || code === 'Space') store.togglePlay();
+      else if (command && code === 'KeyZ') event.shiftKey ? store.redo() : store.undo();
+      else if (command && code === 'KeyY') store.redo();
+      else if (command && code === 'KeyB') store.splitAtPlayhead();
+      else if (command && (code === 'Equal' || key === '+' || key === '=')) store.zoom(1.6);
+      else if (command && (code === 'Minus' || key === '-')) store.zoom(1 / 1.6);
+      else if (command && code === 'KeyA') store.selectAll();
+      else if (command) handled = false;
+      else if (key === '<' || (event.shiftKey && code === 'Comma')) store.stepRate(-1);
+      else if (key === '>' || (event.shiftKey && code === 'Period')) store.stepRate(1);
+      else if (code === 'KeyS') store.splitAtPlayhead();
+      else if (code === 'KeyP') store.insertPause();
+      else if (key === 'Delete' || key === 'Backspace') store.deleteSelection();
+      else if (code === 'BracketLeft' && event.altKey) store.trimToPlayhead('start');
+      else if (code === 'BracketRight' && event.altKey) store.trimToPlayhead('end');
+      else if (key === 'ArrowLeft') store.nudge(event.shiftKey ? -1 : -0.01);
+      else if (key === 'ArrowRight') store.nudge(event.shiftKey ? 1 : 0.01);
+      else if (key === 'ArrowUp') store.jumpEdit(-1);
+      else if (key === 'ArrowDown') store.jumpEdit(1);
+      else if (key === 'Home') store.setPlayhead(0);
+      else if (key === 'End') store.setPlayhead(store.layout.total);
+      else if (code === 'KeyZ' && event.shiftKey) store.zoomToFit();
+      else if (code === 'KeyN') store.toggleSnapping();
+      else if (key === 'Escape') store.select(null);
+      else if (key === '?' || (event.shiftKey && code === 'Slash')) setHelpOpen((open) => !open);
+      else handled = false;
+      if (handled) event.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [store]);
+
+  // Flush the autosave before the page goes away.
+  useEffect(() => {
+    const onLeave = () => void store.flushSave().catch(() => undefined);
+    window.addEventListener('pagehide', onLeave);
+    return () => window.removeEventListener('pagehide', onLeave);
+  }, [store]);
+
+  const running = run?.status === 'running';
+  const save = store.save;
+
+  return (
+    <div className="editor">
+      <header className="topbar">
+        <div className="topbar-left">
+          <button type="button" className="icon-button" title="All projects" onClick={onClose}>
+            <ArrowLeft size={16} />
+          </button>
+          {project.media.kind === 'video' ? <FileVideo size={16} /> : <FileAudio size={16} />}
+          <span className="project-name" title={project.source_path}>
+            {project.name}
+          </span>
+          <span className={`save-state save-${save.state}`} title={save.state === 'error' ? save.message : undefined}>
+            {save.state === 'saved'
+              ? 'Saved'
+              : save.state === 'error'
+                ? 'Not saved — retrying on the next change'
+                : 'Saving…'}
+          </span>
+        </div>
+        <div className="topbar-right">
+          <button type="button" className="icon-button" title="Keyboard shortcuts (?)" onClick={() => setHelpOpen((open) => !open)}>
+            <CircleHelp size={16} />
+          </button>
+          <VoiceCutControls
+            settings={settings}
+            state={settingsState}
+            disabled={running}
+            onChange={changeSettings}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+          <button type="button" className="button accent" disabled={running} onClick={() => void startVoiceCut()}>
+            <Sparkles size={14} /> {store.proposal ? 'Voice Cut again' : 'Voice Cut'}
+          </button>
+          <button type="button" className="icon-button" title="Settings: API keys and Voice Cut options" onClick={() => setSettingsOpen(true)}>
+            <Settings size={16} />
+          </button>
+          <button type="button" className="button primary" onClick={() => setExporting(true)}>
+            <Download size={14} /> Export
+          </button>
+        </div>
+      </header>
+
+      {project.proposal_error && (
+        <div className="banner">
+          This project’s earlier Voice Cut result cannot be edited ({project.proposal_error}). Run Voice Cut again.
+        </div>
+      )}
+
+      <main className={`stage-area${project.media.kind === 'video' ? ' with-video' : ''}`}>
+        <Viewer store={store} />
+        <aside className="side">
+          {run && (
+            <RunPanel
+              progress={run}
+              onCancel={cancelVoiceCut}
+              onClose={() => setRun(null)}
+              onRetry={() => void startVoiceCut()}
+            />
+          )}
+          <Transcript store={store} />
+        </aside>
+      </main>
+
+      <Transport store={store} />
+      <Timeline store={store} />
+
+      {store.message && <div className={`toast toast-${store.message.tone}`}>{store.message.text}</div>}
+      {exporting && <ExportDialog store={store} onClose={() => setExporting(false)} />}
+      {settingsOpen && settingsState && (
+        <SettingsDialog
+          state={settingsState}
+          settings={settings}
+          onState={setSettingsState}
+          onSettings={changeSettings}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {helpOpen && (
+        <div className="popover help" onClick={() => setHelpOpen(false)}>
+          <h3>Keyboard</h3>
+          <dl>
+            {SHORTCUTS.map(([keys, action]) => (
+              <div key={keys}>
+                <dt>{keys}</dt>
+                <dd>{action}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+    </div>
+  );
+}

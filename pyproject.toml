@@ -47,13 +47,25 @@ mlx = [
   "mlx-lm==0.31.3; platform_system == 'Darwin' and platform_machine == 'arm64'",
   "mlx-whisper==0.4.3; platform_system == 'Darwin' and platform_machine == 'arm64'",
 ]
+# Optional verbatim ASR (``voicecut --asr crisperwhisper``), installed into the
+# MLX environment.  The model weights are licensed for non-commercial research
+# use only.
+crisperwhisper = [
+  "crisperwhisper[transformers]==2.0.3",
+]
 cloud = [
   "google-genai>=1.64.0,<2",
   "openai>=1.68.0,<3",
   "python-dotenv>=1.1.0,<2",
 ]
+editor = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.30,<1",
+  "python-multipart>=0.0.9,<1",
+]
 dev = [
   "build>=1.2.2,<2",
+  "httpx>=0.27,<1",
   "pytest>=8.4.0,<9",
   "ruff>=0.12.0,<1",
 ]
@@ -66,12 +78,16 @@ Issues = "https://github.com/vectozavr/voicecut/issues"
 
 [project.scripts]
 voicecut = "voicecut.full_pipeline:main"
+voicecut-editor = "voicecut.editor.cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"voicecut.editor" = ["static/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
