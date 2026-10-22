@@ -5,6 +5,7 @@ import { invoke, listen, onMenu, type MenuCommand, type RecentDocument } from '.
 import { errorText } from '../store';
 import type { ProjectState, SettingsState } from '../types';
 import { SettingsDialog } from './SettingsDialog';
+import { UpdateButton } from './UpdateButton';
 
 function fileName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
@@ -78,6 +79,9 @@ export function DesktopWelcome({ onOpen }: { onOpen: (project: ProjectState) => 
 
   return (
     <div className="welcome">
+      <div className="welcome-corner">
+        <UpdateButton />
+      </div>
       <div className="welcome-card">
         <h1>
           Voice<span>Cut</span>

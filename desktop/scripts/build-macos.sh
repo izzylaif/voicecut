@@ -16,6 +16,11 @@
 # APPLE_PASSWORD (an app-specific password) and APPLE_TEAM_ID work instead of
 # the App Store Connect API key.
 #
+# With TAURI_SIGNING_PRIVATE_KEY (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, if
+# the key has one) it also writes what the app's updater installs:
+# src-tauri/target/release/bundle/macos/VoiceCut.app.tar.gz and its signature
+# (see desktop/README.md, "Updates").
+#
 # VOICECUT_TEST_BUILD=1 builds the end-to-end test variant instead (cargo
 # feature `automation`, see src-tauri/src/automation.rs) and no disk image.
 #
@@ -25,7 +30,8 @@ set -euo pipefail
 # A CI run without these secrets gets them empty; empty means not set (an
 # empty signing identity would replace the ad-hoc one).
 for name in APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_PATH \
-  APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD; do
+  APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD \
+  TAURI_SIGNING_PRIVATE_KEY; do
   if [[ -z "${!name:-}" ]]; then
     unset "${name}"
   fi
@@ -40,6 +46,11 @@ VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["vers
 DMG="${BUILD}/VoiceCut-${VERSION}-arm64.dmg"
 APP="${DESKTOP}/src-tauri/target/release/bundle/macos/VoiceCut.app"
 IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
+# The updater's package needs the signing key; without it there is none.
+UPDATER=()
+if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  UPDATER=(--config src-tauri/tauri.updater.conf.json)
+fi
 
 step() { printf '\n== %s\n' "$*"; }
 
@@ -73,12 +84,12 @@ if [[ -n "${VOICECUT_TEST_BUILD:-}" ]]; then
   # Its own identifier: the Finder and Launch Services must not mistake it for
   # the VoiceCut you use and send it your documents.
   (cd "${DESKTOP}" && npx tauri build --bundles app --features automation \
-    --config src-tauri/tauri.test.conf.json)
+    --config src-tauri/tauri.test.conf.json ${UPDATER[@]+"${UPDATER[@]}"})
   codesign --verify --deep --strict "${APP}"
   echo "test build: ${APP}"
   exit 0
 fi
-(cd "${DESKTOP}" && npx tauri build --bundles app)
+(cd "${DESKTOP}" && npx tauri build --bundles app ${UPDATER[@]+"${UPDATER[@]}"})
 codesign --verify --deep --strict --verbose=2 "${APP}"
 
 step "Building the disk image"

@@ -4,7 +4,9 @@ name: Desktop installers
 # (setup .exe) and uploads them as the run's artifacts.  The release workflow
 # reuses it.  With the APPLE_* secrets (see desktop/README.md) the macOS app
 # is signed with a Developer ID and notarized; without them it is signed ad
-# hoc.
+# hoc.  With the TAURI_SIGNING_PRIVATE_KEY secret every installer also gets
+# the signature the app's updater checks (`<installer>.sig`), and macOS the
+# archive the updater installs (`.app.tar.gz`); without it they are skipped.
 
 on:
   push:
@@ -106,26 +108,47 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: .github/scripts/run.sh "macOS build" desktop/scripts/build-macos.sh
 
       - name: Build the installers
         if: runner.os != 'macOS'
         working-directory: desktop
-        run: ../.github/scripts/run.sh "${{ matrix.name }} build" npx tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # The updater's signatures need the key; without it there are none.
+          updater=()
+          if [[ -n "${TAURI_SIGNING_PRIVATE_KEY}" ]]; then
+            updater=(--config src-tauri/tauri.updater.conf.json)
+          fi
+          ../.github/scripts/run.sh "${{ matrix.name }} build" npx tauri build "${updater[@]}"
 
       - name: Collect the installers
         run: |
           version="$(python -c 'import json; print(json.load(open("desktop/src-tauri/tauri.conf.json"))["version"])')"
           bundle=desktop/src-tauri/target/release/bundle
           mkdir installers
+          # Copy a file and, if the build signed it for the updater, its signature.
+          collect() {
+            cp "$1" "installers/$2"
+            if [[ -f "$1.sig" ]]; then
+              cp "$1.sig" "installers/$2.sig"
+            fi
+          }
           case "${RUNNER_OS}" in
             macOS)
-              cp "desktop/build/VoiceCut-${version}-arm64.dmg" installers/ ;;
+              cp "desktop/build/VoiceCut-${version}-arm64.dmg" installers/
+              if [[ -f "${bundle}/macos/VoiceCut.app.tar.gz.sig" ]]; then
+                collect "${bundle}/macos/VoiceCut.app.tar.gz" "VoiceCut-${version}-arm64.app.tar.gz"
+              fi ;;
             Linux)
-              cp "${bundle}"/appimage/*.AppImage "installers/VoiceCut-${version}-x86_64.AppImage"
-              cp "${bundle}"/deb/*.deb "installers/VoiceCut-${version}-amd64.deb" ;;
+              collect "$(ls "${bundle}"/appimage/*.AppImage)" "VoiceCut-${version}-x86_64.AppImage"
+              collect "$(ls "${bundle}"/deb/*.deb)" "VoiceCut-${version}-amd64.deb" ;;
             Windows)
-              cp "${bundle}"/nsis/*-setup.exe "installers/VoiceCut-${version}-x64-setup.exe" ;;
+              collect "$(ls "${bundle}"/nsis/*-setup.exe)" "VoiceCut-${version}-x64-setup.exe" ;;
           esac
           ls -l installers
 

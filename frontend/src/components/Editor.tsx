@@ -11,6 +11,7 @@ import { reduceProgress, RunPanel, startProgress, type JobProgress } from './Run
 import { SettingsDialog } from './SettingsDialog';
 import { Transcript } from './Transcript';
 import { Transport } from './Transport';
+import { UpdateButton } from './UpdateButton';
 import { Viewer } from './Viewer';
 import { plannerOf, VoiceCutControls } from './VoiceCutControls';
 
@@ -322,6 +323,7 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
           </span>
         </div>
         <div className="topbar-right">
+          <UpdateButton />
           <button type="button" className="icon-button" title="Keyboard shortcuts (?)" onClick={() => setHelpOpen((open) => !open)}>
             <CircleHelp size={16} />
           </button>

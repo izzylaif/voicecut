@@ -488,3 +488,20 @@ pub fn set_preference(
     preferences.set_editor(&key, value)?;
     preferences.save(&state.paths.preferences())
 }
+
+/// The app's own update: the version on offer, if any, and how far it got.
+#[tauri::command]
+pub fn update_status(app: AppHandle) -> crate::updates::UpdateView {
+    crate::updates::view(&app)
+}
+
+/// Download the update, save the documents, install it and restart.
+#[tauri::command]
+pub fn install_update(app: AppHandle) {
+    crate::updates::install_now(app);
+}
+
+#[tauri::command]
+pub fn set_automatic_updates(app: AppHandle, on: bool) -> Result<(), String> {
+    crate::updates::set_automatic(&app, on)
+}

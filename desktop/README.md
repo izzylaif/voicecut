@@ -22,8 +22,9 @@ VoiceCut (Tauri, ~10 MB)                    data directory (see above)
 
 * `src-tauri/` — the app (Rust): `setup.rs` installs the engine, `engine.rs`
   runs it, `lib.rs` has windows, menus, documents and quitting, `commands.rs`
-  what the pages may call, `process.rs` process trees on each system,
-  `linux.rs` what an AppImage registers for itself, `macos.rs` the Dock.
+  what the pages may call, `updates.rs` the app's own updates, `process.rs`
+  process trees on each system, `linux.rs` what an AppImage registers for
+  itself, `macos.rs` the Dock.
 * `ui/` — the app's own pages: first-run setup, starting, errors.
 * `runtime/` — what setup installs, pinned per system: tool versions and
   checksums (`runtime.json`), hashed Python locks, explicit conda locks of MFA.
@@ -33,7 +34,8 @@ VoiceCut (Tauri, ~10 MB)                    data directory (see above)
 * `linux/`, `windows/` — the menu entry, the MIME type and the installer hook
   that give `.vc` documents their icon.
 * `scripts/` — `build-macos.sh` (the `.dmg`), `stage_runtime.py` (what every
-  build bundles), `lock-runtime.sh` (the locks).
+  build bundles), `lock-runtime.sh` (the locks), `updater_manifest.py` (a
+  release's `latest.json`).
 * `tests/` — the end-to-end test of a built app (`e2e.py`) and the pipeline
   check it runs inside the installed engine (`pipeline_smoke.py`).
 
@@ -150,8 +152,104 @@ Downloads folder, on a removable or a network volume: "“VoiceCut” would like
 to access files in your Desktop folder." Until the question is answered, the
 file stays closed and the editor waits. The answer can be changed in System
 Settings › Privacy & Security › Files and Folders. An ad-hoc signed build is a
-new app to macOS after every rebuild and asks again; a Developer ID build
-keeps the answer across updates.
+new app to macOS after every rebuild and asks again — also after every update
+VoiceCut installs itself (see "Updates"); a Developer ID build keeps the
+answer across updates.
+
+## Updates
+
+VoiceCut updates itself from this repository's GitHub Releases
+(`tauri-plugin-updater`, `src-tauri/src/updates.rs`):
+
+* Ten seconds after launch and then every four hours, but never while Voice
+  Cut or an export runs, the app reads the latest published release's
+  manifest, `https://github.com/vectozavr/voicecut/releases/latest/download/latest.json`.
+* When it lists a newer version, the editor's toolbar and the start page show
+  a download-arrow button, "Update available: <version>". A click downloads
+  the update, saves every open document as quitting does (asking first if
+  Voice Cut or an export is running), installs it and restarts VoiceCut with
+  the same documents open. VoiceCut › Check for Updates… (Help › Check for
+  Updates… on Linux and Windows) looks right away.
+* Settings › Updates › "Install updates automatically", on by default and
+  kept in `preferences.json` in the data directory: the update downloads in
+  the background and installs when VoiceCut quits — or, if VoiceCut was
+  stopped without quitting, at the next launch before any window opens.
+* Only the app is updated this way. The engine follows at the next launch,
+  when the source inside the new app differs from what it runs (see "What
+  the app installs").
+
+What an install does:
+
+* **macOS** swaps `VoiceCut.app` for the release's `.app.tar.gz`, asking for
+  an administrator's password only if the user cannot write to the app. A
+  VoiceCut opened from the disk image or straight from Downloads runs from a
+  read-only copy and cannot update; it says to move it to Applications.
+  An ad-hoc signed VoiceCut is a new app to macOS after each update, so the
+  Files and Folders prompts (see "Privacy prompts") come back once.
+* **Windows** runs the new setup `.exe` in passive mode (a progress bar, no
+  questions); it starts VoiceCut again.
+* **AppImage** replaces itself.
+* **.deb** installs with `pkexec dpkg -i`, which asks for an administrator's
+  password, so on Debian and Ubuntu updates install only from the button,
+  never by themselves at quit. `apt` can install the release's `.deb` too.
+
+### The signing key
+
+Before installing anything the app checks the package's signature against
+the public key in `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`).
+The matching private key signs the release builds; it is not in the
+repository. It was made with
+`npx tauri signer generate --ci -w ~/.tauri/voicecut-updater.key` (no
+password), and the workflows read it from the repository secret
+`TAURI_SIGNING_PRIVATE_KEY` (the key file's text; a key with a password also
+needs `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). Without the secret the
+installers build as before, with no signatures, and the draft release gets
+no `latest.json`.
+
+Keep a copy of the private key in a safe place. Without it no later build can
+be signed so that the installed apps accept it: every user would have to
+download the next version by hand, with a new public key inside.
+
+### Releasing an update
+
+With the key, `tauri build --config src-tauri/tauri.updater.conf.json` (what
+`build-macos.sh` and `desktop.yml` add) writes a signature next to every
+installer and, on macOS, `VoiceCut.app.tar.gz`. `release.yml` attaches the
+installers, the macOS archive and `latest.json` (`scripts/updater_manifest.py`,
+with the signatures inside) to the draft. Once the draft is published,
+`releases/latest/download/latest.json` serves its manifest and every
+installed VoiceCut offers the update. Each release needs a higher version in
+`src-tauri/tauri.conf.json`: the app installs only a later version (a
+pre-release only over a pre-release).
+
+### Trying an update locally
+
+A test build (cargo feature `automation`) looks for updates only at
+`VOICECUT_UPDATE_ENDPOINT`, never on GitHub (a release would replace it with
+the real app), and `tauri.test.conf.json` lets it use plain HTTP. On a Mac:
+
+```bash
+# The old version, somewhere writable.
+VOICECUT_TEST_BUILD=1 desktop/scripts/build-macos.sh
+ditto desktop/src-tauri/target/release/bundle/macos/VoiceCut.app ~/vc-update/VoiceCut.app
+# A newer one, signed, and its manifest.
+(cd desktop && TAURI_SIGNING_PRIVATE_KEY=~/.tauri/voicecut-updater.key TAURI_SIGNING_PRIVATE_KEY_PASSWORD= \
+  npx tauri build --bundles app --features automation --config src-tauri/tauri.test.conf.json \
+  --config src-tauri/tauri.updater.conf.json --config '{"version": "0.2.1"}')
+mkdir ~/vc-update/release
+cp desktop/src-tauri/target/release/bundle/macos/VoiceCut.app.tar.gz{,.sig} ~/vc-update/release/
+python3 desktop/scripts/updater_manifest.py ~/vc-update/release --version 0.2.1 \
+  --base-url http://127.0.0.1:8000
+python3 -m http.server 8000 --directory ~/vc-update/release &
+# Apps opened by the Finder, and VoiceCut's restart, get launchd's environment.
+launchctl setenv VOICECUT_UPDATE_ENDPOINT http://127.0.0.1:8000/latest.json
+launchctl setenv VOICECUT_RUNTIME "$PWD"
+launchctl setenv VOICECUT_DATA_DIR ~/vc-update/data
+open ~/vc-update/VoiceCut.app
+# …and afterwards:
+launchctl unsetenv VOICECUT_UPDATE_ENDPOINT; launchctl unsetenv VOICECUT_RUNTIME
+launchctl unsetenv VOICECUT_DATA_DIR
+```
 
 ## API keys
 
@@ -218,8 +316,9 @@ header); it solves the Linux and Windows locks from a Mac.
 * `.github/workflows/ci.yml` — Python tests on macOS, Linux and Windows, each
   installed from the lock the app installs; the editor frontend's checks.
 * `.github/workflows/desktop.yml` — Clippy and the Rust tests on all three
-  systems, then the installers as the run's artifacts; on Linux the `.deb` is
-  installed and its menu entry and file type checked.
+  systems, then the installers as the run's artifacts (with the updater's
+  signatures when the `TAURI_SIGNING_PRIVATE_KEY` secret is set); on Linux
+  the `.deb` is installed and its menu entry and file type checked.
 * `.github/workflows/e2e.yml` — a test build installed like a user would (the
   AppImage under Xvfb, the Windows installer silently), set up from nothing,
   Whisper and MFA run in the engine it installed, a project created, closed,
@@ -228,7 +327,9 @@ header); it solves the Linux and Windows locks from a Mac.
   whole Voice Cut too.
 * `.github/workflows/release.yml` — on a `v<version>` tag or by hand: builds
   all installers and attaches them to a **draft** GitHub Release with
-  `RELEASE_NOTES.md`. Nothing is published until someone presses Publish.
+  `RELEASE_NOTES.md`, plus `latest.json` and the macOS `.app.tar.gz` for the
+  apps' own updates (see "Updates"). Nothing is published until someone
+  presses Publish.
 
 A failing step reports the end of its output as an annotation on the run.
 

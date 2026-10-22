@@ -4,6 +4,7 @@ import { api, ApiError } from '../api';
 import { confirmAction, desktop } from '../desktop';
 import { type Appearance, appearance, setAppearance, subscribe } from '../theme';
 import type { PlannerInfo, RunSettings, SettingsState } from '../types';
+import { setAutomaticUpdates, useUpdate } from '../updates';
 
 const APPEARANCE_OPTIONS: { value: Appearance; label: string; icon: LucideIcon }[] = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -12,8 +13,8 @@ const APPEARANCE_OPTIONS: { value: Appearance; label: string; icon: LucideIcon }
 ];
 
 /**
- * Settings: appearance, API keys of the cloud planners, and (in a project)
- * Voice Cut options.
+ * Settings: appearance, the desktop app's updates, API keys of the cloud
+ * planners, and (in a project) Voice Cut options.
  */
 export function SettingsDialog({
   state,
@@ -53,6 +54,8 @@ export function SettingsDialog({
             System follows the light or dark mode of your {desktop ? 'Mac' : 'computer'}, also while the editor is open.
           </p>
         </section>
+
+        {desktop && <UpdatesSection />}
 
         <section className="settings-section">
           <h3>API keys</h3>
@@ -120,6 +123,30 @@ function AppearancePicker() {
         </button>
       ))}
     </div>
+  );
+}
+
+function UpdatesSection() {
+  const update = useUpdate();
+  if (!update) return null;
+  return (
+    <section className="settings-section">
+      <h3>Updates</h3>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={update.automatic}
+          onChange={(event) => setAutomaticUpdates(event.target.checked)}
+        />
+        Install updates automatically
+      </label>
+      <p className="muted small">
+        This is VoiceCut {update.current}. It looks for a new version when it starts and every few hours;{' '}
+        {update.automatic
+          ? 'a new version downloads in the background and installs when you quit VoiceCut.'
+          : 'when there is one, the download button in the toolbar installs it.'}
+      </p>
+    </section>
   );
 }
 

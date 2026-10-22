@@ -19,6 +19,7 @@ mod preferences;
 mod process;
 mod runtime;
 mod setup;
+mod updates;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -80,6 +81,9 @@ const EDITOR_PERMISSIONS: &[&str] = &[
     "allow-set-appearance",
     "allow-preference",
     "allow-set-preference",
+    "allow-update-status",
+    "allow-install-update",
+    "allow-set-automatic-updates",
 ];
 
 #[derive(Clone, Serialize)]
@@ -121,6 +125,7 @@ pub struct AppState {
     pub quitting: AtomicBool,
     pub recent_menu: Mutex<Option<Submenu<Wry>>>,
     pub preferences: Mutex<Preferences>,
+    pub updates: updates::Updates,
 }
 
 impl AppState {
@@ -142,7 +147,7 @@ pub struct StatusView {
     #[serde(flatten)]
     phase: Phase,
     setup: Option<setup::SetupView>,
-    version: &'static str,
+    version: String,
     data_dir: String,
 }
 
@@ -153,7 +158,7 @@ pub fn status(app: &AppHandle) -> StatusView {
     StatusView {
         phase,
         setup,
-        version: env!("CARGO_PKG_VERSION"),
+        version: app.package_info().version.to_string(),
         data_dir: state.paths.data.display().to_string(),
     }
 }
@@ -908,6 +913,87 @@ fn close_document_window(app: AppHandle, label: String, project_id: String, path
     });
 }
 
+/// The open documents: window label, project id, path.
+fn documents(app: &AppHandle) -> Vec<(String, String, PathBuf)> {
+    app.state::<AppState>()
+        .roles
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|(label, role)| match role {
+            Role::Document { project_id, path } => {
+                Some((label.clone(), project_id.clone(), path.clone()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Voice Cut or an export running in any open document.
+pub fn working(app: &AppHandle) -> bool {
+    let Some(engine) = app.state::<AppState>().engine() else {
+        return false;
+    };
+    documents(app)
+        .iter()
+        .any(|(_, project_id, _)| busy(&engine, project_id))
+}
+
+/// Why VoiceCut is about to close everything.
+#[derive(Clone, Copy)]
+pub enum Leaving {
+    Quit,
+    Update,
+}
+
+/// Save every open document and make sure the user lets go of what still
+/// runs (Voice Cut, an export, the setup).  False when they did not.
+pub fn ready_to_leave(app: &AppHandle, leaving: Leaving) -> bool {
+    let (title, ok, doing) = match leaving {
+        Leaving::Quit => ("Quit VoiceCut?", "Quit", "Quitting"),
+        Leaving::Update => ("Update VoiceCut now?", "Update", "Updating"),
+    };
+    let state = app.state::<AppState>();
+    let documents = documents(app);
+    if let Some(engine) = state.engine() {
+        for (label, _, _) in &documents {
+            flush(app, label);
+        }
+        let working: Vec<String> = documents
+            .iter()
+            .filter(|(_, project_id, _)| busy(&engine, project_id))
+            .map(|(_, _, path)| display_name(path))
+            .collect();
+        if !working.is_empty()
+            && !ask(
+                app,
+                None,
+                title,
+                &format!(
+                    "Voice Cut is still working on {}. {doing} stops it; each project keeps everything finished so far.",
+                    working.iter().map(|name| format!("“{name}”")).collect::<Vec<_>>().join(", ")
+                ),
+                ok,
+            )
+        {
+            return false;
+        }
+    }
+    if let Some(control) = state.control.lock().unwrap().clone() {
+        if !ask(
+            app,
+            None,
+            title,
+            "VoiceCut is still being installed. The setup continues where it stopped the next time you open VoiceCut.",
+            ok,
+        ) {
+            return false;
+        }
+        control.cancel();
+    }
+    true
+}
+
 pub fn request_quit(app: &AppHandle) {
     let state = app.state::<AppState>();
     if state.quitting.load(Ordering::SeqCst) {
@@ -915,62 +1001,19 @@ pub fn request_quit(app: &AppHandle) {
     }
     let app = app.clone();
     std::thread::spawn(move || {
-        let state = app.state::<AppState>();
-        let documents: Vec<(String, String, PathBuf)> = state
-            .roles
-            .lock()
-            .unwrap()
-            .iter()
-            .filter_map(|(label, role)| match role {
-                Role::Document { project_id, path } => {
-                    Some((label.clone(), project_id.clone(), path.clone()))
-                }
-                _ => None,
-            })
-            .collect();
-        if let Some(engine) = state.engine() {
-            for (label, _, _) in &documents {
-                flush(&app, label);
-            }
-            let working: Vec<String> = documents
-                .iter()
-                .filter(|(_, project_id, _)| busy(&engine, project_id))
-                .map(|(_, _, path)| display_name(path))
-                .collect();
-            if !working.is_empty()
-                && !ask(
-                    &app,
-                    None,
-                    "Quit VoiceCut?",
-                    &format!(
-                        "Voice Cut is still working on {}. Quitting stops it; each project keeps everything finished so far.",
-                        working.iter().map(|name| format!("“{name}”")).collect::<Vec<_>>().join(", ")
-                    ),
-                    "Quit",
-                )
-            {
-                return;
-            }
+        if !ready_to_leave(&app, Leaving::Quit) {
+            return;
         }
-        if let Some(control) = state.control.lock().unwrap().clone() {
-            if !ask(
-                &app,
-                None,
-                "Quit VoiceCut?",
-                "VoiceCut is still being installed. The setup continues where it stopped the next time you open VoiceCut.",
-                "Quit",
-            ) {
-                return;
-            }
-            control.cancel();
-        }
-        state.quitting.store(true, Ordering::SeqCst);
+        app.state::<AppState>()
+            .quitting
+            .store(true, Ordering::SeqCst);
         stop_engine(&app);
+        updates::install_on_quit(&app);
         app.exit(0);
     });
 }
 
-fn stop_engine(app: &AppHandle) {
+pub fn stop_engine(app: &AppHandle) {
     let engine = app.state::<AppState>().engine.lock().unwrap().take();
     if let Some(engine) = engine {
         engine.stop();
@@ -991,6 +1034,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     };
     let app_menu = SubmenuBuilder::new(app, "VoiceCut")
         .item(&item("about", "About VoiceCut", None)?)
+        .item(&item("check-updates", "Check for Updates…", None)?)
         .separator()
         .item(&item("settings", "Settings…", Some("CmdOrCtrl+,"))?)
         .separator()
@@ -1099,6 +1143,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("shortcuts", "&Keyboard Shortcuts", None)?)
         .item(&item("help", "VoiceCut &Help", None)?)
         .separator()
+        .item(&item("check-updates", "Check for &Updates…", None)?)
         .item(&item("about", "&About VoiceCut", None)?)
         .build()?;
     let menu = Menu::with_items(app, &[&file, &edit, &view, &help])?;
@@ -1136,6 +1181,7 @@ fn on_menu(app: &AppHandle, id: &str) {
             let _ = commands::open_in_browser(HELP_URL);
         }
         "about" => show_about(app),
+        "check-updates" => updates::check_now(app),
         "reveal" => {
             let state = app.state::<AppState>();
             if let Some(Role::Document { path, .. }) = focused
@@ -1210,6 +1256,9 @@ macro_rules! handlers {
             commands::set_appearance,
             commands::preference,
             commands::set_preference,
+            commands::update_status,
+            commands::install_update,
+            commands::set_automatic_updates,
             $($extra),*
         ]
     };
@@ -1235,7 +1284,13 @@ pub fn run() {
             open_paths(app, paths);
         }
     }));
-    let builder = builder.plugin(tauri_plugin_dialog::init());
+    let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(
+        tauri_plugin_updater::Builder::new()
+            .default_version_comparator(|current, release| {
+                updates::newer(&current, &release.version)
+            })
+            .build(),
+    );
     #[cfg(feature = "automation")]
     let builder = builder.invoke_handler(handlers!(automation::automation_result));
     #[cfg(not(feature = "automation"))]
@@ -1252,6 +1307,23 @@ pub fn run() {
             let bundle = Bundle::load(&paths);
             let recents = load_recents(&paths);
             let preferences = Preferences::load(&paths.preferences());
+            // Files the app was launched with: from the Finder before setup,
+            // or as arguments (Linux and Windows); after an update's restart,
+            // the documents that were open.
+            let mut arguments: Vec<PathBuf> = updates::documents_to_reopen(&paths);
+            arguments.extend(std::mem::take(&mut *EARLY_PATHS.lock().unwrap()));
+            arguments.extend(
+                std::env::args_os()
+                    .skip(1)
+                    .map(PathBuf::from)
+                    .filter(|path| path.exists()),
+            );
+            updates::install_at_launch(
+                app.handle(),
+                &paths,
+                preferences.automatic_updates,
+                &arguments,
+            );
             app.manage(AppState {
                 paths,
                 bundle,
@@ -1268,6 +1340,7 @@ pub fn run() {
                 quitting: AtomicBool::new(false),
                 recent_menu: Mutex::new(None),
                 preferences: Mutex::new(preferences),
+                updates: updates::Updates::default(),
             });
             let handle = app.handle().clone();
             #[cfg(feature = "automation")]
@@ -1283,18 +1356,11 @@ pub fn run() {
                 Role::App,
             )
             .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
-            // Files the app was launched with: from the Finder before setup,
-            // or as arguments (Linux and Windows).
-            let mut arguments: Vec<PathBuf> = std::mem::take(&mut *EARLY_PATHS.lock().unwrap());
-            arguments.extend(
-                std::env::args_os()
-                    .skip(1)
-                    .map(PathBuf::from)
-                    .filter(|path| path.exists()),
-            );
+            arguments.extend(std::mem::take(&mut *EARLY_PATHS.lock().unwrap()));
             if !arguments.is_empty() {
                 open_paths(&handle, arguments);
             }
+            updates::start(&handle);
             std::thread::spawn(move || boot(handle));
             Ok(())
         })

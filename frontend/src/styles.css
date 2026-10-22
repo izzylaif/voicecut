@@ -221,6 +221,15 @@ select:focus {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+/* The desktop app's "Update available" button. */
+.icon-button.update-button {
+  color: var(--accent);
+}
+
+.icon-button.update-button[aria-busy='true'] {
+  cursor: progress;
+}
+
 .meter {
   width: 220px;
   height: 6px;
@@ -281,6 +290,14 @@ select:focus {
 
 .welcome-card {
   width: min(720px, 100%);
+}
+
+.welcome-corner {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
 }
 
 .welcome h1 {

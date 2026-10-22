@@ -40,5 +40,16 @@
       "hardenedRuntime": true,
       "entitlements": "Entitlements.plist"
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENCRUJEQUUyQkEzQjgzMjcKUldRbmd6dTY0dHJyeXdXcE1uK0lnbjZjcGgxT1VwSmltTTFxVEhGVnR3RW9LRnZhZDRRaUNVaUwK",
+      "endpoints": [
+        "https://github.com/vectozavr/voicecut/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

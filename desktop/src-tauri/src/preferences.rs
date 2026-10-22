@@ -1,6 +1,6 @@
 //! What the app remembers for the user across launches: the appearance
-//! (System, Light or Dark) and the editor's small preferences, such as the
-//! playback speed.  The editor's page cannot keep them itself: its origin is
+//! (System, Light or Dark), whether updates install by themselves, and the
+//! editor's small preferences, such as the playback speed.  The editor's page cannot keep them itself: its origin is
 //! the engine's address, whose port changes on every launch.
 
 use std::collections::BTreeMap;
@@ -21,6 +21,10 @@ const MAX_ENTRIES: usize = 64;
 pub struct Preferences {
     #[serde(default = "system")]
     pub appearance: String,
+    /// Install a downloaded update when VoiceCut quits (or, if it did not
+    /// get to, at its next launch).
+    #[serde(default = "yes")]
+    pub automatic_updates: bool,
     #[serde(default)]
     pub editor: BTreeMap<String, String>,
 }
@@ -29,10 +33,15 @@ fn system() -> String {
     "system".into()
 }
 
+fn yes() -> bool {
+    true
+}
+
 impl Default for Preferences {
     fn default() -> Self {
         Self {
             appearance: system(),
+            automatic_updates: yes(),
             editor: BTreeMap::new(),
         }
     }
@@ -135,6 +144,25 @@ mod tests {
         );
         fs::write(&path, r#"{"appearance": "neon"}"#).unwrap();
         assert_eq!(Preferences::load(&path).theme(), None);
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn updates_install_by_themselves_unless_turned_off() {
+        let directory =
+            std::env::temp_dir().join(format!("voicecut-updates-prefs-{}", std::process::id()));
+        let path = directory.join("preferences.json");
+        assert!(Preferences::load(&path).automatic_updates);
+        // A file from before the setting existed.
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(&path, r#"{"appearance": "dark", "editor": {}}"#).unwrap();
+        let mut preferences = Preferences::load(&path);
+        assert!(preferences.automatic_updates);
+        preferences.automatic_updates = false;
+        preferences.save(&path).unwrap();
+        let reloaded = Preferences::load(&path);
+        assert!(!reloaded.automatic_updates);
+        assert_eq!(reloaded.appearance, "dark");
         let _ = fs::remove_dir_all(directory);
     }
 

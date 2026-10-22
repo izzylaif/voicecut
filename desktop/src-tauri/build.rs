@@ -26,6 +26,9 @@ fn main() {
             "set_appearance",
             "preference",
             "set_preference",
+            "update_status",
+            "install_update",
+            "set_automatic_updates",
             "automation_result",
         ]),
     ))

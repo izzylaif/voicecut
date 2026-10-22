@@ -4,6 +4,11 @@ name: Release
 # Release named after the app's version (desktop/src-tauri/tauri.conf.json).
 # Nothing is published: review the draft on GitHub and publish it by hand.
 # Runs by hand, or when a tag like v0.2.0 is pushed.
+#
+# With the TAURI_SIGNING_PRIVATE_KEY secret the draft also gets latest.json,
+# which the installed apps read from the latest published release
+# (releases/latest/download/latest.json) to update themselves, and the macOS
+# archive it points to; the signatures go into latest.json.
 
 on:
   push:
@@ -49,16 +54,29 @@ jobs:
             exit 1
           fi
           ls -l installers
+          python3 desktop/scripts/updater_manifest.py installers --version "${version}" \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}" \
+            --notes "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
+          if [[ ! -f installers/latest.json ]]; then
+            echo "::warning title=Updates::no TAURI_SIGNING_PRIVATE_KEY secret, so no latest.json: installed apps will not update to ${tag}"
+          fi
+          # The signatures are inside latest.json.
+          assets=()
+          for file in installers/*; do
+            if [[ "${file}" != *.sig ]]; then
+              assets+=("${file}")
+            fi
+          done
           if gh release view "${tag}" >/dev/null 2>&1; then
             if [[ "$(gh release view "${tag}" --json isDraft --jq .isDraft)" != true ]]; then
               echo "::error title=Release::${tag} is already published; raise the version first"
               exit 1
             fi
-            gh release upload "${tag}" installers/* --clobber
+            gh release upload "${tag}" "${assets[@]}" --clobber
           else
-            gh release create "${tag}" installers/* --draft \
+            gh release create "${tag}" "${assets[@]}" --draft \
               --target "${GITHUB_SHA}" \
               --title "VoiceCut ${version}" \
               --notes-file desktop/RELEASE_NOTES.md
           fi
-          echo "::notice title=Draft release::${tag} has $(ls installers | wc -l) installers; publish it on GitHub when ready"
+          echo "::notice title=Draft release::${tag} has ${#assets[@]} files; publish it on GitHub when ready"

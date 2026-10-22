@@ -91,6 +91,14 @@ impl Paths {
     pub fn preferences(&self) -> PathBuf {
         self.data.join("preferences.json")
     }
+    /// A downloaded update of the app, waiting to be installed.
+    pub fn updates(&self) -> PathBuf {
+        self.data.join("updates")
+    }
+    /// The documents to open again after an update's restart.
+    pub fn reopen(&self) -> PathBuf {
+        self.data.join("reopen.json")
+    }
 
     pub fn venv(&self) -> PathBuf {
         self.runtime().join(".venv")

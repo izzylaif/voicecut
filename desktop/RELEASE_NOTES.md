@@ -22,6 +22,14 @@ Whisper runs on the GPU on Apple Silicon (MLX) and on NVIDIA GPUs with a
 recent driver (CUDA 12); anywhere else it runs on the CPU, about as fast as
 the recording plays.
 
+### Updates
+
+VoiceCut updates itself: when a new version is out, a download button appears
+in its toolbar, and unless you turn it off in Settings the update installs
+when you quit VoiceCut. `latest.json` and the `.app.tar.gz` are what it
+downloads; you don't need them. On Debian and Ubuntu the update asks for
+your password.
+
 ### Unsigned builds
 
 Unless this release says it is signed, the installers are not signed with a

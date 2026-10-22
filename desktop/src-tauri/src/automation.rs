@@ -10,7 +10,8 @@
 //! * `POST /dialogs {"answers": [...]}` answers the next native dialogs
 //!   (a path, `null` for Cancel, `true`/`false` for a confirmation);
 //! * `POST /fullscreen {"label", "on"}`, `POST /open {"paths"}`,
-//!   `POST /close {"label"}`, `POST /status`, `POST /quit`.
+//!   `POST /close {"label"}`, `POST /status`, `POST /update` (the app's
+//!   own update, as the pages see it), `POST /quit`.
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -25,7 +26,7 @@ use tauri::{AppHandle, Manager};
 use crate::{AppState, Role};
 
 /// Menu items the app handles itself rather than a page.
-const APP_COMMANDS: &[&str] = &["quit", "new", "open", "help", "reveal"];
+const APP_COMMANDS: &[&str] = &["quit", "new", "open", "help", "reveal", "check-updates"];
 
 static ANSWERS: OnceLock<Mutex<VecDeque<Value>>> = OnceLock::new();
 static WAITING: OnceLock<Mutex<HashMap<u64, Sender<Value>>>> = OnceLock::new();
@@ -299,6 +300,7 @@ fn route(app: &AppHandle, path: &str, request: &Value) -> Value {
             }
         }
         "/status" => serde_json::to_value(crate::status(app)).unwrap_or(Value::Null),
+        "/update" => serde_json::to_value(crate::updates::view(app)).unwrap_or(Value::Null),
         "/menu-bar" => json!(app
             .menu()
             .map(|menu| describe_menu(menu.items().unwrap_or_default()))),
