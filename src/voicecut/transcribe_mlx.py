@@ -342,11 +342,15 @@ def _load_pip_cuda_libraries() -> None:
 
 @functools.lru_cache(maxsize=1)
 def _faster_whisper_model(model: str) -> Any:
-    """The model on an NVIDIA GPU when CUDA really works there, else the CPU."""
+    """The model on an NVIDIA GPU when CUDA really works there, else the CPU.
+
+    The run's log says which, and why not the GPU.
+    """
 
     from faster_whisper import WhisperModel
 
-    with contextlib.suppress(Exception):
+    reason = "no NVIDIA GPU with CUDA was found"
+    try:
         import ctranslate2
 
         if ctranslate2.get_cuda_device_count() > 0:
@@ -355,7 +359,13 @@ def _faster_whisper_model(model: str) -> Any:
             # cuBLAS and cuDNN load on first use: decode a second of silence.
             segments, _ = gpu.transcribe(np.zeros(SAMPLE_RATE, np.float32))
             list(segments)
+            print(
+                "Whisper runs on the GPU (CUDA, float16)", file=sys.stderr, flush=True
+            )
             return gpu
+    except Exception as error:  # noqa: BLE001 - any CUDA failure means the CPU
+        reason = f"CUDA failed: {type(error).__name__}: {error}"
+    print(f"Whisper runs on the CPU: {reason}", file=sys.stderr, flush=True)
     return WhisperModel(model, device="cpu", compute_type=FASTER_WHISPER_CPU_COMPUTE)
 
 

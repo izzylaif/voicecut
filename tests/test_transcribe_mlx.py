@@ -70,7 +70,6 @@ def test_crisperwhisper_rejects_a_decoding_prompt() -> None:
         )
 
 
-
 def test_pytorch_stages_never_load_ctranslate2() -> None:
     """On Intel Macs PyTorch cannot compute in a process that loaded
     CTranslate2 (faster-whisper): CTranslate2's wheel brings its own MKL, and
@@ -89,3 +88,49 @@ def test_pytorch_stages_never_load_ctranslate2() -> None:
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )
     assert result.stdout.strip() == "[]"
+
+
+@pytest.mark.parametrize(
+    ("gpus", "cuda_error", "said"),
+    [
+        (1, None, "Whisper runs on the GPU (CUDA, float16)"),
+        (
+            1,
+            "cudnn_ops64_9.dll is not found",
+            "Whisper runs on the CPU: CUDA failed: RuntimeError: cudnn_ops64_9.dll is not found",
+        ),
+        (0, None, "Whisper runs on the CPU: no NVIDIA GPU with CUDA was found"),
+    ],
+)
+def test_faster_whisper_says_where_it_runs_and_why_not_on_the_gpu(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    gpus: int,
+    cuda_error: str | None,
+    said: str,
+) -> None:
+    class WhisperModel:
+        def __init__(self, model: str, *, device: str, compute_type: str) -> None:
+            self.device = device
+
+        def transcribe(self, audio: np.ndarray) -> tuple[list[object], None]:
+            if self.device == "cuda" and cuda_error:
+                raise RuntimeError(cuda_error)
+            return [], None
+
+    monkeypatch.setitem(
+        sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=WhisperModel)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "ctranslate2",
+        SimpleNamespace(get_cuda_device_count=lambda: gpus),
+    )
+    monkeypatch.setattr(transcribe_mlx, "_load_pip_cuda_libraries", lambda: None)
+    transcribe_mlx._faster_whisper_model.cache_clear()
+    try:
+        model = transcribe_mlx._faster_whisper_model("large-v3-turbo")
+    finally:
+        transcribe_mlx._faster_whisper_model.cache_clear()
+    assert model.device == ("cuda" if said.endswith("float16)") else "cpu")
+    assert capsys.readouterr().err.strip() == said
