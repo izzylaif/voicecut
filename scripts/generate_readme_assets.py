@@ -338,23 +338,23 @@ def _generate_pipeline_svg(output_directory: Path) -> Path:
         f'    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="{COLORS["muted"]}"/></marker>',
         "  </defs>",
         f'  <rect width="{width}" height="{height}" rx="24" fill="{COLORS["background"]}"/>',
-        f'  <text x="48" y="57" font-size="30" font-weight="700" fill="{COLORS["ink"]}">One semantic plan, one final render</text>',
-        f'  <text x="48" y="90" font-size="16" fill="{COLORS["muted"]}">Production path reflected by voicecut.full_pipeline and voicecut.final_render</text>',
+        f'  <text x="48" y="57" font-size="30" font-weight="700" fill="{COLORS["ink"]}">Choose the takes, then cut only where it is silent</text>',
+        f'  <text x="48" y="90" font-size="16" fill="{COLORS["muted"]}">Production path reflected by voicecut.full_pipeline and voicecut.cut_render</text>',
     ]
 
     boxes = [
         (45, 135, 205, 105, "Audio / video", "Canonical source WAV"),
-        (285, 135, 205, 105, "Whisper", "Words + time anchors"),
-        (525, 135, 245, 105, "Streaming planner", "Gemini selects source IDs"),
-        (805, 135, 215, 105, "Grounding", "Exact source occurrences"),
-        (1055, 135, 220, 105, "Completeness veto", "WhisperX · no cuts"),
-        (925, 350, 255, 115, "MFA 3.4.1", "Phone-safe boundaries"),
-        (610, 350, 270, 115, "Pause + ambience", "Breath-safe source tone"),
-        (300, 350, 265, 115, "Immutable plan", "All samples resolved first"),
-        (45, 350, 210, 115, "Single render", "Canonical samples once"),
+        (285, 135, 205, 105, "Whisper", "Words per speech region"),
+        (525, 135, 245, 105, "Gap recovery", "Skipped retakes re-heard"),
+        (805, 135, 215, 105, "Take planner", "Gemini reads + listens"),
+        (1055, 135, 220, 105, "Repeat review", "Duplicates re-decided"),
+        (925, 350, 255, 115, "MFA 3.4.1", "Which sound is which word"),
+        (610, 350, 270, 115, "Waveform edges", "Decay and onset kept"),
+        (300, 350, 265, 115, "Pauses", "Retimed with room tone"),
+        (45, 350, 210, 115, "Single render", "Crossfades in silence"),
     ]
     for index, (x, y, box_width, box_height, title, subtitle) in enumerate(boxes):
-        highlight = index in {2, 5, 7, 8}
+        highlight = index in {3, 6, 8}
         fill = COLORS["accent_light"] if highlight else COLORS["panel"]
         stroke = COLORS["accent"] if highlight else COLORS["grid"]
         content.extend(
@@ -373,8 +373,8 @@ def _generate_pipeline_svg(output_directory: Path) -> Path:
             f'  <path d="M 925 407 L 888 407" {arrow_style}/>',
             f'  <path d="M 610 407 L 573 407" {arrow_style}/>',
             f'  <path d="M 300 407 L 263 407" {arrow_style}/>',
-            f'  <text x="48" y="520" font-size="14" fill="{COLORS["muted"]}">Whisper timestamps are crop anchors. MFA phone alignment owns final cut coordinates.</text>',
-            f'  <text x="48" y="546" font-size="14" fill="{COLORS["muted"]}">One immutable plan is rendered once; video publication uses clear cuts without inserted pauses.</text>',
+            f'  <text x="48" y="520" font-size="14" fill="{COLORS["muted"]}">Whisper finds the words, the planner picks the takes, MFA maps them to the sound, and the waveform decides where each word ends.</text>',
+            f'  <text x="48" y="546" font-size="14" fill="{COLORS["muted"]}">Audio is rendered once from the source; video follows the same source intervals with direct picture cuts.</text>',
         ]
     )
     output_path = output_directory / "pipeline.svg"
