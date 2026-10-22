@@ -185,20 +185,29 @@ provider, and you can type any other model name.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/planner-models-dark.webp">
-  <img alt="The model picker in the toolbar: Gemini models listed live from the provider, with Gemini 3.1 Pro Preview as the default" src="docs/assets/screenshots/planner-models-light.webp">
+  <img alt="The model picker in the toolbar: Gemini models listed live from the provider, with Gemini 3.8 Flash as the default" src="docs/assets/screenshots/planner-models-light.webp">
 </picture>
 
 | Planner | Default model | What it receives | Status |
 | --- | --- | --- | --- |
-| **Gemini** | `gemini-3.1-pro-preview` | the transcript of each planning window and that window's audio | Recommended |
+| **Gemini** | `gemini-3.8-flash` | the transcript of each planning window and that window's audio | Recommended |
+| **OpenRouter** | `google/gemma-4-31b-it` | the transcript of each planning window | Supported; the cheapest |
 | **OpenAI** | `gpt-5-mini` | the transcript of each planning window | Supported |
 | **DeepSeek** | `deepseek-v4-flash` | the transcript of each planning window | Supported |
 | **Local (Ollama)** | Gemma 4 31B, on your computer | nothing leaves the computer | Supported; needs a fast computer |
 
-Gemini **hears audio**: it receives a compressed 16 kHz mono copy of each
-window, so it can hear stumbles and fix mis-heard words. Your original file
-and any video never leave the computer. Keys are added in **Settings**, each
-with a link to get one, and are sent only to their own provider.
+Gemini models **hear audio**: they receive a compressed 16 kHz mono copy of
+each window, so they can hear stumbles and fix mis-heard words. Your original
+file and any video never leave the computer. Keys are added in **Settings**,
+each with a link to get one, and are sent only to their own provider.
+
+The defaults come from a comparison on a 64-minute narration, scored against
+Gemini 3.1 Pro listening to the audio. Gemini 3.8 Flash made nearly the same
+edit (removed-word F1 0.98) for about a fifth of the price, roughly $1 per hour of
+recording. Gemma 4 31B through [OpenRouter](https://openrouter.ai) came close
+(0.92) for about three cents, reading the transcript only. Any other model of
+the provider's live list can be chosen instead. Gemma is not offered through
+the Gemini key: the Gemini API meters it at 16,000 input tokens a minute.
 
 **Local** planners run open models on your Mac or PC through Ollama, on
 macOS, Windows and Linux alike, so nothing leaves the computer. The model list
@@ -213,7 +222,7 @@ VoiceCut uses yours and its models.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/settings-dark.webp">
-  <img alt="Settings: appearance, automatic updates, and API keys for Gemini, OpenAI and DeepSeek kept in the macOS Keychain" src="docs/assets/screenshots/settings-light.webp">
+  <img alt="Settings: appearance, automatic updates, API keys for Gemini, OpenAI, DeepSeek and OpenRouter kept in the macOS Keychain, and local models" src="docs/assets/screenshots/settings-light.webp">
 </picture>
 
 ## How it works

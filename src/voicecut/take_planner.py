@@ -59,6 +59,12 @@ REVIEW_MAX_SPAN_SECONDS = 420.0
 REVIEW_CONTEXT_SECONDS = 20.0
 AUDIO_CLIP_SAMPLE_RATE = 16_000
 AUDIO_CLIP_PEAK = 0.7
+# A rate limit says when to come back: "Please retry in 25.5s" (Gemini) or
+# "'retryDelay': '25s'".  The Gemini API meters Gemma models at 16,000 input
+# tokens a minute, about two windows.
+RETRY_AFTER_PATTERN = re.compile(
+    r"retry in (\d+(?:\.\d+)?)\s*s|'retryDelay': '(\d+(?:\.\d+)?)s'", re.IGNORECASE
+)
 # Errors that a retry cannot fix.  Everything else -- dropped connections,
 # timeouts, overload, 5xx -- is retried with backoff.
 PERMANENT_ERROR_PATTERN = re.compile(
@@ -699,14 +705,25 @@ def _generate(
                 or PERMANENT_ERROR_PATTERN.search(f"{type(error).__name__}: {error}")
             ):
                 raise
+            wait = retry_after(error)
+            wait = delay if wait is None else min(wait + 1.0, 120.0)
             print(
-                f"planner transport error ({error}); retrying in {delay:.0f}s",
+                f"planner transport error ({error}); retrying in {wait:.0f}s",
                 file=sys.stderr,
                 flush=True,
             )
-            time.sleep(delay)
+            time.sleep(wait)
             delay = min(delay * 2.5, 120.0)
     raise AssertionError("unreachable")
+
+
+def retry_after(error: BaseException) -> float | None:
+    """The wait a rate-limit error asks for, in seconds, if it names one."""
+
+    match = RETRY_AFTER_PATTERN.search(str(error))
+    if match is None:
+        return None
+    return float(match.group(1) or match.group(2))
 
 
 def _retry_prompt(prompt: str, *, raw: str, error: str) -> str:

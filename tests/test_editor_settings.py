@@ -36,6 +36,7 @@ GEMINI_PAYLOAD = {
                 1048576,
             ),
             ("gemini-3.5-flash", "Gemini 3.5 Flash", ["generateContent"], 1048576),
+            ("gemini-3.8-flash", "Gemini 3.8 Flash", ["generateContent"], 1048576),
             (
                 "gemini-3.5-flash-lite",
                 "Gemini 3.5 Flash Lite",
@@ -133,10 +134,13 @@ def test_gemini_models_are_planner_models_newest_first(
     catalog = settings.ModelCatalog(env)
     listed = catalog.models("gemini")
     ids = [model["id"] for model in listed["models"]]
+    # Gemma models are left out: the Gemini API meters them at 16,000 input
+    # tokens a minute.
     assert ids == [
         DEFAULT_GEMINI_MODEL,
         "gemini-3.5-flash",
         "gemini-3.5-flash-lite",
+        "gemini-3.1-pro-preview",
         "gemini-2.5-pro",
         "gemini-flash-latest",
     ]
@@ -177,6 +181,62 @@ def test_openai_models_skip_audio_image_and_embedding(
     ]
     assert calls[0][0] == "https://api.openai.com/v1/models"
     assert calls[0][1]["Authorization"] == "Bearer sk-test-1234"
+
+
+def test_openrouter_checks_the_key_then_lists_text_models_newest_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env = tmp_path / ".env"
+    env.write_text("OPENROUTER_API_KEY=sk-or-test-1234\n", encoding="utf-8")
+
+    def model(name: str, created: int, *, context: int = 262144, out: str = "text"):
+        return {
+            "id": name,
+            "name": name.split("/")[1],
+            "created": created,
+            "context_length": context,
+            "architecture": {"input_modalities": ["text"], "output_modalities": [out]},
+        }
+
+    payload = {
+        "data": [
+            model("google/gemma-4-31b-it", 1775000000),
+            model("qwen/qwen3.8-27b", 1786000000),
+            model("mistralai/ministral-8b-2512", 1765000000),
+            model("deepseek/deepseek-v4.1-flash:batch", 1787000000),
+            model("qwen/qwen3.5-9b:free", 1772000000),
+            model("google/gemini-3.1-flash-image", 1780000000, out="image"),
+            model("microsoft/phi-4", 1730000000, context=16384),
+        ]
+    }
+    calls: list[tuple[str, dict]] = []
+
+    def get(url: str, headers: dict[str, str]) -> Any:
+        calls.append((url, headers))
+        return {"data": {"label": "sk-or-…1234"}} if url.endswith("/key") else payload
+
+    monkeypatch.setattr(settings, "_get_json", get)
+    listed = settings.ModelCatalog(env).models("openrouter")
+    assert [entry["id"] for entry in listed["models"]] == [
+        "google/gemma-4-31b-it",
+        "qwen/qwen3.8-27b",
+        "mistralai/ministral-8b-2512",
+    ]
+    assert listed["models"][0]["default"] is True
+    assert listed["models"][0]["detail"] == "262K context"
+    # The model list is public, so the key is checked on its own endpoint.
+    assert [url for url, _ in calls] == [
+        "https://openrouter.ai/api/v1/key",
+        "https://openrouter.ai/api/v1/models",
+    ]
+    assert calls[0][1]["Authorization"] == "Bearer sk-or-test-1234"
+
+    def reject(url: str, headers: dict[str, str]) -> Any:
+        raise urllib.error.HTTPError(url, 401, "No auth", None, io.BytesIO())
+
+    monkeypatch.setattr(settings, "_get_json", reject)
+    refused = settings.ModelCatalog(env).models("openrouter", refresh=True)
+    assert refused["error"]["kind"] == "invalid_key"
 
 
 @pytest.mark.parametrize(

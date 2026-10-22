@@ -29,6 +29,15 @@ export function modelOf(settings: RunSettings, state: SettingsState | null): str
 }
 
 /**
+ * Whether the run sends the model each window's audio: Gemini models listen,
+ * the Gemma models the Gemini API also serves read the transcript only (the
+ * same rule as `model_hears_audio` in `src/voicecut/planner_backends.py`).
+ */
+export function hearsAudio(planner: PlannerInfo, model: string): boolean {
+  return planner.listens_to_audio && !/^gemma/i.test(model.split('/').pop() ?? '');
+}
+
+/**
  * Quick Voice Cut choices in the top bar: the planner provider, its model
  * (listed live from the provider, or any name typed in) and the language.
  */
@@ -47,6 +56,7 @@ export function VoiceCutControls({
 }) {
   const planners = state?.planners ?? [];
   const planner = plannerOf(settings, planners);
+  const hears = planner ? hearsAudio(planner, modelOf(settings, state)) : false;
   const languages = state?.languages ?? [settings.language];
 
   return (
@@ -68,15 +78,15 @@ export function VoiceCutControls({
       </label>
       {planner && (
         <span
-          className={`listens${planner.listens_to_audio ? ' yes' : ''}`}
+          className={`listens${hears ? ' yes' : ''}`}
           title={
-            planner.listens_to_audio
-              ? 'This planner listens to the audio of every window as well as reading the transcript'
-              : 'This planner reads the transcript only; Gemini also listens to the audio'
+            hears
+              ? 'This model listens to the audio of every window as well as reading the transcript'
+              : 'This model reads the transcript only; Gemini models also listen to the audio'
           }
         >
-          {planner.listens_to_audio ? <AudioLines size={13} /> : <FileText size={13} />}
-          {planner.listens_to_audio ? 'hears audio' : 'text only'}
+          {hears ? <AudioLines size={13} /> : <FileText size={13} />}
+          {hears ? 'hears audio' : 'text only'}
         </span>
       )}
       {planner?.id === 'ollama' && (

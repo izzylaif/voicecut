@@ -61,6 +61,7 @@ from .planner_backends import (
     PlannerRuntimeConfiguration,
     add_planner_backend_arguments,
     default_model_for_backend,
+    model_hears_audio,
     preflight_planner_backend,
     resolve_planner_base_url,
 )
@@ -676,10 +677,11 @@ def _planner_listens(args: argparse.Namespace) -> bool:
 
     if args.planner_audio == "off":
         return False
-    supported = args.planner_backend in AUDIO_LISTENING_BACKENDS
+    supported = model_hears_audio(args.planner_backend, args.planner_model)
     if args.planner_audio == "on" and not supported:
         raise FullPipelineError(
-            f"--planner-audio on is not supported by {args.planner_backend}"
+            "--planner-audio on is not supported by "
+            f"{args.planner_model or args.planner_backend}"
         )
     return supported
 

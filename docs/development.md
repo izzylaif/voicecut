@@ -87,7 +87,8 @@ voicecut recording.wav --planner-audio off
 
 | Backend | Default model | Credential |
 | --- | --- | --- |
-| `gemini` | `gemini-3.1-pro-preview` | `GEMINI_API_KEY` |
+| `gemini` | `gemini-3.8-flash` | `GEMINI_API_KEY` |
+| `openrouter` | `google/gemma-4-31b-it` | `OPENROUTER_API_KEY` |
 | `openai` | `gpt-5-mini` | `OPENAI_API_KEY` |
 | `deepseek` | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` |
 | `ollama` | `gemma4:31b-it-qat` (`gemma4:31b-mlx` on Apple Silicon with more than 32 GB) | none: a model downloaded into [Ollama](https://ollama.com) |

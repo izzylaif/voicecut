@@ -10,6 +10,7 @@ from voicecut.common import read_json, sha256_file, write_json
 from voicecut.full_pipeline import (
     FullPipelineError,
     _implementation_fingerprint,
+    _planner_listens,
     _run,
     _subprocess_environment,
     _WorkDirectoryLock,
@@ -1335,3 +1336,24 @@ def test_full_pipeline_reports_progress_callback_stage_sequence(
         {"stage": "hidden_retry_recovery", "status": "skipped"}
     ]
     assert read_json(args.work_dir / "pipeline_config.json")["asr"] == "crisperwhisper"
+
+
+def test_only_gemini_models_hear_the_audio(tmp_path: Path) -> None:
+    source = tmp_path / "talk.wav"
+    source.write_bytes(b"")
+
+    def listens(*arguments: str) -> bool:
+        return _planner_listens(build_parser().parse_args([str(source), *arguments]))
+
+    assert listens("--planner-backend", "gemini") is True
+    assert listens("--planner-model", "gemini-3.1-pro-preview") is True
+    # Gemma models on the Gemini API read the transcript only.
+    assert listens("--planner-model", "gemma-4-31b-it") is False
+    assert listens("--planner-model", "gemini-3.8-flash") is True
+    assert (
+        listens("--planner-model", "gemini-3.8-flash", "--planner-audio", "off")
+        is False
+    )
+    assert listens("--planner-backend", "deepseek") is False
+    with pytest.raises(FullPipelineError, match="gemma-4-31b-it"):
+        listens("--planner-model", "gemma-4-31b-it", "--planner-audio", "on")

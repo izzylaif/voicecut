@@ -55,11 +55,13 @@ KEY_PAGES = {
     "gemini": "https://aistudio.google.com/apikey",
     "openai": "https://platform.openai.com/api-keys",
     "deepseek": "https://platform.deepseek.com/api_keys",
+    "openrouter": "https://openrouter.ai/settings/keys",
 }
 PLANNER_LABELS = {
     "gemini": "Gemini",
     "openai": "OpenAI",
     "deepseek": "DeepSeek",
+    "openrouter": "OpenRouter",
     "ollama": "Local (Ollama)",
 }
 # Gemini models that generate text but are not general planners.
@@ -67,6 +69,10 @@ GEMINI_EXCLUDED = re.compile(
     r"tts|image|banana|lyria|transcribe|robotics|computer-use|antigravity|"
     r"deep-research|customtools|embedding|imagen|veo|aqa|native-audio|live|gemma",
 )
+# OpenRouter variants that are not ordinary chat endpoints ("-:batch") or
+# share a small free quota (":free"); either can still be typed in.
+OPENROUTER_EXCLUDED = re.compile(r":(batch|free)$")
+OPENROUTER_MIN_CONTEXT = 131_072
 OPENAI_INCLUDED = re.compile(r"^(gpt-|o\d|chatgpt-)")
 OPENAI_EXCLUDED = re.compile(
     r"audio|realtime|tts|transcribe|image|search|embedding|moderation|instruct|"
@@ -407,6 +413,40 @@ def _gemini_models(key: str) -> list[dict[str, Any]]:
     return models
 
 
+def _openrouter_models(key: str, env_file: Path) -> list[dict[str, Any]]:
+    """Text models with room for a planning window, newest first.  The model
+    list needs no key, so the key is checked on its own endpoint first."""
+
+    base = resolve_planner_base_url(
+        provider="openrouter", env_file=env_file, base_url=None
+    )
+    headers = {"Authorization": f"Bearer {key}"}
+    _get_json(f"{base}/key", headers)
+    payload = _get_json(f"{base}/models", headers)
+    models = []
+    for model in payload.get("data") or []:
+        model_id = str(model.get("id", ""))
+        architecture = model.get("architecture") or {}
+        context = int(model.get("context_length") or 0)
+        if (
+            OPENROUTER_EXCLUDED.search(model_id)
+            or context < OPENROUTER_MIN_CONTEXT
+            or "text" not in (architecture.get("input_modalities") or ["text"])
+            or "text" not in (architecture.get("output_modalities") or ["text"])
+        ):
+            continue
+        models.append(
+            {
+                "id": model_id,
+                "label": str(model.get("name") or model_id),
+                "detail": f"{context // 1000}K context",
+                "alias": False,
+                "created": int(model.get("created") or 0),
+            }
+        )
+    return models
+
+
 def _openai_compatible_models(
     backend: str, key: str, env_file: Path
 ) -> list[dict[str, Any]]:
@@ -426,7 +466,8 @@ def _openai_compatible_models(
 
 
 def _sorted(models: list[dict[str, Any]], default: str) -> list[dict[str, Any]]:
-    """Newest first; within a version pro before flash before lite."""
+    """Newest first (by release date where the provider gives one, else by
+    version); within a version pro before flash before lite."""
 
     unique = {model["id"]: model for model in models}
     ordered = sorted(
@@ -434,6 +475,7 @@ def _sorted(models: list[dict[str, Any]], default: str) -> list[dict[str, Any]]:
         key=lambda model: (
             model["id"] != default,
             model["alias"],
+            -model.get("created", 0),
             tuple(-part for part in _version(model["id"])),
             _tier(model["id"]),
             model["id"],
@@ -491,11 +533,12 @@ class ModelCatalog:
         ):
             return cached[1]
         try:
-            listed = (
-                _gemini_models(key)
-                if backend == "gemini"
-                else _openai_compatible_models(backend, key, self.env_file)
-            )
+            if backend == "gemini":
+                listed = _gemini_models(key)
+            elif backend == "openrouter":
+                listed = _openrouter_models(key, self.env_file)
+            else:
+                listed = _openai_compatible_models(backend, key, self.env_file)
         except urllib.error.HTTPError as error:
             label = PLANNER_LABELS[backend]
             if error.code in (400, 401, 403):

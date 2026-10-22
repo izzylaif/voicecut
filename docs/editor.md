@@ -79,14 +79,16 @@ you can listen and edit meanwhile, and the picture appears when it is ready.
 Choose the **planner**, its **model** and the recording's **language** in the
 top bar, then press **Voice Cut**:
 
-- *Planner* — Gemini, OpenAI, DeepSeek, or a local MLX model. Gemini also
-  *listens* to the audio of every window while it chooses the takes (marked
-  “hears audio”); the others plan from the transcript only (“text only”).
+- *Planner* — Gemini, OpenAI, DeepSeek, OpenRouter, or a local model through
+  Ollama. Gemini models also *listen* to the audio of every window while they
+  choose the takes (marked “hears audio”); the others plan from the transcript
+  only (“text only”).
 - *Model* — the list is fetched live from the provider with your key and
-  filtered to text models that can plan (newest first; the default,
-  `gemini-3.1-pro-preview`, on top). Type in the search field to filter, or to
-  use any model name that is not listed. For local models the list shows the
-  defaults and the MLX models already downloaded; any MLX-LM model name works.
+  filtered to text models that can plan, with the default on top
+  (`gemini-3.8-flash` for Gemini, `google/gemma-4-31b-it` for OpenRouter), then
+  newest first. Type in the search field to filter, or to use any model name
+  that is not listed. For local models the list shows the recommended models
+  and the ones your Ollama already has; any model of the Ollama library works.
 - *Language* — English or Russian.
 
 The choice is saved with the project and used for new projects too. If the

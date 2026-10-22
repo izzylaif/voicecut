@@ -11,6 +11,8 @@ from voicecut.planner_backends import (
     DEFAULT_DEEPSEEK_MODEL,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_OPENAI_BASE_URL,
+    DEFAULT_OPENROUTER_MODEL,
+    OPENROUTER_BASE_URL,
     PLANNER_BACKENDS,
     OllamaPlannerBackend,
     OpenAICompatiblePlannerBackend,
@@ -295,6 +297,28 @@ def test_planner_base_url_is_resolved_and_canonicalized(
         )
         == DEFAULT_DEEPSEEK_BASE_URL
     )
+    assert (
+        resolve_planner_base_url(
+            provider="openrouter",
+            env_file=tmp_path / "missing.env",
+            base_url=None,
+        )
+        == OPENROUTER_BASE_URL
+    )
+
+
+def test_openrouter_plans_through_chat_completions_with_gemma(tmp_path: Path) -> None:
+    from voicecut.planner_backends import create_planner_backend
+
+    env = tmp_path / ".env"
+    env.write_text("OPENROUTER_API_KEY=sk-or-test-1234\n", encoding="utf-8")
+    backend = create_planner_backend(provider="openrouter", model=None, env_file=env)
+    assert isinstance(backend, OpenAICompatiblePlannerBackend)
+    assert backend.model == DEFAULT_OPENROUTER_MODEL == "google/gemma-4-31b-it"
+    assert backend.base_url == OPENROUTER_BASE_URL
+    # Chat Completions with a JSON object, the form every OpenRouter model takes.
+    assert backend.strict_json_schema is False
+    assert "openrouter" in PLANNER_BACKENDS
 
 
 @pytest.mark.parametrize(

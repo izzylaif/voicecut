@@ -24,15 +24,32 @@ from urllib.parse import urlsplit, urlunsplit
 
 from . import local_models, ollama
 
-DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
+# Gemini 3.8 Flash listening to the audio made nearly the same edit as Gemini
+# 3.1 Pro listening to it (removed-word F1 0.98, no repeats left) on a
+# 64-minute narration, for about a fifth of the price: Pro reasons more than
+# twice as long per window at three times the token price.
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
+# Gemma 4 31B planned best among the open models of a comparison on a
+# 64-minute narration (removed-word F1 0.92 against Gemini 3.1 Pro with
+# audio), for about three cents.  OpenRouter does not meter it the way the
+# Gemini API meters Gemma (16,000 input tokens a minute).
+DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it"
 DEFAULT_OLLAMA_MODEL = local_models.default_model()
 DEFAULT_MAX_OUTPUT_TOKENS = 8192
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-PLANNER_BACKENDS = ("gemini", "openai", "deepseek", "ollama")
+PLANNER_BACKENDS = ("gemini", "openai", "deepseek", "openrouter", "ollama")
+# Providers reached through the OpenAI client.
+OPENAI_COMPATIBLE_BACKENDS = frozenset({"openai", "deepseek", "openrouter"})
+DEFAULT_BASE_URL_BY_BACKEND = {
+    "openai": DEFAULT_OPENAI_BASE_URL,
+    "deepseek": DEFAULT_DEEPSEEK_BASE_URL,
+    "openrouter": OPENROUTER_BASE_URL,
+}
 # Earlier local planners (MLX-LM on Apple Silicon); settings that name one
 # now mean Ollama.
 LEGACY_LOCAL_BACKENDS = frozenset({"local", "qwen", "gemma"})
@@ -40,14 +57,33 @@ API_KEY_ENV_BY_BACKEND = {
     "gemini": "GEMINI_API_KEY",
     "openai": "OPENAI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
 }
 DEFAULT_MODEL_BY_BACKEND = {
     "gemini": DEFAULT_GEMINI_MODEL,
     "openai": DEFAULT_OPENAI_MODEL,
     "deepseek": DEFAULT_DEEPSEEK_MODEL,
+    "openrouter": DEFAULT_OPENROUTER_MODEL,
     "ollama": DEFAULT_OLLAMA_MODEL,
 }
 THINK_CHOICES = ("auto", "on", "off", *local_models.THINK_LEVELS)
+
+
+def model_hears_audio(backend: str, model: str | None) -> bool:
+    """Whether a planner model accepts each window's audio.
+
+    Gemini models do.  The Gemini API also serves Google's open Gemma models,
+    which take text only ("Audio input modality is not enabled for this
+    model").  The editor's toolbar mirrors this rule (``hearsAudio`` in
+    ``frontend/src/components/VoiceCutControls.tsx``).
+    """
+
+    if backend != "gemini":
+        return False
+    name = (model or DEFAULT_MODEL_BY_BACKEND[backend]).rsplit("/", 1)[-1]
+    return not name.lower().startswith("gemma")
+
+
 # A prompt's length in tokens, estimated from its characters on the safe
 # side: word IDs ("[123]word") make the window prompts dense.
 CHARACTERS_PER_TOKEN = 2.5
@@ -192,10 +228,11 @@ def resolve_planner_base_url(
 
     if provider not in PLANNER_BACKENDS:
         raise ValueError(f"unsupported planner backend: {provider}")
-    if provider not in {"openai", "deepseek"}:
+    if provider not in OPENAI_COMPATIBLE_BACKENDS:
         if base_url is not None:
             raise ValueError(
-                "--planner-base-url is supported only for openai and deepseek"
+                "--planner-base-url is supported only for openai, deepseek and "
+                "openrouter"
             )
         return None
 
@@ -203,11 +240,7 @@ def resolve_planner_base_url(
     if selected is None:
         selected = _dotenv_value(env_file, f"{provider.upper()}_BASE_URL")
     if selected is None:
-        selected = (
-            DEFAULT_OPENAI_BASE_URL
-            if provider == "openai"
-            else DEFAULT_DEEPSEEK_BASE_URL
-        )
+        selected = DEFAULT_BASE_URL_BY_BACKEND[provider]
     return sanitize_planner_base_url(selected)
 
 
@@ -330,7 +363,6 @@ class GeminiPlannerBackend:
     """Google Gen AI structured-output transport."""
 
     backend_name = "gemini"
-    supports_audio = True
 
     def __init__(
         self,
@@ -358,6 +390,7 @@ class GeminiPlannerBackend:
             client = genai.Client(api_key=api_key)
             types_module = types
         self.model = model
+        self.supports_audio = model_hears_audio("gemini", model)
         self.max_output_tokens = max_output_tokens
         self.system_instruction = system_instruction
         self.temperature = temperature
@@ -461,7 +494,7 @@ class OpenAICompatiblePlannerBackend:
         strict_json_schema: bool,
         client: Any | None = None,
     ) -> None:
-        if provider not in {"openai", "deepseek"}:
+        if provider not in OPENAI_COMPATIBLE_BACKENDS:
             raise ValueError(f"unsupported OpenAI-compatible provider: {provider}")
         if not api_key.strip():
             raise ValueError(f"{provider} API key is empty")
@@ -477,6 +510,12 @@ class OpenAICompatiblePlannerBackend:
             client_arguments: dict[str, Any] = {"api_key": api_key}
             if base_url:
                 client_arguments["base_url"] = base_url
+            if provider == "openrouter":
+                # OpenRouter's app attribution.
+                client_arguments["default_headers"] = {
+                    "HTTP-Referer": "https://vectozavr.github.io/voicecut/",
+                    "X-Title": "VoiceCut",
+                }
             client = OpenAI(**client_arguments)
         self.backend_name = provider
         self.model = model
@@ -758,7 +797,7 @@ def create_planner_backend(
             api_key_env=api_key_env,
             temperature=gemini_temperature,
         )
-    if provider in {"openai", "deepseek"}:
+    if provider in OPENAI_COMPATIBLE_BACKENDS:
         return OpenAICompatiblePlannerBackend(
             provider=provider,
             model=selected_model,

@@ -422,6 +422,38 @@ def test_dropped_connections_are_retried_but_bad_requests_are_not(
         take_planner._generate(broken, "p", schema={}, request_id="r", media=())
 
 
+def test_a_rate_limit_is_retried_after_the_wait_it_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from voicecut import take_planner
+
+    waits: list[float] = []
+    monkeypatch.setattr(take_planner.time, "sleep", waits.append)
+
+    class LimitedBackend(ScriptedBackend):
+        def __init__(self) -> None:
+            super().__init__([{"keep": []}])
+            self.limited = [
+                RuntimeError(
+                    "429 RESOURCE_EXHAUSTED. Quota exceeded for metric "
+                    "input_token_count, limit: 16000. Please retry in 25.576615882s."
+                ),
+                RuntimeError("429 RESOURCE_EXHAUSTED {'retryDelay': '19s'}"),
+                RuntimeError("503 UNAVAILABLE: overloaded"),
+            ]
+
+        def generate(self, prompt: str, **kwargs: Any) -> str:
+            if self.limited:
+                raise self.limited.pop(0)
+            return super().generate(prompt, **kwargs)
+
+    raw = take_planner._generate(
+        LimitedBackend(), "p", schema={}, request_id="r", media=()
+    )
+    assert json.loads(raw)["keep"] == []
+    assert waits == [pytest.approx(26.576615882), 20.0, 31.25]
+
+
 def test_a_review_without_a_usable_answer_leaves_its_region(tmp_path: Path) -> None:
     words = _words(
         [

@@ -64,7 +64,8 @@ narration. It does not choose waveform samples or synthesize speech.
 
 | Backend | Default model | Credential | Status |
 | --- | --- | --- | --- |
-| `gemini` | `gemini-3.1-pro-preview` | `GEMINI_API_KEY` | Cloud |
+| `gemini` | `gemini-3.8-flash` | `GEMINI_API_KEY` | Cloud; listens to the audio |
+| `openrouter` | `google/gemma-4-31b-it` | `OPENROUTER_API_KEY` | Cloud |
 | `openai` | `gpt-5-mini` | `OPENAI_API_KEY` | Cloud |
 | `deepseek` | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` | Cloud |
 | `ollama` | `gemma4:31b-it-qat` (`gemma4:31b-mlx` on Apple Silicon with more than 32 GB) | None | On this computer, through Ollama |
@@ -82,6 +83,7 @@ file, which defaults to `.env`:
 
 ```dotenv
 GEMINI_API_KEY=...
+OPENROUTER_API_KEY=...
 OPENAI_API_KEY=...
 DEEPSEEK_API_KEY=...
 ```
@@ -89,9 +91,23 @@ DEEPSEEK_API_KEY=...
 Use a provider:
 
 ```bash
+voicecut input.wav --planner-backend openrouter
 voicecut input.wav --planner-backend openai
 voicecut input.wav --planner-backend deepseek
 ```
+
+Gemini models listen to each window's audio (`--planner-audio auto`); the
+other providers, and Gemma models on the Gemini API, read the transcript only.
+The cloud defaults come from a comparison on a 64-minute narration, scored by
+agreement with Gemini 3.1 Pro listening to the audio on the words it removed
+(F1). Gemini 3.8 Flash with the audio scored 0.98 with no repeats left, at
+about a fifth of Pro's price: Pro reasons more than twice as long per window
+at three times the token price. Gemma 4 31B through OpenRouter, text only,
+scored 0.92 for about three cents per hour of recording. Through the Gemini
+API the same model scored 0.90 and took twice as long, because Google meters
+Gemma there at 16,000 input tokens a minute; the editor's Gemini list leaves
+Gemma out for that reason. When a provider answers "429" with the wait it
+wants ("retry in 25s"), the planner waits exactly that long.
 
 Override its default model:
 
@@ -110,7 +126,7 @@ voicecut input.wav \
   --planner-api-key-env COMPANY_OPENAI_KEY
 ```
 
-OpenAI and DeepSeek support an endpoint override:
+OpenAI, DeepSeek and OpenRouter support an endpoint override:
 
 ```bash
 voicecut input.wav \
