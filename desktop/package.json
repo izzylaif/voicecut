@@ -1,6 +1,6 @@
 {
   "name": "voicecut-desktop",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "VoiceCut for macOS, Linux and Windows: build tooling (the app itself is src-tauri/ and ui/)",
   "scripts": {

@@ -2,26 +2,16 @@ VoiceCut listens to a narration recording, keeps the best take of every line,
 fixes the pauses, and lets you fine-tune every cut on a timeline before
 exporting.
 
-## What's new in 0.3.0
+## What's new in 0.3.1
 
-- **The planner can run on your computer.** Local models run through Ollama
-  on macOS, Windows and Linux, and VoiceCut installs Ollama unless you have
-  it. New projects plan with Gemma 4 31B on your computer where it runs well
-  (Apple Silicon with 32 GB of memory or more, or an NVIDIA GPU with 24 GB),
-  and with the same model through OpenRouter elsewhere. The first Voice Cut
-  offers to download the model (about 20 GB, once) and starts when it is
-  there.
-- **OpenRouter** joins Gemini, OpenAI and DeepSeek. Gemma 4 31B there edits
-  nearly the way Gemini 3.1 Pro does, for about 5 cents of OpenRouter's
-  charges per hour of recording. Gemini now defaults to Gemini 3.8 Flash.
-- **Voice Cut edits only what is left on the timeline.** Trim a recording
-  first and only the parts you kept are transcribed and planned; delete part
-  of Voice Cut's result and the next run leaves it out too.
-- **Intel Macs:** the macOS download is now universal.
-- **Windows:** Voice Cut no longer hangs at "Checking runtimes", and setup
-  works when Windows long paths are off.
-- The run's log opens at a readable size and says whether Whisper runs on
-  the GPU.
+- **Move and copy clips.** Drag a clip to another place on the timeline;
+  hold ⌥ (Alt) to drop a copy instead. ⌘C, ⌘X and ⌘V copy, cut and paste
+  clips (a paste inside a clip splits it at the playhead), and ⌘D duplicates
+  the selection. Previews and exports, video included, follow the new order.
+- **Select many clips at once.** ⇧-click selects every clip and pause from
+  the last one clicked; ⌘-click (Ctrl-click on Windows and Linux) adds or
+  removes one; ⌘A selects everything.
+- Clicking a clip still puts the playhead there; dragging the ruler scrubs.
 
 ## Install
 
