@@ -1,0 +1,7 @@
+# Installed and generated: `npm install`, `npm run assets`, `npm run render`.
+node_modules/
+public/
+out/
+# Takes the narrator no longer uses (data/vo/ holds the current ones).
+data/vo-cache/
+data/*.wav

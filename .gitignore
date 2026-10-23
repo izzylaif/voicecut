@@ -45,6 +45,10 @@ venv/
 !examples/media/audio/example_ru_edited.wav
 !examples/media/video/video.mp4
 !examples/media/video/video_edited.mp4
+# The promo film (ads/): Voice Cut's result of the English example above and
+# the narrator's synthesized lines.
+!ads/data/example_en_edited.flac
+!ads/data/vo/*.flac
 
 examples/generated/
 examples/work/

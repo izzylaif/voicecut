@@ -1,0 +1,30 @@
+{
+  "vo01": {
+    "text": "Real recordings are messy: retakes, false starts, breaths, long pauses.",
+    "seconds": 6.648
+  },
+  "vo03": {
+    "text": "VoiceCut does it for you.",
+    "seconds": 1.829
+  },
+  "vo04": {
+    "text": "Drop in a recording, pick a model \u2014 it can run locally, right on your computer \u2014 and press Voice Cut.",
+    "seconds": 5.979
+  },
+  "vo05": {
+    "text": "It transcribes everything you said, reads it like an editor, and keeps the best take of every line.",
+    "seconds": 6.873
+  },
+  "vo06": {
+    "text": "It cuts only in the silence between words, and turns breaths into your own room tone.",
+    "seconds": 5.673
+  },
+  "vo09": {
+    "text": "VoiceCut is free and open source. Run it on your own computer, or with your own key for OpenRouter, Gemini, OpenAI or DeepSeek.",
+    "seconds": 10.759
+  },
+  "vo10": {
+    "text": "Record with all your retakes. Get back one clean take.",
+    "seconds": 3.942
+  }
+}

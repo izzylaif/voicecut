@@ -1,0 +1,24 @@
+{
+  "name": "voicecut-ads",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Motion-designed promo videos for VoiceCut, built with Remotion",
+  "scripts": {
+    "studio": "remotion studio",
+    "assets": "sh scripts/assets.sh",
+    "render": "sh scripts/render.sh"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.534",
+    "@remotion/google-fonts": "4.0.534",
+    "@remotion/media-utils": "4.0.534",
+    "@remotion/transitions": "4.0.534",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.534"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "typescript": "5.9.3"
+  }
+}

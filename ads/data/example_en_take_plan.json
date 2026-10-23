@@ -1,0 +1,689 @@
+{
+  "schema_version": 1,
+  "planner": "take_planner_v1",
+  "status": "complete",
+  "backend": "gemini",
+  "model": "gemini-3.8-flash",
+  "language": "en",
+  "transcript": "/private/tmp/claude-379973812/-Users-ilini-Desktop-ivan-study-yt-channel-randimized-pipedream/c7c55e7d-cad8-477a-b8b4-2672e9c4d5fa/scratchpad/cli/.voicecut-cache/example_en-gemini-317cc16b377a/03_gap_recovery/source_transcript_with_recovered_gaps.json",
+  "transcript_sha256": "53adc0281a78f338eec1296ad538fe235451f26a73f1cc8cb7534424cdaa3777",
+  "audio": "/private/tmp/claude-379973812/-Users-ilini-Desktop-ivan-study-yt-channel-randimized-pipedream/c7c55e7d-cad8-477a-b8b4-2672e9c4d5fa/scratchpad/cli/.voicecut-cache/example_en-gemini-317cc16b377a/00_media/source_audio.wav",
+  "listened_to_audio": true,
+  "window_seconds": 240.0,
+  "lookahead_seconds": 120.0,
+  "line_gap_seconds": 0.25,
+  "word_count": 91,
+  "words": [
+    {
+      "id": 0,
+      "text": "Give",
+      "start": 2.95,
+      "end": 3.25
+    },
+    {
+      "id": 1,
+      "text": "a",
+      "start": 3.25,
+      "end": 3.37
+    },
+    {
+      "id": 2,
+      "text": "large",
+      "start": 3.37,
+      "end": 3.6300000000000003
+    },
+    {
+      "id": 3,
+      "text": "language",
+      "start": 3.6300000000000003,
+      "end": 3.93
+    },
+    {
+      "id": 4,
+      "text": "model",
+      "start": 3.93,
+      "end": 4.390000000000001
+    },
+    {
+      "id": 5,
+      "text": "a",
+      "start": 4.390000000000001,
+      "end": 4.69
+    },
+    {
+      "id": 6,
+      "text": "simple",
+      "start": 4.69,
+      "end": 4.970000000000001
+    },
+    {
+      "id": 7,
+      "text": "instruction.",
+      "start": 4.970000000000001,
+      "end": 5.41
+    },
+    {
+      "id": 8,
+      "text": "such",
+      "start": 5.85,
+      "end": 6.109999999999999
+    },
+    {
+      "id": 9,
+      "text": "as",
+      "start": 6.109999999999999,
+      "end": 6.33
+    },
+    {
+      "id": 10,
+      "text": "write",
+      "start": 6.33,
+      "end": 6.81
+    },
+    {
+      "id": 11,
+      "text": "a",
+      "start": 6.81,
+      "end": 6.93
+    },
+    {
+      "id": 12,
+      "text": "story.",
+      "start": 6.93,
+      "end": 7.1899999999999995
+    },
+    {
+      "id": 13,
+      "text": "gill.",
+      "start": 8.6,
+      "end": 8.879999999999999
+    },
+    {
+      "id": 14,
+      "text": "Give",
+      "start": 9.53,
+      "end": 9.87
+    },
+    {
+      "id": 15,
+      "text": "a",
+      "start": 9.87,
+      "end": 10.01
+    },
+    {
+      "id": 16,
+      "text": "large",
+      "start": 10.01,
+      "end": 10.229999999999999
+    },
+    {
+      "id": 17,
+      "text": "language",
+      "start": 10.229999999999999,
+      "end": 10.549999999999999
+    },
+    {
+      "id": 18,
+      "text": "model",
+      "start": 10.549999999999999,
+      "end": 10.93
+    },
+    {
+      "id": 19,
+      "text": "a",
+      "start": 10.93,
+      "end": 11.229999999999999
+    },
+    {
+      "id": 20,
+      "text": "simple",
+      "start": 11.229999999999999,
+      "end": 11.489999999999998
+    },
+    {
+      "id": 21,
+      "text": "instruction,",
+      "start": 11.489999999999998,
+      "end": 11.969999999999999
+    },
+    {
+      "id": 22,
+      "text": "such",
+      "start": 12.17,
+      "end": 12.489999999999998
+    },
+    {
+      "id": 23,
+      "text": "as",
+      "start": 12.489999999999998,
+      "end": 12.67
+    },
+    {
+      "id": 24,
+      "text": "write",
+      "start": 12.67,
+      "end": 13.07
+    },
+    {
+      "id": 25,
+      "text": "a",
+      "start": 13.07,
+      "end": 13.23
+    },
+    {
+      "id": 26,
+      "text": "story.",
+      "start": 13.23,
+      "end": 13.489999999999998
+    },
+    {
+      "id": 27,
+      "text": "and",
+      "start": 14.090253,
+      "end": 14.170506
+    },
+    {
+      "id": 28,
+      "text": "it",
+      "start": 14.230696,
+      "end": 14.270823
+    },
+    {
+      "id": 29,
+      "text": "might",
+      "start": 14.331013,
+      "end": 14.431329
+    },
+    {
+      "id": 30,
+      "text": "begin",
+      "start": 14.531646,
+      "end": 14.772405
+    },
+    {
+      "id": 31,
+      "text": "with",
+      "start": 14.852658,
+      "end": 14.993101
+    },
+    {
+      "id": 32,
+      "text": "familiar",
+      "start": 15.073354,
+      "end": 15.454557
+    },
+    {
+      "id": 33,
+      "text": "with",
+      "start": 15.675253,
+      "end": 15.815696
+    },
+    {
+      "id": 34,
+      "text": "the",
+      "start": 15.875886,
+      "end": 15.956139
+    },
+    {
+      "id": 35,
+      "text": "familiar",
+      "start": 15.996266,
+      "end": 16.477785
+    },
+    {
+      "id": 36,
+      "text": "words",
+      "start": 16.558038,
+      "end": 16.879051
+    },
+    {
+      "id": 37,
+      "text": "once",
+      "start": 17.24,
+      "end": 17.599999999999998
+    },
+    {
+      "id": 38,
+      "text": "upon",
+      "start": 17.599999999999998,
+      "end": 17.88
+    },
+    {
+      "id": 39,
+      "text": "a",
+      "start": 17.88,
+      "end": 18.0
+    },
+    {
+      "id": 40,
+      "text": "time.",
+      "start": 18.0,
+      "end": 18.22
+    },
+    {
+      "id": 41,
+      "text": "from",
+      "start": 18.87,
+      "end": 19.09
+    },
+    {
+      "id": 42,
+      "text": "the",
+      "start": 19.09,
+      "end": 19.21
+    },
+    {
+      "id": 43,
+      "text": "outside",
+      "start": 19.21,
+      "end": 19.57
+    },
+    {
+      "id": 44,
+      "text": "that",
+      "start": 19.57,
+      "end": 19.89
+    },
+    {
+      "id": 45,
+      "text": "looks",
+      "start": 19.89,
+      "end": 20.130000000000003
+    },
+    {
+      "id": 46,
+      "text": "almost",
+      "start": 20.130000000000003,
+      "end": 20.61
+    },
+    {
+      "id": 47,
+      "text": "effortless.",
+      "start": 20.61,
+      "end": 21.21
+    },
+    {
+      "id": 48,
+      "text": "But",
+      "start": 21.66,
+      "end": 21.84
+    },
+    {
+      "id": 49,
+      "text": "underneath",
+      "start": 21.84,
+      "end": 22.34
+    },
+    {
+      "id": 50,
+      "text": "this",
+      "start": 22.34,
+      "end": 22.72
+    },
+    {
+      "id": 51,
+      "text": "simple",
+      "start": 22.72,
+      "end": 23.1
+    },
+    {
+      "id": 52,
+      "text": "interaction",
+      "start": 23.1,
+      "end": 23.5
+    },
+    {
+      "id": 53,
+      "text": "is",
+      "start": 23.5,
+      "end": 23.86
+    },
+    {
+      "id": 54,
+      "text": "a",
+      "start": 23.86,
+      "end": 23.98
+    },
+    {
+      "id": 55,
+      "text": "very",
+      "start": 23.98,
+      "end": 24.240000000000002
+    },
+    {
+      "id": 56,
+      "text": "large",
+      "start": 24.240000000000002,
+      "end": 24.54
+    },
+    {
+      "id": 57,
+      "text": "sequence",
+      "start": 24.54,
+      "end": 24.92
+    },
+    {
+      "id": 58,
+      "text": "of",
+      "start": 24.92,
+      "end": 25.16
+    },
+    {
+      "id": 59,
+      "text": "numerical",
+      "start": 25.16,
+      "end": 25.5
+    },
+    {
+      "id": 60,
+      "text": "operations.",
+      "start": 25.5,
+      "end": 26.1
+    },
+    {
+      "id": 61,
+      "text": "In",
+      "start": 26.65,
+      "end": 27.009999999999998
+    },
+    {
+      "id": 62,
+      "text": "this",
+      "start": 27.009999999999998,
+      "end": 27.15
+    },
+    {
+      "id": 63,
+      "text": "video",
+      "start": 27.15,
+      "end": 27.47
+    },
+    {
+      "id": 64,
+      "text": "I",
+      "start": 27.47,
+      "end": 27.729999999999997
+    },
+    {
+      "id": 65,
+      "text": "will",
+      "start": 27.729999999999997,
+      "end": 27.869999999999997
+    },
+    {
+      "id": 66,
+      "text": "show",
+      "start": 27.869999999999997,
+      "end": 28.07
+    },
+    {
+      "id": 67,
+      "text": "you",
+      "start": 28.07,
+      "end": 28.229999999999997
+    },
+    {
+      "id": 68,
+      "text": "why",
+      "start": 28.229999999999997,
+      "end": 28.49
+    },
+    {
+      "id": 69,
+      "text": "compressing",
+      "start": 28.49,
+      "end": 29.07
+    },
+    {
+      "id": 70,
+      "text": "those",
+      "start": 29.07,
+      "end": 29.229999999999997
+    },
+    {
+      "id": 71,
+      "text": "operations",
+      "start": 29.229999999999997,
+      "end": 29.79
+    },
+    {
+      "id": 72,
+      "text": "is",
+      "start": 29.79,
+      "end": 30.09
+    },
+    {
+      "id": 73,
+      "text": "difficult,",
+      "start": 30.09,
+      "end": 30.49
+    },
+    {
+      "id": 74,
+      "text": "build",
+      "start": 30.77,
+      "end": 31.229999999999997
+    },
+    {
+      "id": 75,
+      "text": "up",
+      "start": 31.229999999999997,
+      "end": 31.409999999999997
+    },
+    {
+      "id": 76,
+      "text": "the",
+      "start": 31.409999999999997,
+      "end": 31.57
+    },
+    {
+      "id": 77,
+      "text": "main",
+      "start": 31.57,
+      "end": 31.849999999999998
+    },
+    {
+      "id": 78,
+      "text": "ideas",
+      "start": 31.849999999999998,
+      "end": 32.33
+    },
+    {
+      "id": 79,
+      "text": "behind",
+      "start": 32.33,
+      "end": 32.69
+    },
+    {
+      "id": 80,
+      "text": "modern",
+      "start": 32.69,
+      "end": 33.17
+    },
+    {
+      "id": 81,
+      "text": "LLM",
+      "start": 33.17,
+      "end": 33.69
+    },
+    {
+      "id": 82,
+      "text": "pruning,",
+      "start": 33.69,
+      "end": 34.01
+    },
+    {
+      "id": 83,
+      "text": "and",
+      "start": 34.39,
+      "end": 34.59
+    },
+    {
+      "id": 84,
+      "text": "then",
+      "start": 34.59,
+      "end": 34.81
+    },
+    {
+      "id": 85,
+      "text": "introduce",
+      "start": 34.81,
+      "end": 35.17
+    },
+    {
+      "id": 86,
+      "text": "the",
+      "start": 35.17,
+      "end": 35.39
+    },
+    {
+      "id": 87,
+      "text": "method",
+      "start": 35.39,
+      "end": 35.67
+    },
+    {
+      "id": 88,
+      "text": "we",
+      "start": 35.67,
+      "end": 35.93
+    },
+    {
+      "id": 89,
+      "text": "developed.",
+      "start": 35.93,
+      "end": 36.230000000000004
+    },
+    {
+      "id": 90,
+      "text": "Thanos.",
+      "start": 36.67,
+      "end": 37.03
+    }
+  ],
+  "items": [
+    {
+      "first_id": 14,
+      "last_id": 26,
+      "text": "Give a large language model a simple instruction, such as write a story.",
+      "break_after": "sentence",
+      "origin": "window_001"
+    },
+    {
+      "first_id": 27,
+      "last_id": 30,
+      "text": "And it might begin",
+      "break_after": "none",
+      "origin": "window_001"
+    },
+    {
+      "first_id": 33,
+      "last_id": 40,
+      "text": "with the familiar words, \"Once upon a time.\"",
+      "break_after": "sentence",
+      "origin": "window_001"
+    },
+    {
+      "first_id": 41,
+      "last_id": 47,
+      "text": "From the outside, that looks almost effortless.",
+      "break_after": "sentence",
+      "origin": "window_001"
+    },
+    {
+      "first_id": 48,
+      "last_id": 60,
+      "text": "But underneath this simple interaction is a very large sequence of numerical operations.",
+      "break_after": "sentence",
+      "origin": "window_001"
+    },
+    {
+      "first_id": 61,
+      "last_id": 90,
+      "text": "In this video, I will show you why compressing those operations is difficult, build up the main ideas behind modern LLM pruning, and then introduce the method we developed: Thanos.",
+      "break_after": "paragraph",
+      "origin": "window_001"
+    }
+  ],
+  "selected_source_ranges": [
+    {
+      "start_word_id": 14,
+      "end_word_id": 31
+    },
+    {
+      "start_word_id": 33,
+      "end_word_id": 91
+    }
+  ],
+  "reconstructed_narration": "Give a large language model a simple instruction, such as write a story. And it might begin with the familiar words, \"Once upon a time.\" From the outside, that looks almost effortless. But underneath this simple interaction is a very large sequence of numerical operations. In this video, I will show you why compressing those operations is difficult, build up the main ideas behind modern LLM pruning, and then introduce the method we developed: Thanos.",
+  "windows": [
+    {
+      "name": "window_001",
+      "zone_word_ids": [
+        0,
+        90
+      ],
+      "zone_seconds": [
+        2.95,
+        37.03
+      ],
+      "lookahead_lines": 0,
+      "audio_seconds": 34.68,
+      "attempts": [
+        {
+          "attempt": 1,
+          "accepted": true
+        }
+      ],
+      "kept": [
+        {
+          "first_id": 14,
+          "last_id": 26,
+          "text": "Give a large language model a simple instruction, such as write a story.",
+          "break_after": "sentence",
+          "origin": "window_001"
+        },
+        {
+          "first_id": 27,
+          "last_id": 30,
+          "text": "And it might begin",
+          "break_after": "none",
+          "origin": "window_001"
+        },
+        {
+          "first_id": 33,
+          "last_id": 40,
+          "text": "with the familiar words, \"Once upon a time.\"",
+          "break_after": "sentence",
+          "origin": "window_001"
+        },
+        {
+          "first_id": 41,
+          "last_id": 47,
+          "text": "From the outside, that looks almost effortless.",
+          "break_after": "sentence",
+          "origin": "window_001"
+        },
+        {
+          "first_id": 48,
+          "last_id": 60,
+          "text": "But underneath this simple interaction is a very large sequence of numerical operations.",
+          "break_after": "sentence",
+          "origin": "window_001"
+        },
+        {
+          "first_id": 61,
+          "last_id": 90,
+          "text": "In this video, I will show you why compressing those operations is difficult, build up the main ideas behind modern LLM pruning, and then introduce the method we developed: Thanos.",
+          "break_after": "paragraph",
+          "origin": "window_001"
+        }
+      ],
+      "dropped_previous": [],
+      "resume_from_id": null,
+      "warnings": []
+    }
+  ],
+  "review": [],
+  "remaining_duplicate_suspects": []
+}
