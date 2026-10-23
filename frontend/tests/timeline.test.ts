@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import fixture from './fixtures/layout_cases.json';
 import { computeLayout } from '../src/model/layout';
-import type { EditContext } from '../src/model/segments';
+import { type EditContext, copiesOf, edgeLimits } from '../src/model/segments';
 import {
   type Pause,
+  insertClips,
   isProposal,
   manualPause,
   pauseLimits,
+  moveClips,
   placePause,
   proposalTimeline,
   removeItems,
@@ -97,5 +99,60 @@ describe('deleting', () => {
   it('never removes every clip, and reports when nothing changed', () => {
     expect(removeItems(original, new Set(original.clips.map((clip) => clip.id)))).toBeNull();
     expect(removeItems(original, ids('missing'))).toBeNull();
+  });
+});
+
+describe('moving and copying clips', () => {
+  const ids = (...values: string[]) => new Set(values);
+  const order = (timeline: typeof original) => timeline.clips.map((clip) => clip.id);
+  const [first, second, third, last] = original.clips.map((clip) => clip.id) as [string, string, string, string];
+
+  it('moves a clip to another cut, joining the pauses where it left', () => {
+    const next = moveClips(original, ids(last), 0)!;
+    expect(order(next)).toEqual([last, first, second, third]);
+    // It goes in after the lead-in and meets the first clip directly; the
+    // tail, longer than its own pause, closes the edit.
+    expect(next.gaps.map((gap) => gap?.join ?? null)).toEqual(['lead', null, 0, null, 'tail']);
+    expect(computeLayout(next, proposal, rate).total).toBeLessThan(computeLayout(original, proposal, rate).total);
+  });
+
+  it('does nothing when the clips are dropped onto their own place', () => {
+    expect(moveClips(original, ids(second), 1)).toBeNull();
+    expect(moveClips(original, ids(second), 2)).toBeNull();
+    expect(moveClips(original, ids(second, third), 3)).toBeNull();
+    expect(moveClips(original, new Set(order(original)), 0)).toBeNull();
+  });
+
+  it('gathers clips from different places in their order', () => {
+    expect(order(moveClips(original, ids(first, third), 4)!)).toEqual([second, last, first, third]);
+    expect(order(moveClips(original, ids(first, third), 2)!)).toEqual([second, first, third, last]);
+  });
+
+  it('inserts copies of the same stretches as new clips', () => {
+    const copies = copiesOf([original.clips[1]!]);
+    const next = insertClips(original, copies, 4);
+    expect(next.clips).toHaveLength(5);
+    expect(next.gaps).toHaveLength(6);
+    const copy = next.clips[4]!;
+    expect([copy.start, copy.end, copy.startOrigin, copy.endOrigin]).toEqual([
+      original.clips[1]!.start,
+      original.clips[1]!.end,
+      'voicecut',
+      'voicecut',
+    ]);
+    expect(copy.id).not.toBe(second);
+    // The tail stays before the copy at the very end.
+    expect(next.gaps[4]?.join).toBe('tail');
+    expect(next.gaps[5]).toBeNull();
+  });
+
+  it('lets an edge extend into a neighbour only where it comes later in the recording', () => {
+    const minimum = Math.round(0.02 * rate);
+    // In recording order an edge stops at its neighbour's material.
+    expect(edgeLimits(original.clips, 0, 'end', context)).toEqual([original.clips[0]!.start + minimum, original.clips[1]!.start]);
+    // Moved first, the last clip extends as far as the recording goes.
+    const moved = moveClips(original, ids(last), 0)!;
+    expect(edgeLimits(moved.clips, 0, 'end', context)[1]).toBe(fixture.source_frames);
+    expect(edgeLimits(moved.clips, 1, 'start', context)[0]).toBe(0);
   });
 });

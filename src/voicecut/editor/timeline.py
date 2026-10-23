@@ -6,9 +6,10 @@
   inserted at every join, the lead-in/lead-out room tone and the transcript
   words.  ``Proposal.to_client`` is exactly what the browser uses to lay the
   timeline out, so browser and exporter agree on every output sample.
-* An editor timeline is an ordered list of items: clips — non-overlapping
-  source intervals in canonical WAV samples, in recording order — and pauses
-  of room tone between them (or before the first and after the last clip).
+* An editor timeline is an ordered list of items: clips — source intervals
+  in canonical WAV samples, in any order, a stretch of the recording as often
+  as the user puts it in — and pauses of room tone between them (or before
+  the first and after the last clip).
   Each clip edge carries its provenance: ``voicecut`` (the sample VoiceCut
   chose for this kind of edge), ``manual`` (placed by the user) or ``source``
   (the start or end of the media).  A pause has a length and remembers which
@@ -428,7 +429,6 @@ def validate_timeline(
     items: list[dict[str, Any]] = []
     seen: set[str] = set()
     joins_used: set[Any] = set()
-    previous_end = 0
     for index, raw in enumerate(raw_items):
         if not isinstance(raw, dict):
             raise TimelineError(f"item {index} must be an object")
@@ -455,9 +455,6 @@ def validate_timeline(
                 f"clip {item_id} must satisfy 0 <= start < end <= "
                 f"{source_frames} (got {start}..{end})"
             )
-        if start < previous_end:
-            raise TimelineError(f"clip {item_id} overlaps the previous clip")
-        previous_end = end
         start_origin = raw.get("start_origin")
         end_origin = raw.get("end_origin")
         for origin, sample, edge, anchors, media_edge in (

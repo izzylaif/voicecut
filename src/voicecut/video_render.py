@@ -9,6 +9,7 @@ motion.
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -271,6 +272,27 @@ def _video_codec_arguments(extension: str) -> list[str]:
     )
 
 
+def source_runs(timeline: Sequence[VisualTimelineSegment]) -> list[int]:
+    """The forward run of the source that each segment belongs to.
+
+    One FFmpeg input shows its pictures only forward: every segment's chain
+    takes the same decoded frames, so a segment that goes back in the source
+    (a clip the editor moved earlier, or repeated) would wait for frames the
+    others have already let pass.  Such a segment starts a new run, read from
+    an input of its own; an edit in recording order is one run.
+    """
+
+    runs: list[int] = []
+    run = 0
+    previous_end: int | None = None
+    for segment in timeline:
+        if previous_end is not None and segment.source_start_sample < previous_end:
+            run += 1
+        runs.append(run)
+        previous_end = segment.source_end_sample
+    return runs
+
+
 def _filter_graph(
     timeline: list[VisualTimelineSegment],
     *,
@@ -278,7 +300,11 @@ def _filter_graph(
     video_stream_index: int,
     stream_offset_seconds: float,
     expected_duration_seconds: float,
+    inputs: Sequence[int] | None = None,
 ) -> str:
+    """The picture of ``timeline``; ``inputs`` names each segment's FFmpeg
+    input (all the first one by default)."""
+
     filters: list[str] = []
     labels: list[str] = []
     for index, segment in enumerate(timeline):
@@ -291,8 +317,9 @@ def _filter_graph(
                 "selected audio interval has no corresponding source-video interval"
             )
         output_start = segment.output_start_sample / sample_rate
+        source = inputs[index] if inputs is not None else 0
         chain = (
-            f"[0:{video_stream_index}]setpts=PTS-STARTPTS,"
+            f"[{source}:{video_stream_index}]setpts=PTS-STARTPTS,"
             f"trim=start={max(0.0, visual_start):.9f}:end={visual_end:.9f},"
             "settb=expr=1/1000000,"
             f"setpts=PTS-STARTPTS+{output_start:.9f}/TB"
@@ -426,6 +453,10 @@ def render_edited_video(
         raise FileExistsError(resolved_manifest_path)
     temporary = _prepare_destination(output_path, overwrite=overwrite)
     filter_script = temporary.with_suffix(temporary.suffix + ".filter.txt")
+    # Input 0 is the source and 1 the edited audio; every further run of the
+    # source (see source_runs) reads the source again from its own input.
+    runs = source_runs(timeline)
+    extra_runs = max(runs, default=0)
     filter_script.write_text(
         _filter_graph(
             timeline,
@@ -433,6 +464,7 @@ def render_edited_video(
             video_stream_index=source_info.video_stream.index,
             stream_offset_seconds=stream_offset,
             expected_duration_seconds=expected_duration,
+            inputs=[0 if run == 0 else run + 1 for run in runs],
         ),
         encoding="utf-8",
     )
@@ -450,6 +482,11 @@ def render_edited_video(
                 str(source_video),
                 "-i",
                 str(final_audio),
+                *[
+                    argument
+                    for _ in range(extra_runs)
+                    for argument in ("-i", str(source_video))
+                ],
                 *filter_script_arguments(ffmpeg_path, filter_script),
                 "-map",
                 "[vout]",

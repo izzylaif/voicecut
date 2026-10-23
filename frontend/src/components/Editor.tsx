@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, CircleHelp, Download, FileAudio, FileVideo, Settings, Sparkles } from 'lucide-react';
 import { api, followJob } from '../api';
-import { confirmAction, desktop, documentOpened, editText, invoke, onMenu } from '../desktop';
+import { confirmAction, desktop, documentOpened, editableTarget, editText, invoke, onMenu } from '../desktop';
 import { findLocalModel, useLocalModels } from '../localModels';
 import { EditorStore, errorText } from '../store';
 import { Timeline } from '../timeline/Timeline';
@@ -22,7 +22,15 @@ const SHORTCUTS: [string, string][] = [
   ['Space', 'Play / pause'],
   ['< / >', 'Slower / faster preview (0.5× to 2.5×, same pitch)'],
   ['Drag a clip edge', 'Trim or extend it; later clips follow'],
-  ['⌥ while dragging', 'Ignore snapping'],
+  ['⌥ while dragging an edge', 'Ignore snapping'],
+  ['Drag a clip', 'Move it (and the other selected clips) to another cut'],
+  ['⌥ while dragging a clip', 'Drop a copy instead'],
+  ['⇧-click', 'Select every clip and pause from the last one clicked'],
+  [mod + 'click', 'Select one more, or one less'],
+  [mod + 'A', 'Select everything'],
+  [mod + 'C / ' + mod + 'X', 'Copy / cut the selected clips'],
+  [mod + 'V', 'Paste them at the playhead (splits a clip)'],
+  [mod + 'D', 'Duplicate the selected clips after them'],
   ['S or ' + mod + 'B', 'Split at the playhead'],
   ['P', 'Insert a 1 s pause at the playhead (splits a clip)'],
   ['Drag a pause edge', 'Make the pause longer or shorter'],
@@ -139,7 +147,7 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
     }
     if (store.proposal && store.isEdited) {
       const ok = await confirmAction(
-        'Voice Cut edits the recording again, leaving out what you deleted. Your other manual edits are replaced with a new automatic edit. Continue?',
+        'Voice Cut edits the recording again, in recording order, leaving out what you deleted. Your other manual edits, and clips you moved or copied, are replaced with a new automatic edit. Continue?',
         { title: 'Voice Cut again?', ok: 'Voice Cut' },
       );
       if (!ok) return;
@@ -285,6 +293,10 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
       else if (command && (code === 'Equal' || key === '+' || key === '=')) store.zoom(1.6);
       else if (command && (code === 'Minus' || key === '-')) store.zoom(1 / 1.6);
       else if (command && code === 'KeyA') store.selectAll();
+      else if (command && code === 'KeyC') store.copySelection();
+      else if (command && code === 'KeyX') store.cutSelection();
+      else if (command && code === 'KeyV') store.paste();
+      else if (command && code === 'KeyD') store.duplicateSelection();
       else if (command) handled = false;
       else if (key === '<' || (event.shiftKey && code === 'Comma')) store.stepRate(-1);
       else if (key === '>' || (event.shiftKey && code === 'Period')) store.stepRate(1);
@@ -306,8 +318,20 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
       else handled = false;
       if (handled) event.preventDefault();
     };
+    // Edit › Copy, Cut and Paste of the desktop app's menu arrive as clipboard events.
+    const onClipboard = (event: ClipboardEvent) => {
+      if (modalRef.current || editableTarget()) return;
+      event.preventDefault();
+      if (event.type === 'copy') store.copySelection();
+      else if (event.type === 'cut') store.cutSelection();
+      else store.paste();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    for (const type of ['copy', 'cut', 'paste'] as const) document.addEventListener(type, onClipboard);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      for (const type of ['copy', 'cut', 'paste'] as const) document.removeEventListener(type, onClipboard);
+    };
   }, [store]);
 
   // Flush the autosave before the page goes away.

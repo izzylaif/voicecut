@@ -11,6 +11,10 @@
  * dragging a clip's end moves everything after it; dragging a clip's start
  * pulls material in from (or gives it back to) the left while the rest of the
  * clip and everything after it stay where they are on screen.
+ *
+ * Dragging a clip's body moves the selected clips to the cut nearest the
+ * pointer (⌥ drops copies instead); a press that does not move puts the
+ * playhead there.  ⇧-click selects a range, ⌘/Ctrl-click one item more or less.
  */
 import { delta as formatDelta, duration as formatDuration, timecode } from '../format';
 import { clipAt, sourceAt, type ClipView, type Layout } from '../model/layout';
@@ -33,6 +37,8 @@ const EDGE_HIT_PX = 7;
 const MIN_GRAB_WIDTH_PX = 8;
 const SNAP_PX = 8;
 const AUTOSCROLL_ZONE = 48;
+/** How far a press on a clip must travel to become a move. */
+const MOVE_THRESHOLD_PX = 5;
 const WORD_ROW = 18;
 const TITLE_ROW = 16;
 
@@ -65,6 +71,22 @@ interface ScrubDrag {
   resume: boolean;
 }
 
+/** A press on a clip's body: a click, or a move once it travels. */
+interface MoveDrag {
+  kind: 'move';
+  /** The clip pressed. */
+  id: string;
+  startX: number;
+  pointerX: number;
+  altKey: boolean;
+  moving: boolean;
+  /** The clip boundary the clips would drop at (timeline.ts insertClips). */
+  boundary: number | null;
+  /** Released without moving, a press on one clip of several selects it alone. */
+  narrow: boolean;
+  resume: boolean;
+}
+
 interface EdgeHit {
   target: 'clip' | 'pause';
   /** Clip index, or gap index for a pause. */
@@ -85,7 +107,7 @@ export class TimelineView {
   private width = 0;
   private height = 0;
   private ratio = 1;
-  private drag: TrimDrag | ScrubDrag | null = null;
+  private drag: TrimDrag | ScrubDrag | MoveDrag | null = null;
   private hover: EdgeHit | null = null;
   private readonly sheets = new Map<number, HTMLImageElement>();
   private readonly textWidths = new Map<string, number>();
@@ -258,7 +280,30 @@ export class TimelineView {
       }
       const under = this.itemAt(x);
       const id = under.clip ?? (row === 'audio' ? under.pause : null);
-      if (id) store.select(id, event.shiftKey || event.metaKey || event.ctrlKey ? 'toggle' : 'replace');
+      if (id && (event.shiftKey || event.metaKey || event.ctrlKey)) {
+        store.select(id, event.shiftKey ? 'range' : 'toggle');
+        return;
+      }
+      if (under.clip) {
+        const narrow = store.selection.has(under.clip) && store.selection.size > 1;
+        if (!store.selection.has(under.clip)) store.select(under.clip);
+        const resume = store.playing;
+        if (resume) store.pause();
+        this.scrubTo(x);
+        this.drag = {
+          kind: 'move',
+          id: under.clip,
+          startX: x,
+          pointerX: x,
+          altKey: event.altKey,
+          moving: false,
+          boundary: null,
+          narrow,
+          resume,
+        };
+        return;
+      }
+      if (id) store.select(id);
       else store.select(null);
     }
     const resume = store.playing;
@@ -280,9 +325,21 @@ export class TimelineView {
       this.scrubTo(x);
       return;
     }
+    if (drag?.kind === 'move') {
+      drag.pointerX = x;
+      drag.altKey = event.altKey;
+      if (!drag.moving && Math.abs(x - drag.startX) >= MOVE_THRESHOLD_PX) drag.moving = true;
+      if (drag.moving) {
+        drag.boundary = this.boundaryAt(x);
+        this.canvas.style.cursor = drag.altKey ? 'copy' : 'grabbing';
+        this.store.redraw();
+      }
+      return;
+    }
     const hit = this.hitEdge(x, y);
     const row = this.rowAt(y);
-    this.canvas.style.cursor = hit ? 'ew-resize' : row === 'ruler' || row === 'overview' ? 'pointer' : 'default';
+    const onClip = !hit && (row === 'audio' || row === 'video') && this.itemAt(x).clip !== null;
+    this.canvas.style.cursor = hit ? 'ew-resize' : onClip ? 'grab' : row === 'ruler' || row === 'overview' ? 'pointer' : 'default';
     if (hit?.target !== this.hover?.target || hit?.index !== this.hover?.index || hit?.edge !== this.hover?.edge) {
       this.hover = hit;
       this.store.redraw();
@@ -303,9 +360,39 @@ export class TimelineView {
       }
     } else if (drag?.kind === 'scrub' && drag.resume) {
       void this.store.play();
+    } else if (drag?.kind === 'move') {
+      this.canvas.style.cursor = 'grab';
+      if (drag.moving && drag.boundary !== null) this.store.dropSelection(drag.boundary, drag.altKey);
+      else if (drag.narrow) this.store.select(drag.id);
+      if (drag.resume) void this.store.play();
     }
     this.store.redraw();
   };
+
+  /** The clip boundary whose cut is nearest `x` (0: before the first clip). */
+  private boundaryAt(x: number): number {
+    const layout = this.store.layout;
+    const count = this.store.timeline.clips.length;
+    const starts = new Map(layout.clips.map((clip) => [clip.segment, clip.outStart]));
+    const frame = this.frameAt(x);
+    let best = count;
+    let distance = Math.abs(layout.total - frame);
+    for (let boundary = 0; boundary < count; boundary += 1) {
+      const at = starts.get(boundary);
+      if (at === undefined) continue;
+      if (Math.abs(at - frame) < distance) {
+        distance = Math.abs(at - frame);
+        best = boundary;
+      }
+    }
+    return best;
+  }
+
+  /** Output frame where clips dropped at `boundary` would start. */
+  private boundaryFrame(boundary: number): number {
+    const layout = this.store.layout;
+    return layout.clips.find((clip) => clip.segment === boundary)?.outStart ?? layout.total;
+  }
 
   private onContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
@@ -494,9 +581,23 @@ export class TimelineView {
     return growing ? length >= high : length <= low;
   }
 
-  /** Auto-scroll while an edge is dragged near the side of the timeline. */
+  /** Auto-scroll while an edge or clips are dragged near the side of the timeline. */
   private autoScroll(): void {
     const drag = this.drag;
+    if (drag?.kind === 'move' && drag.moving) {
+      const x = drag.pointerX;
+      let speed = 0;
+      if (x < AUTOSCROLL_ZONE) speed = -(AUTOSCROLL_ZONE - x) / AUTOSCROLL_ZONE;
+      else if (x > this.width - AUTOSCROLL_ZONE) speed = (x - (this.width - AUTOSCROLL_ZONE)) / AUTOSCROLL_ZONE;
+      if (speed === 0) return;
+      const store = this.store;
+      const scroll = store.clampScroll(store.view.scroll + (Math.max(-1, Math.min(1, speed)) * 14) / store.view.pxPerSecond);
+      if (scroll === store.view.scroll) return;
+      store.view = { ...store.view, scroll };
+      drag.boundary = this.boundaryAt(x);
+      store.redraw();
+      return;
+    }
     if (drag?.kind !== 'trim') return;
     const x = drag.pointerX;
     let speed = 0;
@@ -536,7 +637,34 @@ export class TimelineView {
     layout.clips.forEach((clip, index) => this.drawClip(clip, index, rows));
     this.drawThroughEdits(layout, rows);
     this.drawEdgeFeedback(layout, rows);
+    this.drawMove(layout, rows);
     this.drawPlayhead(frame);
+  }
+
+  /** Clips being moved show faded, and a bar marks the cut they would drop at. */
+  private drawMove(layout: Layout, rows: ReturnType<TimelineView['rows']>): void {
+    const drag = this.drag;
+    if (drag?.kind !== 'move' || !drag.moving || drag.boundary === null) return;
+    const context = this.context;
+    const top = this.video ? rows.videoTop : rows.audioTop;
+    const bottom = rows.audioTop + rows.audioHeight;
+    const selection = this.store.selection;
+    const clips = this.store.timeline.clips;
+    if (!drag.altKey) {
+      context.fillStyle = this.colors.laneBackground;
+      context.globalAlpha = 0.6;
+      for (const clip of layout.clips) {
+        if (!selection.has(clips[clip.segment]!.id)) continue;
+        const left = this.xOf(clip.outStart);
+        context.fillRect(left, top, this.xOf(clip.outEnd) - left, bottom - top);
+      }
+      context.globalAlpha = 1;
+    }
+    const x = Math.round(this.xOf(this.boundaryFrame(drag.boundary)));
+    context.fillStyle = this.colors.selection;
+    context.fillRect(x - 1, top - 4, 3, bottom - top + 8);
+    context.fillRect(x - 5, top - 4, 11, 3);
+    context.fillRect(x - 5, bottom + 1, 11, 3);
   }
 
   private drawOverview(layout: Layout, frame: number): void {

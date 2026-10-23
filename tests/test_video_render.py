@@ -17,6 +17,7 @@ from voicecut.video_render import (
     build_visual_timeline,
     load_visual_timeline,
     render_edited_video,
+    source_runs,
 )
 
 
@@ -374,3 +375,112 @@ def test_video_render_muxes_final_audio_with_selected_video(
         text=True,
     ).stdout.strip()
     assert aspect == "2:1"
+
+
+def test_a_segment_going_back_in_the_source_starts_a_new_run() -> None:
+    def segment(start: int, end: int, out: int) -> VisualTimelineSegment:
+        return VisualTimelineSegment(
+            clip_index=0,
+            source_start_sample=start,
+            source_end_sample=end,
+            output_start_sample=out,
+            output_end_sample=out + end - start,
+        )
+
+    in_order = [segment(0, 100, 0), segment(200, 300, 100), segment(300, 400, 200)]
+    assert source_runs(in_order) == [0, 0, 0]
+    moved = [segment(300, 400, 0), segment(0, 100, 100), segment(200, 300, 200)]
+    assert source_runs(moved) == [0, 1, 1]
+    repeated = [segment(0, 100, 0), segment(0, 100, 100), segment(50, 150, 200)]
+    assert source_runs(repeated) == [0, 1, 2]
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="FFmpeg is not installed")
+def test_moved_and_repeated_clips_show_their_own_pictures(tmp_path: Path) -> None:
+    """A clip moved earlier, and the same clip again after it."""
+
+    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    source = tmp_path / "source.mkv"
+    output = tmp_path / "output.mkv"
+    filter_script = tmp_path / "timeline.txt"
+    subprocess.run(
+        [
+            ffmpeg,
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=64x64:rate=10:duration=5",
+            "-c:v",
+            "ffv1",
+            str(source),
+        ],
+        check=True,
+    )
+    # 3.0-3.5 s first, then 0.5-1.0 s, then 3.0-3.5 s again.
+    spans = [(3000, 3500), (500, 1000), (3000, 3500)]
+    timeline = [
+        VisualTimelineSegment(
+            clip_index=index,
+            source_start_sample=start,
+            source_end_sample=end,
+            output_start_sample=index * 500,
+            output_end_sample=(index + 1) * 500,
+        )
+        for index, (start, end) in enumerate(spans)
+    ]
+    runs = source_runs(timeline)
+    assert runs == [0, 1, 1]  # the repeat goes forward from 1.0 s
+    filter_script.write_text(
+        _filter_graph(
+            timeline,
+            sample_rate=1000,
+            video_stream_index=0,
+            stream_offset_seconds=0.0,
+            expected_duration_seconds=1.5,
+            inputs=runs,
+        ),
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            ffmpeg,
+            "-v",
+            "error",
+            "-y",
+            *[
+                argument
+                for _ in range(max(runs) + 1)
+                for argument in ("-i", str(source))
+            ],
+            *filter_script_arguments(ffmpeg, filter_script),
+            "-map",
+            "[vout]",
+            "-c:v",
+            "ffv1",
+            "-fps_mode",
+            "vfr",
+            str(output),
+        ],
+        check=True,
+        timeout=120,
+    )
+
+    def frame_hashes(path: Path) -> list[str]:
+        result = subprocess.run(
+            [ffmpeg, "-v", "error", "-i", str(path), "-f", "framemd5", "-"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return [
+            line.rsplit(",", 1)[-1].strip()
+            for line in result.stdout.splitlines()
+            if line and not line.startswith("#")
+        ]
+
+    source_hashes = frame_hashes(source)
+    used = [source_hashes.index(value) for value in frame_hashes(output)]
+    assert used == [30, 31, 32, 33, 34, 5, 6, 7, 8, 9, 30, 31, 32, 33, 34]

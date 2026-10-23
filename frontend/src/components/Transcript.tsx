@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { computeLayout, sourceAt } from '../model/layout';
+import { clipAt, computeLayout, sourceAt } from '../model/layout';
 import { wordsBetween } from '../model/words';
 import type { EditorStore } from '../store';
 import type { Word } from '../types';
@@ -14,8 +14,10 @@ interface Block {
 }
 
 /**
- * The text of the edit, clip by clip.  Words VoiceCut had removed and that an
- * edit brought back are marked; clicking a word moves the playhead to it.
+ * The text of the edit, clip by clip, in timeline order (a clip moved or
+ * copied shows its words where it plays).  Words VoiceCut had removed and
+ * that an edit brought back are marked; clicking a word moves the playhead to
+ * it.
  */
 export function Transcript({ store }: { store: EditorStore }) {
   const committed = useSyncExternalStore(store.subscribe, () => store.committed);
@@ -47,7 +49,10 @@ export function Transcript({ store }: { store: EditorStore }) {
     const words = proposal?.words ?? [];
     let current: HTMLElement | null = null;
     return store.onFrame((frame, playing) => {
-      const sample = sourceAt(store.layout, Math.min(frame, store.layout.total - 1));
+      const at = Math.min(frame, store.layout.total - 1);
+      const sample = sourceAt(store.layout, at);
+      // A stretch can play more than once: the word is the one in this clip.
+      const block = clipAt(store.layout, at);
       let next: HTMLElement | null = null;
       if (sample !== null && words.length) {
         let low = 0;
@@ -58,7 +63,7 @@ export function Transcript({ store }: { store: EditorStore }) {
           else high = middle;
         }
         if (low < words.length && words[low]!.start <= sample) {
-          next = list.current?.querySelector<HTMLElement>(`[data-word="${low}"]`) ?? null;
+          next = list.current?.querySelector<HTMLElement>(`[data-word="${block}-${low}"]`) ?? null;
         }
       }
       if (next === current) return;
@@ -93,7 +98,7 @@ export function Transcript({ store }: { store: EditorStore }) {
             className="transcript-clip"
             title="Select this clip"
             onClick={(event) => {
-              store.select(block.id, event.shiftKey || event.metaKey ? 'toggle' : 'replace');
+              store.select(block.id, event.shiftKey ? 'range' : event.metaKey || event.ctrlKey ? 'toggle' : 'replace');
               store.setPlayhead(block.outStart);
               store.reveal(block.outStart);
             }}
@@ -105,7 +110,7 @@ export function Transcript({ store }: { store: EditorStore }) {
             {block.words.map(({ word, index }) => (
               <span
                 key={index}
-                data-word={index}
+                data-word={`${position}-${index}`}
                 className={word.kept ? 'word' : 'word restored'}
                 title={word.kept ? undefined : 'Removed by Voice Cut, brought back by your edit'}
                 onClick={() => seek(block, word)}

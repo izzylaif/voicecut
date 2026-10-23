@@ -13,13 +13,15 @@ import { OutputPlayer } from './audio/player';
 import { remember, remembered } from './desktop';
 import { History } from './model/history';
 import { computeLayout, outputAt, sourceAt, clipAt, editPoints, pauseAt, type Layout } from './model/layout';
-import type { EditContext, Edge, Segment } from './model/segments';
+import { type EditContext, type Edge, type Segment, copiesOf } from './model/segments';
 import {
   type Timeline,
   fromItems,
+  insertClips,
   isProposal,
   itemIds,
   manualPause,
+  moveClips,
   placePause,
   proposalTimeline,
   removeItems,
@@ -75,6 +77,10 @@ export class EditorStore {
   private draft: Timeline | null = null;
   layout: Layout;
   selection: ReadonlySet<string> = new Set();
+  /** The item a Shift-click selects up to (the last one clicked alone or with ⌘). */
+  private anchor: string | null = null;
+  /** Clips copied or cut, pasted as new clips of the same stretches. */
+  private clipboard: Segment[] = [];
   view: ViewState = { pxPerSecond: 50, scroll: 0 };
   viewportWidth = 1000;
   /** The whole edit fits the view (until the user zooms). */
@@ -397,16 +403,132 @@ export class EditorStore {
     this.commit(trimClip(this.timeline, segment, edge, sample, this.context));
   }
 
+  // -- moving and copying clips ---------------------------------------------------------
+  /** The clips of the selection, in timeline order. */
+  private selectedClips(): Segment[] {
+    return this.timeline.clips.filter((clip) => this.selection.has(clip.id));
+  }
+
+  copySelection(): boolean {
+    const clips = this.selectedClips();
+    if (clips.length === 0) {
+      this.notify('Select a clip to copy it');
+      return false;
+    }
+    this.clipboard = clips;
+    this.notify(clips.length === 1 ? 'Copied 1 clip' : `Copied ${clips.length} clips`);
+    return true;
+  }
+
+  cutSelection(): void {
+    if (this.copySelection()) this.deleteSelection();
+  }
+
+  get canPaste(): boolean {
+    return this.clipboard.length > 0;
+  }
+
+  /**
+   * Paste the copied clips at the playhead: inside a clip it is split there,
+   * at a cut or inside a pause they go in at that cut.
+   */
+  paste(frame = this.frame()): void {
+    if (!this.clipboard.length) {
+      this.notify('Copy or cut a clip first');
+      return;
+    }
+    const near = Math.round(0.01 * this.sampleRate);
+    let timeline = this.timeline;
+    let boundary = timeline.clips.length;
+    const inPause = pauseAt(this.layout, frame);
+    const index = inPause >= 0 || frame >= this.layout.total ? -1 : clipAt(this.layout, frame);
+    const clip = index >= 0 ? this.layout.clips[index]! : null;
+    if (inPause >= 0) boundary = this.layout.pauses[inPause]!.gap;
+    else if (clip && frame - clip.outStart < near) boundary = clip.segment;
+    else if (clip && clip.outEnd - frame < near) boundary = clip.segment + 1;
+    else if (clip) {
+      const split = splitClip(timeline, clip.segment, clip.sourceAtStart + (frame - clip.outStart), this.context);
+      if (split) {
+        timeline = split;
+        boundary = clip.segment + 1;
+      } else boundary = clip.segment + 1;
+    }
+    const copies = copiesOf(this.clipboard);
+    this.place(insertClips(timeline, copies, boundary), 'Pasted', copies);
+  }
+
+  /** A copy of the selected clips right after the last of them. */
+  duplicateSelection(): void {
+    const clips = this.selectedClips();
+    if (clips.length === 0) {
+      this.notify('Select a clip to duplicate it');
+      return;
+    }
+    const last = this.timeline.clips.findIndex((clip) => clip.id === clips[clips.length - 1]!.id);
+    const copies = copiesOf(clips);
+    this.place(insertClips(this.timeline, copies, last + 1), 'Duplicated', copies);
+  }
+
+  /** Drop the selected clips at clip boundary `boundary`, moved or (`copy`) as copies. */
+  dropSelection(boundary: number, copy: boolean): void {
+    const clips = this.selectedClips();
+    if (clips.length === 0) return;
+    if (copy) {
+      const copies = copiesOf(clips);
+      this.place(insertClips(this.timeline, copies, boundary), 'Copied', copies);
+      return;
+    }
+    const next = moveClips(this.timeline, new Set(clips.map((clip) => clip.id)), boundary);
+    if (next) this.place(next, 'Moved', clips);
+    else this.changed();
+  }
+
+  /** Commit a timeline with `placed` clips new or moved, select them and put the playhead on the first. */
+  private place(next: Timeline, verb: string, placed: readonly Segment[]): void {
+    const ids = placed.map((clip) => clip.id);
+    this.commit(next, { keepPlayhead: true });
+    this.selection = new Set(ids);
+    this.anchor = ids[0] ?? null;
+    const first = this.timeline.clips.findIndex((clip) => clip.id === ids[0]);
+    const start = this.layout.clips.find((clip) => clip.segment === first);
+    if (start) this.setPlayhead(start.outStart);
+    this.notify(`${verb} ${ids.length === 1 ? '1 clip' : `${ids.length} clips`}`);
+    this.changed();
+  }
+
   // -- selection --------------------------------------------------------------------
-  select(id: string | null, mode: 'replace' | 'toggle' = 'replace'): void {
-    if (id === null) this.selection = new Set();
-    else if (mode === 'toggle') {
+  /**
+   * Select `id`: alone (`replace`), added or taken away (`toggle`, ⌘-click),
+   * or every item from the last one clicked up to it (`range`, ⇧-click).
+   */
+  select(id: string | null, mode: 'replace' | 'toggle' | 'range' = 'replace'): void {
+    if (id === null) {
+      this.selection = new Set();
+      this.anchor = null;
+    } else if (mode === 'toggle') {
       const next = new Set(this.selection);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       this.selection = next;
-    } else this.selection = new Set([id]);
+      this.anchor = id;
+    } else if (mode === 'range' && this.anchor !== null) {
+      const order = this.itemOrder();
+      const from = order.indexOf(this.anchor);
+      const to = order.indexOf(id);
+      if (from < 0 || to < 0) {
+        this.selection = new Set([id]);
+        this.anchor = id;
+      } else this.selection = new Set(order.slice(Math.min(from, to), Math.max(from, to) + 1));
+    } else {
+      this.selection = new Set([id]);
+      this.anchor = id;
+    }
     this.changed();
+  }
+
+  /** Ids of the clips and pauses in timeline order. */
+  private itemOrder(): string[] {
+    return toItems(this.timeline).map((item) => item.id);
   }
 
   selectAll(): void {

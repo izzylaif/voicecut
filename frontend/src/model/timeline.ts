@@ -1,6 +1,7 @@
 /**
- * The editable timeline: clips of the original recording, in recording
- * order, with pauses of room tone between them.
+ * The editable timeline: clips of the original recording, in the order the
+ * user arranged them (recording order unless clips were moved or copied),
+ * with pauses of room tone between them.
  *
  * `gaps[k]` is the pause before clip `k` (`gaps[clips.length]` the one after
  * the last clip), or null where two clips meet directly, so two pauses can
@@ -137,7 +138,7 @@ export function isProposal(timeline: Timeline, proposal: Proposal | null): boole
   );
 }
 
-/** Move a clip edge (clips keep their recording order; pauses stay). */
+/** Move a clip edge (everything after it follows; pauses stay). */
 export function trimClip(timeline: Timeline, clip: number, edge: Edge, sample: number, context: EditContext): Timeline {
   return { clips: trimEdge(timeline.clips, clip, edge, sample, context), gaps: timeline.gaps };
 }
@@ -206,6 +207,38 @@ export function removeItems(timeline: Timeline, ids: ReadonlySet<string>): Timel
     gaps = [...gaps.slice(0, index), kept, ...gaps.slice(index + 2)];
   }
   return changed ? { clips, gaps } : null;
+}
+
+/**
+ * Put `clips` in at clip boundary `boundary` (before clip `boundary`): after
+ * the pause there, if any, and meeting the clip that follows directly.
+ */
+export function insertClips(timeline: Timeline, clips: readonly Segment[], boundary: number): Timeline {
+  const at = Math.max(0, Math.min(timeline.clips.length, boundary));
+  return {
+    clips: [...timeline.clips.slice(0, at), ...clips, ...timeline.clips.slice(at)],
+    gaps: [...timeline.gaps.slice(0, at + 1), ...clips.map(() => null), ...timeline.gaps.slice(at + 1)],
+  };
+}
+
+/**
+ * Move the clips `ids` (in their timeline order) to clip boundary `boundary`
+ * of `timeline`.  Where they leave, the pauses on either side join as on a
+ * delete.  Null when nothing would change: no clip to move, all of them, or a
+ * run of clips dropped onto its own place.
+ */
+export function moveClips(timeline: Timeline, ids: ReadonlySet<string>, boundary: number): Timeline | null {
+  const moving = timeline.clips.filter((clip) => ids.has(clip.id));
+  if (moving.length === 0 || moving.length === timeline.clips.length) return null;
+  const positions = timeline.clips.flatMap((clip, index) => (ids.has(clip.id) ? [index] : []));
+  const first = positions[0]!;
+  const last = positions[positions.length - 1]!;
+  const contiguous = last - first + 1 === positions.length;
+  if (contiguous && boundary >= first && boundary <= last + 1) return null;
+  const rest = removeItems(timeline, new Set(moving.map((clip) => clip.id)));
+  if (!rest) return null;
+  const before = timeline.clips.slice(0, boundary).filter((clip) => !ids.has(clip.id)).length;
+  return insertClips(rest, moving, before);
 }
 
 /** Whether clip `index` and the next one continue the same source audio. */

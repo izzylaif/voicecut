@@ -130,7 +130,6 @@ def test_validation_accepts_the_proposal_and_normalises(proposal) -> None:
 @pytest.mark.parametrize(
     ("change", "message"),
     [
-        (lambda c: c[1].update(source_start_sample=60_000), "overlaps"),
         (lambda c: c[0].update(source_end_sample=24_000), "must satisfy"),
         (lambda c: c[0].update(source_end_sample=73_000), "not a VoiceCut end"),
         (lambda c: c[0].update(start_origin="source"), "media edge"),
@@ -152,6 +151,25 @@ def test_validation_rejects_broken_clips(proposal, change, message: str) -> None
         validate_timeline(
             _timeline(proposal, items), source_frames=FIXTURE_FRAMES, proposal=proposal
         )
+
+
+def test_clips_may_come_in_any_order_and_more_than_once(proposal) -> None:
+    clips = _clips(proposal.timeline_items())
+    copy = {**clips[0], "id": "m-copy"}
+    overlapping = {**clips[1], "id": "m-wide", "source_start_sample": 30_000}
+    overlapping["start_origin"] = "manual"
+    order = [clips[2], clips[0], overlapping, copy, clips[3]]
+    timeline = validate_timeline(
+        _timeline(proposal, order), source_frames=FIXTURE_FRAMES, proposal=proposal
+    )
+    assert [item["id"] for item in timeline["items"]] == [
+        "vc-0002",
+        "vc-0000",
+        "m-wide",
+        "m-copy",
+        "vc-0003",
+    ]
+    assert not matches_proposal(timeline, proposal)
 
 
 def _pause(

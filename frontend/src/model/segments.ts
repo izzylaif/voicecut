@@ -1,7 +1,8 @@
 /**
- * The editable timeline: an ordered list of non-overlapping source intervals
- * of the original recording (canonical samples).  Every operation here is pure
- * and returns a new array, so undo/redo is just keeping old arrays.
+ * The editable timeline: an ordered list of source intervals of the original
+ * recording (canonical samples), in any order and as often as the user puts a
+ * stretch in.  Every operation here is pure and returns a new array, so
+ * undo/redo is just keeping old arrays.
  *
  * Edge provenance follows the backend (timeline.py): an edge is `voicecut`
  * when it sits exactly on a boundary of that kind VoiceCut chose, `source` at
@@ -67,7 +68,12 @@ export function originFor(edge: Edge, sample: number, context: EditContext): Ori
   return 'manual';
 }
 
-/** The range an edge of segment `index` may move in. */
+/**
+ * The range an edge of segment `index` may move in: anywhere in the recording,
+ * except into the material of a neighbour that comes after it in the
+ * recording too (dragging there would play those words twice).  A clip moved
+ * away from its place, or a copy, extends freely.
+ */
 export function edgeLimits(
   segments: readonly Segment[],
   index: number,
@@ -77,11 +83,18 @@ export function edgeLimits(
   const segment = segments[index]!;
   const minimum = minimumLength(context.sampleRate);
   if (edge === 'start') {
-    const previous = index > 0 ? segments[index - 1]!.end : 0;
+    const before = index > 0 ? segments[index - 1]!.end : 0;
+    const previous = before <= segment.start ? before : 0;
     return [previous, Math.max(previous, segment.end - minimum)];
   }
-  const following = index + 1 < segments.length ? segments[index + 1]!.start : context.sourceFrames;
+  const after = index + 1 < segments.length ? segments[index + 1]!.start : context.sourceFrames;
+  const following = after >= segment.end ? after : context.sourceFrames;
   return [Math.min(following, segment.start + minimum), following];
+}
+
+/** The same stretches as new clips, for a paste or a copy. */
+export function copiesOf(segments: readonly Segment[]): Segment[] {
+  return segments.map((segment) => ({ ...segment, id: newSegmentId() }));
 }
 
 /** Move one edge to `sample` (clamped); everything after it ripples. */

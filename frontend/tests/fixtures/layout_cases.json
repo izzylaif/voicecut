@@ -2899,6 +2899,439 @@
    "total": 286584
   },
   {
+   "name": "moved clip",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 136320,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 135840,
+     "output_end_sample": 183840,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 183360,
+     "output_end_sample": 203040,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 202560,
+     "output_end_sample": 252560,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 252368,
+     "output_end_sample": 312368,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 1440,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 310928,
+     "output_end_sample": 341168,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 1440,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 136320,
+     "source_interval_index": 0,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 2,
+     "kind": "source",
+     "output_start_sample": 136320,
+     "output_end_sample": 183840,
+     "source_interval_index": 1,
+     "source_start_sample": 24480,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 3,
+     "kind": "room_tone",
+     "output_start_sample": 183840,
+     "output_end_sample": 202560,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 202560,
+     "output_end_sample": 252560,
+     "source_interval_index": 2,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 5,
+     "kind": "source",
+     "output_start_sample": 252560,
+     "output_end_sample": 312368,
+     "source_interval_index": 3,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 6,
+     "kind": "room_tone",
+     "output_start_sample": 312368,
+     "output_end_sample": 341168,
+     "join_id": "lead"
+    }
+   ],
+   "total": 341168
+  },
+  {
+   "name": "copied clip",
+   "with_proposal": true,
+   "items": [
+    {
+     "kind": "pause",
+     "id": "vp-lead",
+     "length": 16320,
+     "origin": "voicecut",
+     "join": "lead"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0000",
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0000",
+     "length": 18720,
+     "origin": "voicecut",
+     "join": 0
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0001",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0002",
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "clip",
+     "id": "m-copy",
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-0002",
+     "length": 3840,
+     "origin": "voicecut",
+     "join": 2
+    },
+    {
+     "kind": "clip",
+     "id": "vc-0003",
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "start_origin": "voicecut",
+     "end_origin": "voicecut"
+    },
+    {
+     "kind": "pause",
+     "id": "vp-tail",
+     "length": 28800,
+     "origin": "voicecut",
+     "join": "tail"
+    }
+   ],
+   "placed": [
+    {
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16800,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 2400,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 0
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 63840,
+     "output_end_sample": 83520,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 1
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 132848,
+     "output_end_sample": 192848,
+     "source_start_sample": 200000,
+     "source_end_sample": 260000,
+     "fade_in_samples": 192,
+     "fade_out_samples": 480,
+     "source_interval_index": 2
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 192368,
+     "output_end_sample": 242368,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 192,
+     "source_interval_index": 3
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 242176,
+     "output_end_sample": 246688,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 192,
+     "fade_out_samples": 480,
+     "source_interval_index": null
+    },
+    {
+     "kind": "source",
+     "output_start_sample": 246208,
+     "output_end_sample": 366208,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000,
+     "fade_in_samples": 480,
+     "fade_out_samples": 480,
+     "source_interval_index": 4
+    },
+    {
+     "kind": "room_tone",
+     "output_start_sample": 365728,
+     "output_end_sample": 395008,
+     "source_start_sample": null,
+     "source_end_sample": null,
+     "fade_in_samples": 480,
+     "fade_out_samples": 4800,
+     "source_interval_index": null
+    }
+   ],
+   "trace": [
+    {
+     "segment_index": 0,
+     "kind": "room_tone",
+     "output_start_sample": 0,
+     "output_end_sample": 16320,
+     "join_id": "lead"
+    },
+    {
+     "segment_index": 1,
+     "kind": "source",
+     "output_start_sample": 16320,
+     "output_end_sample": 64320,
+     "source_interval_index": 0,
+     "source_start_sample": 24000,
+     "source_end_sample": 72000
+    },
+    {
+     "segment_index": 2,
+     "kind": "room_tone",
+     "output_start_sample": 64320,
+     "output_end_sample": 83040,
+     "join_id": "join_00000"
+    },
+    {
+     "segment_index": 3,
+     "kind": "source",
+     "output_start_sample": 83040,
+     "output_end_sample": 133040,
+     "source_interval_index": 1,
+     "source_start_sample": 90000,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 4,
+     "kind": "source",
+     "output_start_sample": 133040,
+     "output_end_sample": 192848,
+     "source_interval_index": 2,
+     "source_start_sample": 200192,
+     "source_end_sample": 260000
+    },
+    {
+     "segment_index": 5,
+     "kind": "source",
+     "output_start_sample": 192848,
+     "output_end_sample": 242368,
+     "source_interval_index": 3,
+     "source_start_sample": 90480,
+     "source_end_sample": 140000
+    },
+    {
+     "segment_index": 6,
+     "kind": "room_tone",
+     "output_start_sample": 242368,
+     "output_end_sample": 246208,
+     "join_id": "join_00002"
+    },
+    {
+     "segment_index": 7,
+     "kind": "source",
+     "output_start_sample": 246208,
+     "output_end_sample": 366208,
+     "source_interval_index": 4,
+     "source_start_sample": 300000,
+     "source_end_sample": 420000
+    },
+    {
+     "segment_index": 8,
+     "kind": "room_tone",
+     "output_start_sample": 366208,
+     "output_end_sample": 395008,
+     "join_id": "lead"
+    }
+   ],
+   "total": 395008
+  },
+  {
    "name": "whole recording before Voice Cut",
    "with_proposal": false,
    "items": [

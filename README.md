@@ -89,6 +89,10 @@ still references the source, so nothing is lost:
 - drag a clip edge to bring back removed material or trim it — later clips
   follow;
 - drag a pause edge to make it longer or shorter, or press `P` to insert one;
+- drag a clip to move it to another place, or with `⌥` to drop a copy; `⌘C`,
+  `⌘X`, `⌘V` and `⌘D` copy, cut, paste and duplicate clips;
+- select a run of clips with `⇧`-click, or pick them one by one with
+  `⌘`-click;
 - split with `S`, delete, undo and redo;
 - listen at 0.5× to 2.5× at the same pitch while the caption highlights each
   word, and click any word in the text to jump to it.

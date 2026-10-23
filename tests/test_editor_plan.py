@@ -539,6 +539,26 @@ def _cases() -> list[tuple[str, bool, list[dict[str, Any]]]]:
         259_000, 260_000, "manual", "voicecut", id="vc-0002"
     )
     cases.append(("very short clip with a long fade", True, items))
+    # Moved: the last clip first, its pause and the tail joined where it left.
+    cases.append(
+        (
+            "moved clip",
+            True,
+            [
+                _pause(pauses["lead"], "lead", id="vp-lead"),
+                _clip(*vc[3], id="vc-0003"),
+                _clip(*vc[0], id="vc-0000"),
+                _pause(pauses[0], 0, id="vp-0000"),
+                _clip(*vc[1], id="vc-0001"),
+                _clip(*vc[2], id="vc-0002"),
+                _pause(pauses["tail"], "tail", id="vp-tail"),
+            ],
+        )
+    )
+    items = proposal_items()
+    at = clip_at(items, 2)
+    items.insert(at + 1, _clip(*vc[1], id="m-copy"))
+    cases.append(("copied clip", True, items))
     cases.append(
         (
             "whole recording before Voice Cut",

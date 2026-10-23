@@ -163,16 +163,18 @@ exporter's own arithmetic, crossfades and pauses included.
 | --- | --- |
 | Play / pause | `Space`, or the play button |
 | Listen faster or slower | the `1×` button next to split/delete (0.5×, 1×, 1.5×, 2×, 2.5×); `<` / `>` |
-| Move the playhead | click/drag the ruler or a clip; `←`/`→` 10 ms, `⇧←`/`⇧→` 1 s; click a word in the transcript |
+| Move the playhead | click/drag the ruler, or click a clip; `←`/`→` 10 ms, `⇧←`/`⇧→` 1 s; click a word in the transcript |
 | Previous / next cut | `↑` / `↓` |
 | Lengthen or shorten a clip | drag its left or right edge |
 | Lengthen or shorten a pause | drag its left or right edge |
 | Insert a pause at the playhead | `P`, the pause button next to split, or right-click → *Insert a 1 s pause here* |
 | Split at the playhead | `S` or `⌘B` |
 | Trim the clip under the playhead to the playhead | `⌥[` (start) / `⌥]` (end) |
-| Select clips and pauses | click; `⇧`/`⌘`-click adds; `⌘A` selects all; `Esc` clears |
+| Select clips and pauses | click; `⇧`-click selects everything from the last one clicked; `⌘`-click adds or removes one; `⌘A` selects all; `Esc` clears |
+| Move clips | drag a clip: it and the other selected clips go to the cut nearest the pointer |
+| Copy clips | drag a clip with `⌥` held; or `⌘C` and `⌘V` (pastes at the playhead, splitting the clip there); `⌘D` duplicates after the selection; `⌘X` cuts |
 | Delete selected clips or pauses | `Delete` / `Backspace` |
-| Everything possible at one spot | right-click the timeline: insert a pause, split, delete |
+| Everything possible at one spot | right-click the timeline: insert a pause, split, copy, cut, duplicate, paste, delete |
 | Undo / redo | `⌘Z` / `⇧⌘Z` |
 | Back to Voice Cut's edit | the reset button in the toolbar (undoable) |
 | Zoom | `⌘+` / `⌘−`, `⌘`-scroll or pinch, the slider; `⇧Z` fits the whole edit |
@@ -192,9 +194,10 @@ dragged edge stays under the pointer and nothing else changes length.
   left: the rest of the clip and everything after it stay where they are on
   screen, and everything before it moves.
 
-A clip cannot run into its neighbour's material (clips stay in recording
-order); when its edge meets the neighbour the two play straight through, shown
-as a dotted line. Near the side of the timeline the view scrolls along while
+A clip cannot run into the material of a neighbour that comes after it in
+the recording; when its edge meets that neighbour the two play straight
+through, shown as a dotted line. A clip you moved or copied is not held back:
+its edges reach anywhere in the recording. Near the side of the timeline the view scrolls along while
 you drag. Material Voice Cut had removed is drawn in amber in the waveform,
 the words and the transcript, so you always see what you brought back. While
 dragging, the edge snaps to Voice Cut's own cut points and to word edges; a
@@ -471,10 +474,11 @@ readable contrast). None of them download models or call planner APIs.
 
 ## Limitations
 
-- One recording per project; no multi-camera, titles, effects or reordering of
-  clips — the editor exists to correct Voice Cut's cut.
-- A clip cannot overlap its neighbours' material; delete a clip to let its
-  neighbour extend over that stretch.
+- One recording per project; no multi-camera, titles or effects — the editor
+  exists to correct Voice Cut's cut.
+- Clips you move or copy are kept only until the next Voice Cut, which edits
+  the recording again in recording order.
+- The clipboard holds clips of this project only, inside VoiceCut.
 - Pauses are for audio projects; video edits are direct cuts.
 - Manual cuts are not checked against the alignment.
 - Running Voice Cut again with other settings replaces the edit (undo history

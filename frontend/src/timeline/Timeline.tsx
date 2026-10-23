@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Scissors, Trash2, UnfoldHorizontal } from 'lucide-react';
+import { ClipboardPaste, Copy, CopyPlus, Scissors, ScissorsLineDashed, Trash2, UnfoldHorizontal } from 'lucide-react';
 import { api } from '../api';
 import type { EditorStore } from '../store';
 import { PeakStore } from './peaks';
 import { type ContextTarget, TimelineView } from './view';
+
+const mod = navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl+';
 
 export function Timeline({ store }: { store: EditorStore }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -64,7 +66,7 @@ function TimelineMenu({ store, target, onClose }: { store: EditorStore; target: 
     action();
   };
   const left = Math.min(target.clientX, window.innerWidth - 230);
-  const top = Math.min(target.clientY, window.innerHeight - 150);
+  const top = Math.min(target.clientY, window.innerHeight - 300);
   return (
     <div ref={root} className="context-menu" role="menu" style={{ left, top }}>
       <button type="button" role="menuitem" disabled={store.isVideo} onClick={act(() => store.insertPause(target.frame))}>
@@ -74,6 +76,24 @@ function TimelineMenu({ store, target, onClose }: { store: EditorStore; target: 
       {target.clip && (
         <button type="button" role="menuitem" onClick={act(() => store.splitAtPlayhead())}>
           <Scissors size={14} /> Split here <kbd>S</kbd>
+        </button>
+      )}
+      {target.clip && (
+        <>
+          <button type="button" role="menuitem" onClick={act(() => store.copySelection())}>
+            <Copy size={14} /> Copy <kbd>{mod}C</kbd>
+          </button>
+          <button type="button" role="menuitem" onClick={act(() => store.cutSelection())}>
+            <ScissorsLineDashed size={14} /> Cut <kbd>{mod}X</kbd>
+          </button>
+          <button type="button" role="menuitem" onClick={act(() => store.duplicateSelection())}>
+            <CopyPlus size={14} /> Duplicate <kbd>{mod}D</kbd>
+          </button>
+        </>
+      )}
+      {store.canPaste && (
+        <button type="button" role="menuitem" onClick={act(() => store.paste(target.frame))}>
+          <ClipboardPaste size={14} /> Paste here <kbd>{mod}V</kbd>
         </button>
       )}
       {(target.clip || target.pause) && (
