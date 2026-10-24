@@ -458,11 +458,42 @@ select:focus {
   min-width: 0;
 }
 
+/* The project name gives way first; the controls keep their width. */
+.topbar-left {
+  flex: 1 1 auto;
+}
+
+.topbar-right {
+  flex: none;
+}
+
+.topbar-left > * {
+  flex: none;
+}
+
 .project-name {
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.topbar-left > .project-name {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Text the top bar hides, step by step, while it does not fit (Editor.tsx). */
+.topbar[data-compact~='1'] .listens-text,
+.topbar[data-compact~='2'] .control-label,
+.topbar[data-compact~='3'] .save-saved,
+.topbar[data-compact~='5'] .export-label,
+.topbar[data-compact~='6'] .voicecut-label {
+  display: none;
+}
+
+.topbar[data-compact~='4'] .model-button {
+  max-width: 150px;
 }
 
 .save-state {
@@ -1123,6 +1154,28 @@ select:focus {
 .control select {
   height: 30px;
   padding: 0 6px;
+}
+
+/* A select as wide as its chosen option: a hidden copy of that option's text
+   (with room for the arrow) sizes the box, and the select covers it. */
+.fit-select {
+  position: relative;
+  display: inline-block;
+}
+
+.fit-select-text {
+  display: block;
+  height: 30px;
+  overflow: hidden;
+  visibility: hidden;
+  white-space: nowrap;
+  padding: 0 28px 0 7px;
+}
+
+.fit-select > select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
 }
 
 .listens {

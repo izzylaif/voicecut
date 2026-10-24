@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowLeft, CircleHelp, Download, FileAudio, FileVideo, Settings, Sparkles } from 'lucide-react';
 import { api, followJob } from '../api';
 import { confirmAction, desktop, documentOpened, editableTarget, editText, invoke, onMenu } from '../desktop';
@@ -45,6 +45,45 @@ const SHORTCUTS: [string, string][] = [
   ['N', 'Snapping on / off'],
 ];
 
+/** Steps of hiding the top bar's text, the least needed first (see styles.css). */
+const TOPBAR_STEPS = 6;
+/** The project name may shrink to this many pixels before any text is hidden. */
+const NAME_MIN_PIXELS = 120;
+
+/**
+ * Hides the top bar's text labels step by step while its controls do not fit
+ * the window, so they never run into each other: `data-compact` lists the
+ * steps taken ("1 2" hides the first two).
+ */
+function useCompactTopbar(): RefObject<HTMLElement | null> {
+  const ref = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const bar = ref.current;
+    if (!bar) return;
+    const fits = () => {
+      if (bar.scrollWidth > bar.clientWidth + 1) return false;
+      for (const group of bar.children) if (group.scrollWidth > group.clientWidth + 1) return false;
+      const name = bar.querySelector('.project-name');
+      return !name || name.scrollWidth <= name.clientWidth + 1 || name.clientWidth >= NAME_MIN_PIXELS;
+    };
+    const fit = () => {
+      const steps: number[] = [];
+      bar.dataset.compact = '';
+      while (steps.length < TOPBAR_STEPS && !fits()) {
+        steps.push(steps.length + 1);
+        bar.dataset.compact = steps.join(' ');
+      }
+    };
+    fit();
+    // The bar, and its parts whose content changes: the controls and the save state.
+    const observer = new ResizeObserver(fit);
+    observer.observe(bar);
+    bar.querySelectorAll('.topbar-right, .save-state').forEach((part) => observer.observe(part));
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+}
+
 export function Editor({ initial, onClose }: { initial: ProjectState; onClose: () => void }) {
   const [store] = useState(() => new EditorStore(initial));
   useStore(store);
@@ -57,6 +96,7 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
   // The local model the Voice Cut button is downloading: Voice Cut runs once it is there.
   const [awaitedModel, setAwaitedModel] = useState<string | null>(null);
   const localModels = useLocalModels(false);
+  const topbar = useCompactTopbar();
   const project = store.project;
 
   useEffect(() => () => store.dispose(), [store]);
@@ -352,7 +392,7 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
 
   return (
     <div className="editor">
-      <header className="topbar">
+      <header className="topbar" ref={topbar}>
         <div className="topbar-left">
           {!desktop && (
             <button type="button" className="icon-button" title="All projects" onClick={onClose}>
@@ -389,14 +429,20 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
             onChange={changeSettings}
             onOpenSettings={() => setSettingsOpen(true)}
           />
-          <button type="button" className="button accent" disabled={running} onClick={() => void startVoiceCut()}>
-            <Sparkles size={14} /> {store.proposal ? 'Voice Cut again' : 'Voice Cut'}
+          <button
+            type="button"
+            className="button accent"
+            title={store.proposal ? 'Voice Cut again' : 'Voice Cut'}
+            disabled={running}
+            onClick={() => void startVoiceCut()}
+          >
+            <Sparkles size={14} /> <span className="voicecut-label">{store.proposal ? 'Voice Cut again' : 'Voice Cut'}</span>
           </button>
           <button type="button" className="icon-button" title="Settings: appearance, API keys and Voice Cut options" onClick={() => setSettingsOpen(true)}>
             <Settings size={16} />
           </button>
-          <button type="button" className="button primary" onClick={() => setExporting(true)}>
-            <Download size={14} /> Export
+          <button type="button" className="button primary" title="Export" onClick={() => setExporting(true)}>
+            <Download size={14} /> <span className="export-label">Export</span>
           </button>
         </div>
       </header>

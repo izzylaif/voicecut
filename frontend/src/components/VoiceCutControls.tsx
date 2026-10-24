@@ -34,6 +34,10 @@ export function plannerOf(settings: RunSettings, planners: PlannerInfo[]): Plann
   return planners.find((planner) => planner.id === id);
 }
 
+function plannerText(planner: PlannerInfo): string {
+  return planner.label + (planner.key_env && !planner.key?.set ? ' — no key' : '');
+}
+
 /** The model a run will use: the chosen one or the planner's default. */
 export function modelOf(settings: RunSettings, state: SettingsState | null): string {
   return settings.planner_model ?? state?.default_models[settings.planner_backend] ?? '';
@@ -74,18 +78,23 @@ export function VoiceCutControls({
     <div className="voicecut-controls">
       <label className="control" title="Which model chooses the takes">
         <span className="control-label">Planner</span>
-        <select
-          value={planner?.id ?? settings.planner_backend}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...settings, planner_backend: event.target.value, planner_model: null })}
-        >
-          {planners.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-              {item.key_env && !item.key?.set ? ' — no key' : ''}
-            </option>
-          ))}
-        </select>
+        {/* As wide as the chosen planner, not as the longest one in the list. */}
+        <span className="fit-select">
+          <select
+            value={planner?.id ?? settings.planner_backend}
+            disabled={disabled}
+            onChange={(event) => onChange({ ...settings, planner_backend: event.target.value, planner_model: null })}
+          >
+            {planners.map((item) => (
+              <option key={item.id} value={item.id}>
+                {plannerText(item)}
+              </option>
+            ))}
+          </select>
+          <span className="fit-select-text" aria-hidden="true">
+            {planner ? plannerText(planner) : settings.planner_backend}
+          </span>
+        </span>
       </label>
       {planner && (
         <span
@@ -97,7 +106,7 @@ export function VoiceCutControls({
           }
         >
           {hears ? <AudioLines size={13} /> : <FileText size={13} />}
-          {hears ? 'hears audio' : 'text only'}
+          <span className="listens-text">{hears ? 'hears audio' : 'text only'}</span>
         </span>
       )}
       {planner?.id === 'ollama' && (
@@ -121,16 +130,16 @@ export function VoiceCutControls({
           onOpenSettings={onOpenSettings}
         />
       )}
-      <label className="control" title="Language of the recording">
-        <span className="control-label">Language</span>
+      <label className="control" title={`Language of the recording: ${LANGUAGE_NAMES[settings.language] ?? settings.language}`}>
+        <span className="control-label">Lang</span>
         <select
           value={settings.language}
           disabled={disabled}
           onChange={(event) => onChange({ ...settings, language: event.target.value })}
         >
           {languages.map((language) => (
-            <option key={language} value={language}>
-              {LANGUAGE_NAMES[language] ?? language}
+            <option key={language} value={language} title={LANGUAGE_NAMES[language]}>
+              {language}
             </option>
           ))}
         </select>
