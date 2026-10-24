@@ -1,4 +1,5 @@
-// The VoiceCut website: the example players and the download buttons.
+// The VoiceCut website: the example players, the download buttons and the
+// table of tested models.
 
 const REPOSITORY = "vectozavr/voicecut";
 const RELEASES_PAGE = `https://github.com/${REPOSITORY}/releases/latest`;
@@ -274,3 +275,20 @@ async function setUpDownloads() {
 }
 
 setUpDownloads();
+
+// ---------------------------------------------------------------------------
+// Tested models: the buttons above the table show one kind of planner.
+
+for (const bench of document.querySelectorAll("[data-bench]")) {
+  const filters = bench.querySelector(".bench-filters");
+  const buttons = [...filters.querySelectorAll("button")];
+  const rows = [...bench.querySelectorAll("tbody tr")];
+  filters.hidden = false;
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      const kind = button.dataset.filter;
+      for (const other of buttons) other.setAttribute("aria-pressed", String(other === button));
+      for (const row of rows) row.hidden = kind !== "all" && !row.dataset.kind.split(" ").includes(kind);
+    });
+  }
+}

@@ -926,6 +926,169 @@ section[id] {
   }
 }
 
+/* Tested models */
+
+.bench {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.bench-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1.4rem;
+}
+
+.bench-filters[hidden] {
+  display: none;
+}
+
+.bench-filters button {
+  padding: 0.4rem 0.95rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text-2);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bench-filters button:hover {
+  border-color: var(--accent);
+}
+
+.bench-filters button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.bench-filters button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.bench-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.95rem;
+}
+
+.bench-table thead th {
+  padding: 0 0.6rem 0.6rem;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.bench-table thead th:nth-child(1) {
+  width: 48%;
+}
+
+.bench-table thead th:nth-child(2) {
+  width: 30%;
+}
+
+.bench-table tbody th,
+.bench-table td {
+  padding: 0.75rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  font-weight: inherit;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.bench-table tbody tr:hover {
+  background: var(--surface-2);
+}
+
+.bench-model {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.5rem;
+}
+
+.bench-where {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.bench-score {
+  white-space: nowrap;
+}
+
+.bench-value {
+  display: inline-block;
+  width: 3.6rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.bench-note {
+  color: var(--muted);
+}
+
+/* Drawn on 0 to 1, the whole range of the score. */
+.bench-bar {
+  position: relative;
+  display: inline-block;
+  width: calc(100% - 3.8rem);
+  height: 8px;
+  border-radius: 4px;
+  background: var(--track);
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+.bench-bar::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--score) * 100%);
+  border-radius: 4px;
+  background: var(--accent);
+  content: "";
+}
+
+.bench-time {
+  color: var(--text-2);
+}
+
+@media (max-width: 640px) {
+  .bench-table {
+    font-size: 0.9rem;
+  }
+
+  .bench-table thead th:nth-child(1) {
+    width: 50%;
+  }
+
+  .bench-table thead th:nth-child(2) {
+    width: 26%;
+  }
+
+  .bench-table tbody th,
+  .bench-table td {
+    padding: 0.7rem 0.35rem;
+  }
+
+  .bench-bar {
+    display: block;
+    width: 100%;
+    margin-top: 0.35rem;
+  }
+}
+
 /* How it works */
 
 .how {

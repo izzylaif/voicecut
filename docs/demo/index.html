@@ -39,6 +39,7 @@
         <nav class="nav-links" aria-label="Sections">
           <a href="#features">Features</a>
           <a href="#examples">Examples</a>
+          <a href="#models">Models</a>
           <a href="#how">How it works</a>
           <a href="#faq">FAQ</a>
         </nav>
@@ -436,6 +437,151 @@
               />
             </picture>
           </figure>
+        </div>
+      </section>
+
+      <section class="section models" id="models" aria-labelledby="models-title">
+        <div class="section-head">
+          <p class="eyebrow">Tested models</p>
+          <h2 id="models-title">How the models compare</h2>
+          <p class="section-lede">
+            Each model chose the takes of the same 64-minute narration, and its edit was compared with the
+            author's own. A score of 1.00 is the author's cut; cutting everything scores 0.36.
+          </p>
+        </div>
+        <div class="bench" data-bench>
+          <div class="bench-filters" role="group" aria-label="Show planners" hidden>
+            <button type="button" aria-pressed="true" data-filter="all">All</button>
+            <button type="button" aria-pressed="false" data-filter="local">On your computer</button>
+            <button type="button" aria-pressed="false" data-filter="cloud">In the cloud</button>
+            <button type="button" aria-pressed="false" data-filter="decision">Decision models</button>
+          </div>
+          <table class="bench-table">
+            <caption class="visually-hidden">
+              Planner models by how closely their edit matched the author's hand edit, with the time each takes
+              to choose the takes of 10 minutes of recording
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Model</th>
+                <th scope="col">Score</th>
+                <th scope="col">Per 10 min of recording</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-kind="cloud">
+                <th scope="row">
+                  <span class="bench-model"><strong>Gemini 3.8 Flash</strong><span class="tag">Hears the audio</span></span>
+                  <span class="bench-where">Gemini API</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.974</span><span class="bench-bar" style="--score: 0.974"></span></td>
+                <td class="bench-time">3 min</td>
+              </tr>
+              <tr data-kind="cloud">
+                <th scope="row">
+                  <span class="bench-model"><strong>Gemini 3.8 Flash</strong></span>
+                  <span class="bench-where">Gemini API, transcript only</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.964</span><span class="bench-bar" style="--score: 0.964"></span></td>
+                <td class="bench-time">4 min</td>
+              </tr>
+              <tr data-kind="cloud">
+                <th scope="row">
+                  <span class="bench-model"><strong>Gemini 3.1 Pro</strong></span>
+                  <span class="bench-where">OpenRouter</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.955</span><span class="bench-bar" style="--score: 0.955"></span></td>
+                <td class="bench-time">4.4 min</td>
+              </tr>
+              <tr data-kind="cloud">
+                <th scope="row">
+                  <span class="bench-model"><strong>Qwen 3.8 27B</strong><span class="tag">Thinking</span></span>
+                  <span class="bench-where">OpenRouter</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.950</span><span class="bench-bar" style="--score: 0.95"></span></td>
+                <td class="bench-time">25 min</td>
+              </tr>
+              <tr data-kind="cloud">
+                <th scope="row">
+                  <span class="bench-model"><strong>GLM-5.3</strong></span>
+                  <span class="bench-where">OpenRouter, low thinking</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.923</span><span class="bench-bar" style="--score: 0.923"></span></td>
+                <td class="bench-time">1.1 min</td>
+              </tr>
+              <tr data-kind="cloud">
+                <th scope="row">
+                  <span class="bench-model"><strong>Gemma 4 31B</strong><span class="tag accent">Default</span></span>
+                  <span class="bench-where">OpenRouter</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.910</span><span class="bench-bar" style="--score: 0.91"></span></td>
+                <td class="bench-time">1.3 min</td>
+              </tr>
+              <tr data-kind="local">
+                <th scope="row">
+                  <span class="bench-model"><strong>Gemma 4 31B, 4-bit</strong><span class="tag accent">Default</span></span>
+                  <span class="bench-where">Your computer (Ollama): A100 40 GB or M1 Max 64 GB</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.903</span><span class="bench-bar" style="--score: 0.903"></span></td>
+                <td class="bench-time">2.8 min on the A100,<br />16 min on the M1 Max</td>
+              </tr>
+              <tr data-kind="cloud decision">
+                <th scope="row">
+                  <span class="bench-model"><strong>TypeSafe Jev 1.14</strong><span class="tag accent">Decision</span></span>
+                  <span class="bench-where">OpenRouter</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.889<span class="bench-note" aria-hidden="true">*</span></span><span class="bench-bar" style="--score: 0.889"></span></td>
+                <td class="bench-time">4 s</td>
+              </tr>
+              <tr data-kind="local">
+                <th scope="row">
+                  <span class="bench-model"><strong>Qwen 3.8 27B, 4-bit</strong></span>
+                  <span class="bench-where">Your computer (Ollama): A100 40 GB</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.887</span><span class="bench-bar" style="--score: 0.887"></span></td>
+                <td class="bench-time">10 min</td>
+              </tr>
+              <tr data-kind="local decision">
+                <th scope="row">
+                  <span class="bench-model"><strong>Kev 9B</strong><span class="tag accent">Decision</span></span>
+                  <span class="bench-where">Your Mac (Apple Silicon): M1 Max 64 GB</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.854<span class="bench-note" aria-hidden="true">*</span></span><span class="bench-bar" style="--score: 0.854"></span></td>
+                <td class="bench-time">3 min</td>
+              </tr>
+              <tr data-kind="cloud">
+                <th scope="row">
+                  <span class="bench-model"><strong>Qwen 3.6 35B A3B</strong><span class="tag">Thinking</span></span>
+                  <span class="bench-where">OpenRouter</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.852</span><span class="bench-bar" style="--score: 0.852"></span></td>
+                <td class="bench-time">4.8 min</td>
+              </tr>
+              <tr data-kind="local decision">
+                <th scope="row">
+                  <span class="bench-model"><strong>Kev 4B</strong><span class="tag accent">Decision</span></span>
+                  <span class="bench-where">Your Mac (Apple Silicon): M1 Max 64 GB</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.818<span class="bench-note" aria-hidden="true">*</span></span><span class="bench-bar" style="--score: 0.818"></span></td>
+                <td class="bench-time">1.5 min</td>
+              </tr>
+              <tr data-kind="cloud">
+                <th scope="row">
+                  <span class="bench-model"><strong>Qwen 3.5 122B A10B</strong></span>
+                  <span class="bench-where">OpenRouter</span>
+                </th>
+                <td class="bench-score"><span class="bench-value">0.773</span><span class="bench-bar" style="--score: 0.773"></span></td>
+                <td class="bench-time">1 min</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="fine">
+            <span aria-hidden="true">*</span> Decision models were scored on two 10-minute parts of the recording,
+            an easy one and a hard one, where Gemma&nbsp;4 31B scored 0.90–0.93. Times are for choosing the takes
+            only; in the cloud they depend on how busy the provider is. Most models of 14B parameters or less could
+            not produce a valid edit at all. Every model, the method and what is still being measured are in the
+            <a href="https://github.com/vectozavr/voicecut/blob/main/docs/planner-benchmark.md">planner benchmark</a>.
+          </p>
         </div>
       </section>
 

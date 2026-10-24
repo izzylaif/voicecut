@@ -233,11 +233,13 @@ file and any video never leave the computer. Keys are added in **Settings**,
 each with a link to get one, and are sent only to their own provider.
 
 **A big model is not needed.** The defaults come from a comparison on a
-64-minute narration, scored against Gemini 3.1 Pro listening to the audio,
-the most capable model we tried. Gemma 4 31B made nearly the same edit from
-the transcript alone (removed-word F1 0.92), and its 4-bit local build
-planned like the full model; Gemini 3.8 Flash, which also hears the audio,
-agreed with Pro even more closely (0.98). The charges above are list prices for what that run sent: for
+64-minute narration, scored against its author's own edit (the mean F1 of the
+words cut and the words kept; 1.0 is the author's cut). Gemma 4 31B scored
+0.91 through OpenRouter and 0.90 as its 4-bit local build; Gemini 3.8 Flash,
+which also hears the audio, scored 0.97. The
+[planner benchmark](docs/planner-benchmark.md) lists every model measured,
+with its score and the time it takes per 10 minutes of recording. The charges
+above are list prices for what that run sent: for
 Gemma 4 about 175,000 tokens in and 26,000 out per hour of recording, which
 Gemini adds the audio to. Any other model of the provider's live list can be
 chosen instead. Gemma is not offered through the Gemini key: the Gemini API
@@ -380,6 +382,7 @@ command line, the browser editor, tests and building the desktop app.
 | [Examples](examples/README.md) | The example recordings and how to reproduce them |
 | [Architecture](docs/architecture.md) | Production call graph, safety invariants and manifests |
 | [Configuration](docs/configuration.md) | Planner backends, languages, caching and command-line options |
+| [Planner benchmark](docs/planner-benchmark.md) | Every planner model measured: how close its edit comes to a hand edit, and how fast |
 | [Troubleshooting](docs/troubleshooting.md) | Model, long-recording and media errors |
 | [Contributing](CONTRIBUTING.md) | Development environment, tests and contribution scope |
 | [Credits](docs/credits.md) | Upstream projects, models and licenses |
