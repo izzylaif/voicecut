@@ -79,26 +79,44 @@ you can listen and edit meanwhile, and the picture appears when it is ready.
 Choose the **planner**, its **model** and the recording's **language** in the
 top bar, then press **Voice Cut**:
 
-- *Planner* — Gemini, OpenAI, DeepSeek, OpenRouter, or a local model through
-  Ollama. Gemini models also *listen* to the audio of every window while they
-  choose the takes (marked “hears audio”); the others plan from the transcript
-  only (“text only”).
+- *Planner* — Gemini, OpenAI, DeepSeek, OpenRouter, or a model on this
+  computer (*Local*). Gemini models also *listen* to the audio of every window
+  while they choose the takes (marked “hears audio”); the others plan from the
+  transcript only (“text only”).
 - *Model* — the list is fetched live from the provider with your key and
   filtered to text models that can plan, with the default on top
   (`gemini-3.8-flash` for Gemini, `google/gemma-4-31b-it` for OpenRouter), then
   newest first. Type in the search field to filter, or to use any model name
   that is not listed. For local models the list shows the recommended models
   and the ones your Ollama already has; any model of the Ollama library works.
-- *Language* — English or Russian.
+  Models marked *decision* are decision models (see below): **Kev 9B** and
+  **Kev 4B** among the local ones, **TypeSafe Jev 1.14** in the OpenRouter
+  list.
+- *Lang* — the recording's language, `en` (English) or `ru` (Russian).
 
 The choice is saved with the project and used for new projects too. Until you
-choose, new projects plan with Gemma 4 31B on this computer where it runs well
-(Apple Silicon with 32 GB of memory or more, or an NVIDIA GPU with 24 GB), and
-with the same model through OpenRouter elsewhere. Pressing **Voice Cut** with a
+choose, new projects plan with the best model this computer runs well: Gemma 4
+31B on Apple Silicon with 32 GB of memory or more or on an NVIDIA GPU with
+24 GB; otherwise, on Apple Silicon, Kev 9B (18 GB or more) or Kev 4B (12 GB or
+more); and elsewhere Gemma 4 through OpenRouter. Pressing **Voice Cut** with a
 local model that is not downloaded yet offers the download and starts Voice
 Cut when it is there. If the planner's API key is missing or the provider
 rejects it, the model list says so and Voice Cut refuses to start until the key
-is added.
+is added. In a narrow window the top bar hides its text a step at a time — “text
+only”, the *Planner* and *Lang* labels, *Saved*, then the words on the Voice Cut
+and Export buttons — so its controls never run into each other.
+
+**Decision models** answer typed questions with probabilities instead of
+writing text, so their answer cannot break the planner's format. For every
+transcript line the planner asks which later line says it again (or none) and
+whether the line is narration at all, and cuts the lines that are said again or
+are not narration. They are fast and need far less memory than an LLM that plans
+as well, at some cost in quality: on a 64-minute narration, scored against the
+author's own edit, Gemma 4 31B reached 0.90–0.93, Jev 0.89, Kev 9B 0.85 and
+Kev 4B 0.82. Kev runs on Apple Silicon only (on MLX, without Ollama) and plans
+an hour of narration in about 20 minutes (9B) or 10–15 minutes (4B) on an M1
+Max; its weights download from Hugging Face (19 or 9 GB). Jev runs at
+OpenRouter with your OpenRouter key.
 
 Voice Cut edits what is on the timeline. Split the recording and delete what
 you do not want first, and only the parts that are left are transcribed,
@@ -117,15 +135,36 @@ Recovering hidden retries · Recovering skipped speech · Choosing takes ·
 Aligning and rendering the edit · Publishing
 ```
 
-Each stage shows its duration (or *cached* / *skipped*); the pipeline's log is
-one click away, and failures are shown in the panel. **Cancel** stops the run.
-When it finishes, the timeline becomes Voice Cut's edit and the transcript
-appears. A run that fails or is cancelled keeps the previous result editable.
-Running Voice Cut again replaces the other manual edits (the editor asks
-first).
+Each stage shows how far it has got and then its duration (or *cached* /
+*skipped*); the panel's header shows the whole run's progress and the time
+left, refreshed every few seconds. The time left comes from the recording's
+length and how fast this computer ran each stage before (with each planner
+model separately), so it fits this computer from its second run on; the first
+run starts from reference speeds and corrects them as the stages go. The
+pipeline's log is one click away, and failures are shown in the panel.
+**Cancel** stops the run. When it finishes, the timeline becomes Voice Cut's
+edit and the transcript appears. A run that fails or is cancelled keeps the
+previous result editable. Running Voice Cut again replaces the other manual
+edits (the editor asks first).
+
+Running Voice Cut again does only the work the changed settings need: with
+another planner or model the transcription and recovery stages are *cached*,
+and only the take selection and the render run again; with another breath
+option only the render. Going back to settings used before reuses that whole
+run. Another language transcribes again.
 
 **Settings** (the gear icon) holds the API keys of the cloud planners
 (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`) and the breath option.
+
+**Pauses.** *Settings → Pauses* sets how long Voice Cut's pauses are, for every
+project: inside a sentence, after a comma, between sentences and between
+paragraphs (0 to 5 s; *Restore the defaults* returns to VoiceCut's own). A
+change applies at once to Voice Cut's pauses on every timeline, in projects
+already edited too, and to every later run; pauses you resized or inserted
+keep their length. Each Voice Cut pause moves by the difference between the
+chosen width and the renderer's target for its kind, so the silence already
+around a cut stays, and the pause is filled with clean room tone like a
+resized one.
 Keys are written into the editor's env file — the same file `voicecut` reads —
 changing only that key's line; other lines are kept. A key is checked with its
 provider before it is saved, is shown only masked (`••••abcd`), and is never
@@ -176,7 +215,6 @@ exporter's own arithmetic, crossfades and pauses included.
 | Delete selected clips or pauses | `Delete` / `Backspace` |
 | Everything possible at one spot | right-click the timeline: insert a pause, split, copy, cut, duplicate, paste, delete |
 | Undo / redo | `⌘Z` / `⇧⌘Z` |
-| Back to Voice Cut's edit | the reset button in the toolbar (undoable) |
 | Zoom | `⌘+` / `⌘−`, `⌘`-scroll or pinch, the slider; `⇧Z` fits the whole edit |
 | Scroll | scroll or swipe horizontally |
 | Snapping on/off | `N`; hold `⌥` while dragging to ignore it once |
@@ -227,7 +265,8 @@ effect of the clips around it:
   that pause.
 
 A pause you have not resized plays Voice Cut's own room tone, sample for
-sample. A resized or inserted pause is filled with clean room tone from the
+sample (unless *Settings → Pauses* changed its length). A resized or inserted
+pause is filled with clean room tone from the
 same recording — the quiet stretches without speech or breath that Voice Cut
 itself takes room tone from (`cut_render.build_ambience_bank`) — and joins the
 clips beside it with the same equal-power crossfades. Its room tone is chosen
@@ -324,10 +363,13 @@ and the join it came from, or `manual`). The timeline's output time is
 computed from the items with the exporter's piece arithmetic. Nothing is
 quantised to frames, so repeated edits cannot drift.
 
-`timeline.json` is schema 3. An edit saved by an earlier editor (schema 2,
+`timeline.json` is schema 4. An edit saved by an earlier editor (schema 2,
 clips only) is converted when it is opened: a Voice Cut pause is placed where
 the old rule kept it (both facing edges Voice Cut's own, the clips neighbours
-in Voice Cut's edit), so the converted edit sounds exactly as before.
+in Voice Cut's edit), so the converted edit sounds exactly as before. In a
+schema 2 or 3 edit, a Voice Cut pause whose length differs from Voice Cut's
+was resized by hand, and becomes a manual pause, so the pause widths of
+*Settings → Pauses* leave it alone.
 
 ## Architecture
 
@@ -410,6 +452,7 @@ in Voice Cut's edit), so the converted edit sounds exactly as before.
 | --- | --- |
 | `GET /api/config` | Languages, planner backends, defaults |
 | `GET /api/settings`, `PUT /api/settings/keys/{planner}` | Planners with masked key status; save or remove a key `{key}` |
+| `PUT /api/settings/pauses` | Save the pause widths `{class: seconds}` of every project; `null` restores the defaults |
 | `GET /api/planners/{planner}/models?refresh=` | The provider's planner models, or why they cannot be listed |
 | `PUT /api/projects/{id}/settings` | Save the project's planner, model, language and breath option |
 | `GET /api/projects`, `POST /api/projects/import` | List; open a file (multipart upload or `{"path"}`) |
@@ -427,6 +470,9 @@ in Voice Cut's edit), so the converted edit sounds exactly as before.
 ## Artifacts
 
 ```
+.voicecut-cache/editor/
+  pause_widths.json             the pause widths of Settings → Pauses (every project)
+  run_speeds.json               how fast this computer ran each stage, for the time left
 .voicecut-cache/editor/<project>/
   project.json                  settings, run state, preview state, recent exports
   source/<file>                 a copied file (files opened by path stay in place)
@@ -435,7 +481,8 @@ in Voice Cut's edit), so the converted edit sounds exactly as before.
   media/ambience.json           room-tone stretches for resized and added pauses
   media/proxy.mp4, filmstrip/   video preview copy and thumbnail sheets
   voicecut/<name>_edited.<ext>  VoiceCut's own result
-  voicecut/.voicecut-cache/…    the pipeline's work directory (05_final/final_boundary_plan.json)
+  voicecut/.voicecut-cache/…    the pipeline's work directories: source stages, take plans,
+                                renders (05_final/final_boundary_plan.json)
   timeline.json                 your edit (autosaved)
   exports/<export_id>/          editor_boundary_plan.json, manifests (the render is deleted once published)
 ```

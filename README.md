@@ -54,8 +54,9 @@ the whole recording and edits it the way a human editor would.
 - **Leaves the last word to you.** The automatic edit opens as clips on a
   timeline over the original recording, ready to adjust.
 - **Runs on your computer.** Transcription, alignment and rendering are
-  local, and the planner can be too: Gemma 4 on your own Mac or PC, or a
-  cloud model with your own API key (see [Planners](#planners)).
+  local, and the planner can be too: Gemma 4 on your own Mac or PC, the fast
+  Kev decision models on a Mac with less memory, or a cloud model with your
+  own API key (see [Planners](#planners)).
 
 ## A quick tour
 
@@ -73,8 +74,11 @@ document that you open from the Finder, your file manager or Explorer.
 ### Press Voice Cut
 
 Pick the planner, its model and the language in the toolbar, then press
-**Voice Cut**. Every stage shows its progress, and a long recording that was
-interrupted picks up where it stopped.
+**Voice Cut**. Every stage shows its progress, and the panel shows the time
+left, learned from how fast your own computer ran earlier runs. A long
+recording that was interrupted picks up where it stopped, and running Voice
+Cut again with another model reuses the transcripts: only the take selection
+and the render run again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/voice-cut-run-dark.webp">
@@ -89,6 +93,8 @@ still references the source, so nothing is lost:
 - drag a clip edge to bring back removed material or trim it — later clips
   follow;
 - drag a pause edge to make it longer or shorter, or press `P` to insert one;
+  **Settings › Pauses** sets the length of each kind of Voice Cut pause once,
+  for every project, and leaves the pauses you resized alone;
 - drag a clip to move it to another place, or with `⌥` to drop a copy; `⌘C`,
   `⌘X`, `⌘V` and `⌘D` copy, cut, paste and duplicate clips;
 - select a run of clips with `⇧`-click, or pick them one by one with
@@ -167,7 +173,9 @@ you run Voice Cut.
 Last, the planner. On a computer that runs Gemma 4 well — a Mac with Apple
 Silicon and 32 GB of memory or more, or a PC with a 24 GB NVIDIA GPU —
 VoiceCut plans on it by default: the first Voice Cut offers to download the
-model (about 20 GB, once) and starts when it is there. Elsewhere it plans
+model (about 20 GB, once) and starts when it is there. A Mac with Apple
+Silicon and less memory plans with the Kev decision model that fits it (Kev
+9B from 18 GB, Kev 4B from 12 GB; 19 or 9 GB to download). Elsewhere it plans
 with the same Gemma 4 through OpenRouter: paste an
 [OpenRouter key](https://openrouter.ai/settings/keys) in **Settings**. Any
 other planner can be chosen in the toolbar, such as
@@ -194,7 +202,8 @@ takes. Its default model is **Gemma 4 31B**, an open model, on your computer
 and through OpenRouter in the cloud alike; it edits nearly the way Gemini 3.1
 Pro does (see below). New projects plan on your computer where it runs the
 model well (Apple Silicon with 32 GB of memory or more, or an NVIDIA GPU with
-24 GB), and through OpenRouter elsewhere. Other providers work too: with a Gemini key
+24 GB), with a Kev decision model on Apple Silicon with less memory, and
+through OpenRouter elsewhere. Other providers work too: with a Gemini key
 the default is Gemini 3.8 Flash, and OpenAI and DeepSeek are supported. Pick
 the planner in the toolbar; the list of models comes live from the provider,
 and you can type any other model name.
@@ -207,7 +216,9 @@ and you can type any other model name.
 | Planner | Default model | What leaves your computer | Provider's charge per hour of recording |
 | --- | --- | --- | --- |
 | **Local (Ollama)** | Gemma 4 31B | nothing | none |
+| **Local, decision model** | Kev 9B or Kev 4B, on Apple Silicon | nothing | none |
 | **OpenRouter** | `google/gemma-4-31b-it`, the same Gemma 4 | the transcript of each planning window | about 5 cents |
+| **OpenRouter, decision model** | `typesafe/jev-1.14` | the transcript lines of each request | about 3 cents |
 | **Gemini** | `gemini-3.8-flash` | the transcript and the audio of each planning window | about $1 |
 | **OpenAI** | `gpt-5-mini` | the transcript of each planning window | depends on the model |
 | **DeepSeek** | `deepseek-v4-flash` | the transcript of each planning window | depends on the model |
@@ -244,6 +255,17 @@ a **Reasoning** switch (off, on, or a level): the recommended ones start with
 the setting that planned best. **Settings › Local models** lists them too and
 deletes them. If you already use Ollama, VoiceCut uses yours and its models.
 
+**Decision models** — Kev 9B and Kev 4B under the recommended local models,
+TypeSafe Jev 1.14 in the OpenRouter list — answer typed questions with
+probabilities instead of writing text: for every line of the transcript,
+which later line says it again, and whether it is narration at all. They are
+fast and light, at some cost in quality. Against the author's own edit of the
+same 64-minute narration (the mean F1 of the words cut and kept on two
+10-minute stretches), Gemma 4 31B scored 0.90–0.93, Jev 0.89, Kev 9B 0.85 and
+Kev 4B 0.82, where LLMs of 14B parameters or fewer scored 0.62 or worse. Kev
+runs on Apple Silicon only, without Ollama, from 12 GB (4B) or 18 GB (9B) of
+memory, and plans an hour of narration in about 10–20 minutes on an M1 Max.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/settings-dark.webp">
   <img alt="Settings: appearance, automatic updates, API keys for Gemini, OpenAI, DeepSeek and OpenRouter kept in the macOS Keychain, and local models" src="docs/assets/screenshots/settings-light.webp">
@@ -278,7 +300,9 @@ deletes them. If you already use Ollama, VoiceCut uses yours and its models.
 
 Every planner answer is checked and retried when invalid, and every request
 is cached by its exact content, so an interrupted run resumes where it
-stopped. Places where the edit may still repeat itself are reported as
+stopped. Each stage is cached by only the settings it depends on, so another
+planner model reuses the transcripts, and another breath setting the take
+plan too. Places where the edit may still repeat itself are reported as
 warnings. If the aligner is unavailable, cuts use Whisper's timing refined
 by the waveform; if the breath detector fails, pauses are cleaned by
 waveform energy alone.
@@ -320,11 +344,12 @@ plan, so you can always see why a cut was made.
   supported.
 - **Cloud planners** need an internet connection and your own API key,
   which their provider bills.
-- **Local planner:** it needs about 32 GB of memory and 20 GB of disk: models
-  small enough for less (14B parameters or fewer) choose takes far worse. And
-  it takes longer than the recording itself: on an M1 Max an hour of
-  narration plans in about 1.5–2 hours. Local models read the transcript
-  only, without hearing the audio.
+- **Local planner:** Gemma 4 needs about 32 GB of memory and 20 GB of disk:
+  LLMs small enough for less (14B parameters or fewer) choose takes far
+  worse. And it takes longer than the recording itself: on an M1 Max an hour
+  of narration plans in about 1.5–2 hours. The Kev decision models plan much
+  faster from 12 GB, but on Apple Silicon only and somewhat less precisely.
+  Local models read the transcript only, without hearing the audio.
 - **Judgement:** the planner is a language model and can occasionally choose
   the wrong take, and a cut inside tightly connected speech (no pause
   between a kept and a removed word) can sound abrupt. Listen to the edit

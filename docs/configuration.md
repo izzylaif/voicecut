@@ -68,11 +68,12 @@ narration. It does not choose waveform samples or synthesize speech.
 | `openrouter` | `google/gemma-4-31b-it` | `OPENROUTER_API_KEY` | Cloud |
 | `openai` | `gpt-5-mini` | `OPENAI_API_KEY` | Cloud |
 | `deepseek` | `deepseek-v4-flash` | `DEEPSEEK_API_KEY` | Cloud |
-| `ollama` | `gemma4:31b-it-qat` (`gemma4:31b-mlx` on Apple Silicon with more than 32 GB) | None | On this computer, through Ollama |
+| `ollama` | `gemma4:31b-it-qat` (`gemma4:31b-mlx` on Apple Silicon with more than 32 GB); on Apple Silicon with less memory the decision model `jaredpalmer/kev-9b` (18 GB or more) or `jaredpalmer/kev-4b` (12 GB or more) | None | On this computer, through Ollama (Kev on MLX) |
 
 Gemma 4 31B (on this computer or through OpenRouter) and Gemini 3.8 Flash
-planned best in our comparison; local models of 14B parameters or fewer
-choose takes far worse.
+planned best in our comparison; local LLMs of 14B parameters or fewer
+choose takes far worse. The decision models (see "Decision models") are the
+fast, light alternative.
 All backends must pass the same range, ordering, commitment, and
 source-grounding validation; changing a model does not bypass those checks.
 Answers whose geometry can be repaired without losing narration are repaired
@@ -228,6 +229,45 @@ about 50 tokens/s and answered at about 30, so 14 minutes of narration
 planned in 22–23 minutes, and an hour plans in about 1.5–2 hours. The editor
 says so next to the local models.
 
+### Decision models
+
+A decision model answers typed questions about a text with probabilities and
+never writes text, so its answer cannot break the planner's format. It cannot
+pick word ranges either, so these models plan differently
+(`voicecut.decision_planner`): for every transcript line the planner asks
+which later line says it again (the next lines up to 30 s ahead, or none) and
+whether the line is narration at all, ten lines per request, and cuts the
+lines that are said again or are not narration. The pause after each kept
+line follows its punctuation.
+
+| Model | Planner backend | Runs | Memory |
+| --- | --- | --- | --- |
+| `jaredpalmer/kev-9b` (Kev 9B) | `ollama` | on this computer, Apple Silicon only, on MLX (not through Ollama) | 18 GB or more; float weights from 32 GB, 8-bit below |
+| `jaredpalmer/kev-4b` (Kev 4B) | `ollama` | the same | 12 GB or more; float weights from 24 GB, 8-bit below |
+| `typesafe/jev-1.14` (TypeSafe Jev 1.14) | `openrouter` | at OpenRouter, with `OPENROUTER_API_KEY` | none |
+
+```bash
+voicecut input.wav --planner-backend ollama --planner-model jaredpalmer/kev-9b
+voicecut input.wav --planner-backend openrouter --planner-model typesafe/jev-1.14
+```
+
+Kev is a LoRA adapter with a pointer head over Qwen3.5 base models; its
+weights (19 GB for 9B, 9 GB for 4B) come from Hugging Face at pinned
+revisions. The editor's model list downloads them; from the command line,
+download the adapter and base repositories at the revisions in
+`src/voicecut/decision_models.py` with `hf download`. Jev plans a whole hour
+of recording in seconds; it sees two minutes ahead of each line and also
+counts a reworded re-read as a retake. OpenRouter bills about 3 cents per
+hour of recording for it, at today's list price.
+
+Compared on the same 64-minute narration against the author's own edit (the
+mean of F1 on the words cut and on the words kept, on minutes 0–10 and 30–40):
+Gemma 4 31B 0.90–0.93, Jev 0.89, Kev 9B 0.85 and Kev 4B 0.82, where every LLM
+of 14B parameters or less scored 0.62 or worse. On an M1 Max Kev plans an hour
+of narration in about 20 minutes (9B) or 10–15 minutes (4B), where Gemma 4 31B
+takes longer than the recording. `--planner-think`, `--window-seconds`,
+`--lookahead-seconds` and `--max-output-tokens` do not apply to them.
+
 ## Privacy and data flow
 
 All audio decoding, waveform analysis, transcription, MFA alignment, breath
@@ -241,7 +281,9 @@ or any video. Use `--planner-audio off` to send text only. The provider's
 data-processing terms apply to everything submitted.
 
 With `ollama`, transcript processing also remains local: VoiceCut talks only
-to the Ollama on this computer (or the one `OLLAMA_HOST` names).
+to the Ollama on this computer (or the one `OLLAMA_HOST` names); Kev runs in
+VoiceCut's own process and talks to nothing. Jev receives the transcript lines
+of each request, as the other cloud planners do.
 
 VoiceCut filters unrelated provider credentials out of child-process
 environments. API keys are not written to run manifests. A configured endpoint
@@ -340,12 +382,23 @@ voicecut input.wav -o result.wav --overwrite
 
 ## Work directory and cache
 
-Without `--work-dir`, VoiceCut creates a content-addressed directory below
-`.voicecut-cache` beside the output. Its identity includes the input hash,
-language, planner settings, model choices, renderer settings, and a fingerprint
-of production source code.
+Without `--work-dir`, VoiceCut keeps its stages in three content-addressed
+directories below `.voicecut-cache` beside the output, each named by the
+digest of only the settings its stages depend on:
 
-Set an explicit location for a long or inspectable run:
+| Directory | Stages | Identity |
+| --- | --- | --- |
+| `<name>-source-<digest>` | media, analysis, transcription, hidden-retry and gap recovery | input hash, language, speech recognition settings |
+| `<name>-<backend>-plan-<digest>` | take selection | the above and the planner settings |
+| `<name>-<backend>-<digest>` | render and publication (`pipeline_run.json`) | every setting |
+
+Each identity also includes a fingerprint of the production source code. A
+run with another planner model therefore reuses the transcripts and runs only
+the take selection and the render; one with another breath or pause setting
+reuses the take plan too; a run with settings used before reuses everything.
+
+Set an explicit location for a long or inspectable run (it holds every
+stage):
 
 ```bash
 voicecut input.wav \
@@ -364,7 +417,8 @@ Do not:
 - reuse one explicit work directory with a different input or configuration;
 - put the input or output inside the work directory.
 
-When comparing models, use separate directories:
+When comparing models with explicit work directories, use separate ones (or
+leave out `--work-dir`, and the runs share the transcripts):
 
 ```bash
 voicecut take.wav -o take_gemini.wav \
@@ -486,12 +540,12 @@ accepted for compatibility and adds nothing. See
 | --- | --- |
 | `INPUT` | Required input audio or video path |
 | `-o`, `--output PATH` | Published output path |
-| `--work-dir PATH` | Persistent stage cache |
+| `--work-dir PATH` | Persistent stage cache holding every stage (default: shared directories under `.voicecut-cache`) |
 | `--overwrite` | Replace an existing non-cached destination |
 | `--env-file PATH` | dotenv file; default `.env` |
 | `--language en\|ru` | Source language; default `en` |
-| `--planner-backend NAME` | `gemini`, `openai`, `deepseek`, or `ollama` |
-| `--planner-model NAME` | Provider model, or an Ollama model such as `gemma4:31b-it-qat` |
+| `--planner-backend NAME` | `gemini`, `openrouter`, `openai`, `deepseek`, or `ollama` |
+| `--planner-model NAME` | Provider model, an Ollama model such as `gemma4:31b-it-qat`, or a decision model (`jaredpalmer/kev-9b`, `jaredpalmer/kev-4b`, `typesafe/jev-1.14`) |
 | `--planner-base-url URL` | OpenAI/DeepSeek endpoint override |
 | `--planner-api-key-env NAME` | Credential environment-variable name |
 | `--planner-think auto\|on\|off\|low\|medium\|high` | How an Ollama model reasons before it answers; default `auto` |

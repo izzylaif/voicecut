@@ -140,7 +140,10 @@
           </li>
           <li>
             <h3>Natural pauses</h3>
-            <p>Each pause gets a length for its kind, and breaths and clicks become clean room tone.</p>
+            <p>
+              Each pause gets a length for its kind — set once in Settings for every project — and breaths and
+              clicks become clean room tone.
+            </p>
           </li>
           <li>
             <h3>Your real voice</h3>
@@ -154,7 +157,7 @@
             <h3>Runs on your computer</h3>
             <p>
               Transcription, alignment and rendering are local, and the planner can be too: Gemma&nbsp;4 on your own
-              Mac or PC, or a cloud model with your own key.
+              Mac or PC, the fast Kev on a Mac with less memory, or a cloud model with your own key.
             </p>
           </li>
         </ul>
@@ -190,7 +193,8 @@
             <h2>Press Voice Cut</h2>
             <p>
               Pick the planner, its model and the language, then press one button. Every stage shows its
-              progress, and an interrupted run picks up where it stopped.
+              progress and the run the time left, learned from your own computer's speed. An interrupted run
+              picks up where it stopped, and trying another model runs only the take selection again.
             </p>
           </div>
           <figure class="shot">
@@ -215,6 +219,7 @@
             <ul class="checks">
               <li>Drag a clip edge to bring back removed words or trim them</li>
               <li>Resize pauses, or press <kbd>P</kbd> to insert one</li>
+              <li>Set how long each kind of pause is, once for every project</li>
               <li>Drag clips to rearrange them, or copy and paste them</li>
               <li>Split with <kbd>S</kbd>, delete, undo and redo</li>
               <li>Listen at 0.5× to 2.5× while the caption follows every word</li>
@@ -371,8 +376,9 @@
             <p>
               The planner reads the transcript and chooses the takes. Its default model, on your computer and on
               OpenRouter, is Gemma&nbsp;4 31B: an open model that edits nearly the way Gemini 3.1 Pro does, so a
-              big model is not needed. New projects plan on your computer where it runs Gemma&nbsp;4 well, and
-              through OpenRouter elsewhere. Other providers work too, and you can type any model name.
+              big model is not needed. New projects plan on your computer where it runs Gemma&nbsp;4 well, with
+              the faster Kev decision models on a Mac with less memory, and through OpenRouter elsewhere. Other
+              providers work too, and you can type any model name.
             </p>
             <ul class="planner-list">
               <li>
@@ -380,6 +386,14 @@
                 <p>
                   Gemma 4 31B by default, on your Mac or PC, downloaded in the app. Nothing leaves the computer; it
                   needs about 32&nbsp;GB of memory.
+                </p>
+              </li>
+              <li>
+                <div><strong>Kev 9B and Kev 4B</strong><span class="tag accent">Decision models</span></div>
+                <p>
+                  Fast and light, on a Mac with Apple Silicon from 12&nbsp;GB of memory: an hour of narration plans
+                  in about 10–20 minutes, a little less precisely than Gemma&nbsp;4. They answer typed questions
+                  about every line instead of writing text. TypeSafe Jev, a hosted one, is in the OpenRouter list.
                 </p>
               </li>
               <li>
@@ -404,8 +418,8 @@
             </ul>
             <p class="fine">
               VoiceCut is free. A cloud planner bills your own API key at its provider, and none of it goes to
-              VoiceCut: for an hour of recording, about 5&nbsp;cents with Gemma&nbsp;4 through OpenRouter and about
-              $1 with Gemini 3.8 Flash, at their list prices. Your original file and any video never leave the
+              VoiceCut: for an hour of recording, about 5&nbsp;cents with Gemma&nbsp;4 through OpenRouter, about
+              3&nbsp;cents with Jev and about $1 with Gemini 3.8 Flash, at their list prices. Your original file and any video never leave the
               computer. Keys live in the macOS Keychain, the Windows Credential Manager or your Linux keyring, and
               are sent only to their own provider.
             </p>

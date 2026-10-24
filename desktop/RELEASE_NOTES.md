@@ -2,16 +2,27 @@ VoiceCut listens to a narration recording, keeps the best take of every line,
 fixes the pauses, and lets you fine-tune every cut on a timeline before
 exporting.
 
-## What's new in 0.3.1
+## What's new in 0.4.0
 
-- **Move and copy clips.** Drag a clip to another place on the timeline;
-  hold ⌥ (Alt) to drop a copy instead. ⌘C, ⌘X and ⌘V copy, cut and paste
-  clips (a paste inside a clip splits it at the playhead), and ⌘D duplicates
-  the selection. Previews and exports, video included, follow the new order.
-- **Select many clips at once.** ⇧-click selects every clip and pause from
-  the last one clicked; ⌘-click (Ctrl-click on Windows and Linux) adds or
-  removes one; ⌘A selects everything.
-- Clicking a clip still puts the playhead there; dragging the ruler scrubs.
+- **Fast planners for smaller Macs.** Kev 9B and Kev 4B, decision models that
+  answer typed questions about every line instead of writing text, plan an
+  hour of narration in about 10–20 minutes on Apple Silicon from 12 GB of
+  memory, a little less precisely than Gemma 4. New projects pick the best
+  planner your computer runs well: Gemma 4 31B, else Kev 9B, else Kev 4B,
+  else Gemma 4 through OpenRouter. TypeSafe Jev, a hosted decision model, is
+  in the OpenRouter list.
+- **See how long it will take.** Voice Cut shows how far each stage has got
+  and the time left, learned from how fast your own computer ran before.
+- **Try another model without waiting again.** Running Voice Cut again with
+  another planner reuses the transcription: only the take selection and the
+  render run again, and going back to a model you used is instant.
+- **Your own pause lengths.** Settings › Pauses sets how long Voice Cut's
+  pauses are — inside a sentence, after a comma, between sentences and
+  paragraphs — for every project at once. Pauses you resized keep their length.
+- The top bar fits narrow windows: it hides its text labels instead of
+  letting the controls overlap. The language is now chosen as `en` or `ru`.
+- The “Back to Voice Cut's edit” button is gone: running Voice Cut again
+  with the same settings brings its edit back at once.
 
 ## Install
 
