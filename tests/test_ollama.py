@@ -255,31 +255,44 @@ def test_fit_think_maps_a_setting_onto_what_a_model_takes() -> None:
     assert local_models.fit_think("high", None) == "high"
 
 
+GEMMA = "gemma4"
+
+
 @pytest.mark.parametrize(
-    ("system", "machine", "memory", "gpu", "backend"),
+    ("system", "machine", "memory", "gpu", "backend", "model"),
     [
-        ("darwin", "arm64", 68.7, None, "ollama"),  # an M1 Max with 64 GB
-        ("darwin", "arm64", 34.4, None, "ollama"),  # 32 GB
-        ("darwin", "arm64", 17.2, None, "openrouter"),  # 16 GB
-        ("darwin", "x86_64", 68.7, None, "openrouter"),  # an Intel Mac
-        ("win32", "AMD64", 68.7, 8.0, "openrouter"),  # an RTX 2080
-        ("win32", "AMD64", 34.4, 23.99, "ollama"),  # an RTX 4090
-        ("linux", "x86_64", 137.4, None, "openrouter"),  # no NVIDIA GPU
+        ("darwin", "arm64", 68.7, None, "ollama", GEMMA),  # an M1 Max with 64 GB
+        ("darwin", "arm64", 34.4, None, "ollama", GEMMA),  # 32 GB
+        ("darwin", "arm64", 25.8, None, "ollama", "jaredpalmer/kev-9b"),  # 24 GB
+        ("darwin", "arm64", 19.3, None, "ollama", "jaredpalmer/kev-9b"),  # 18 GB
+        ("darwin", "arm64", 17.2, None, "ollama", "jaredpalmer/kev-4b"),  # 16 GB
+        ("darwin", "arm64", 8.6, None, "openrouter", None),  # 8 GB
+        ("darwin", "x86_64", 68.7, None, "openrouter", None),  # an Intel Mac
+        ("win32", "AMD64", 68.7, 8.0, "openrouter", None),  # an RTX 2080
+        ("win32", "AMD64", 34.4, 23.99, "ollama", GEMMA),  # an RTX 4090
+        ("linux", "x86_64", 137.4, None, "openrouter", None),  # no NVIDIA GPU
     ],
 )
-def test_new_projects_plan_locally_where_the_model_runs_well(
+def test_new_projects_plan_with_the_strongest_model_that_runs_here(
     monkeypatch: pytest.MonkeyPatch,
     system: str,
     machine: str,
     memory: float,
     gpu: float | None,
     backend: str,
+    model: str | None,
 ) -> None:
     monkeypatch.setattr(local_models.sys, "platform", system)
     monkeypatch.setattr(local_models.platform, "machine", lambda: machine)
     monkeypatch.setattr(local_models, "memory_gb", lambda: memory)
     monkeypatch.setattr(local_models, "nvidia_memory_gb", lambda: gpu)
     assert local_models.default_planner_backend() == backend
+    chosen = local_models.default_local_model()
+    if model is None:
+        assert chosen is None
+    else:
+        assert chosen is not None and chosen.startswith(model)
+        assert local_models.default_model() == chosen
 
 
 def test_nvidia_memory_is_the_largest_gpu_and_none_without_one(

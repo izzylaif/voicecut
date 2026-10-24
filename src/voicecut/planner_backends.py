@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
-from . import local_models, ollama
+from . import decision_models, local_models, ollama
 
 # Gemini 3.8 Flash listening to the audio made nearly the same edit as Gemini
 # 3.1 Pro listening to it (removed-word F1 0.98, no repeats left) on a
@@ -290,7 +290,21 @@ def preflight_planner_backend(
             api_key_env=selected_key_env,
         )
 
-    check_ollama_model(model or default_model_for_backend(provider))
+    selected = model or default_model_for_backend(provider)
+    decision = decision_models.find(provider, selected)
+    if decision is not None:
+        if not decision_models.runs_here(decision):
+            raise RuntimeError(
+                f"{decision.label} runs on Apple Silicon with at least "
+                f"{decision.memory_gb:.0f} GB of memory; choose another planner"
+            )
+        if not decision_models.weights_ready(decision):
+            raise RuntimeError(
+                f"the local model {decision.label} is not downloaded: download it "
+                "from the planner's model list in the editor"
+            )
+    else:
+        check_ollama_model(selected)
     return PlannerRuntimeConfiguration(
         provider=provider,
         base_url=None,

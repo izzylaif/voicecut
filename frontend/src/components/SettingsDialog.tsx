@@ -321,6 +321,7 @@ function LocalModelRow({ model, usable }: { model: ModelInfo; usable: boolean })
         <strong>{model.label}</strong>
         {model.label !== model.id && <code className="muted">{model.id}</code>}
         {model.engine && <span className="badge">{model.engine}</span>}
+        {model.decision && <span className="badge">decision</span>}
         {model.default && <span className="badge">default</span>}
         <span className={`key-state${model.downloaded ? ' set' : ''}`}>{stateText(model)}</span>
         <span className="local-model-actions">
@@ -342,7 +343,7 @@ function LocalModelRow({ model, usable }: { model: ModelInfo; usable: boolean })
               <Trash2 size={14} />
             </button>
           ) : (
-            usable && (
+            (usable || model.decision) && (
               <button type="button" className="button" onClick={() => void downloadLocalModel(model)}>
                 <Download size={14} /> Download
               </button>

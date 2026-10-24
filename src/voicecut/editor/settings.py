@@ -34,6 +34,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Protocol
 
+from .. import decision_models
 from ..planner_backends import (
     API_KEY_ENV_BY_BACKEND,
     DEFAULT_MODEL_BY_BACKEND,
@@ -424,10 +425,12 @@ def _openrouter_models(key: str, env_file: Path) -> list[dict[str, Any]]:
     _get_json(f"{base}/key", headers)
     payload = _get_json(f"{base}/models", headers)
     models = []
+    newest = 0
     for model in payload.get("data") or []:
         model_id = str(model.get("id", ""))
         architecture = model.get("architecture") or {}
         context = int(model.get("context_length") or 0)
+        newest = max(newest, int(model.get("created") or 0))
         if (
             OPENROUTER_EXCLUDED.search(model_id)
             or context < OPENROUTER_MIN_CONTEXT
@@ -442,6 +445,20 @@ def _openrouter_models(key: str, env_file: Path) -> list[dict[str, Any]]:
                 "detail": f"{context // 1000}K context",
                 "alias": False,
                 "created": int(model.get("created") or 0),
+            }
+        )
+    # Decision models (voicecut.decision_models) are served by OpenRouter's
+    # Decisions API, not its chat models list; they come right after the
+    # default model.
+    for decision in decision_models.HOSTED:
+        models.append(
+            {
+                "id": decision.id,
+                "label": decision.label,
+                "detail": "typed decisions, about $0.03 per hour of recording",
+                "alias": False,
+                "created": newest + 1,
+                "decision": True,
             }
         )
     return models

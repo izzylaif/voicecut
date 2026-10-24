@@ -8,18 +8,24 @@ reports its progress.  How a model reasons before answering (off, on, or a
 level for models that take one) is a setting of that model, kept in
 ``local_models.json`` next to the editor's projects; a recommended model
 starts from the setting that planned best.
+
+Below the recommended LLMs come the local decision models
+(:mod:`voicecut.decision_models`, Kev on Apple Silicon).  They are not Ollama
+models: their weights download from Hugging Face into its cache, and a Voice
+Cut with one does not need Ollama.
 """
 
 from __future__ import annotations
 
 import contextlib
+import fnmatch
 import json
 import re
 import threading
 from pathlib import Path
 from typing import Any
 
-from .. import local_models, ollama
+from .. import decision_models, local_models, ollama
 
 SETTINGS_FILE = "local_models.json"
 MODEL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}")
@@ -65,6 +71,66 @@ class _Pull:
         }
 
 
+class _HubPull:
+    """A local decision model's weights downloading from Hugging Face, file by
+    file; progress counts finished files and the partial one in the cache."""
+
+    def __init__(self, model: decision_models.DecisionModel) -> None:
+        self.model = model
+        self.status = "starting"
+        self.error: str | None = None
+        self.done = False
+        self.cancelled = False
+        self.total = 0
+        self.finished = 0
+        self.blob_dirs: list[Path] = []
+
+    def partial(self) -> int:
+        size = 0
+        for directory in self.blob_dirs:
+            with contextlib.suppress(OSError):
+                for path in directory.glob("*.incomplete"):
+                    size += path.stat().st_size
+        return size
+
+    def view(self) -> dict[str, Any]:
+        completed = min(self.total, self.finished + self.partial()) if self.total else 0
+        return {
+            "status": self.status,
+            "completed": completed,
+            "total": self.total,
+            "fraction": completed / self.total if self.total else None,
+            "error": self.error,
+            "done": self.done,
+        }
+
+    def run(self) -> None:
+        from huggingface_hub import HfApi, hf_hub_download
+        from huggingface_hub.constants import HF_HUB_CACHE
+
+        api = HfApi()
+        files: list[tuple[str, str | None, str, int]] = []
+        for repo, revision in decision_models.weight_repos(self.model):
+            info = api.model_info(repo, revision=revision, files_metadata=True)
+            self.blob_dirs.append(
+                Path(HF_HUB_CACHE) / f"models--{repo.replace('/', '--')}" / "blobs"
+            )
+            for sibling in info.siblings or []:
+                name = sibling.rfilename
+                if any(
+                    fnmatch.fnmatch(name, pattern)
+                    for pattern in decision_models.WEIGHT_PATTERNS
+                ):
+                    files.append((repo, revision, name, int(sibling.size or 0)))
+        self.total = sum(size for *_, size in files)
+        self.status = "downloading"
+        for repo, revision, name, size in files:
+            if self.cancelled:
+                raise InterruptedError
+            hf_hub_download(repo, name, revision=revision)
+            self.finished += size
+
+
 class LocalModels:
     """Ollama and its models, as the editor's planner list shows them."""
 
@@ -92,6 +158,8 @@ class LocalModels:
         worse off than one that is slower with it.
         """
 
+        if decision_models.find("ollama", model) is not None:
+            return False
         saved = (self._settings().get("think") or {}).get(ollama.canonical_name(model))
         if local_models.is_think(saved):
             return saved
@@ -166,6 +234,13 @@ class LocalModels:
                     url=status["url"],
                 )
             )
+        for decision in decision_models.local_models_here():
+            seen.update({decision.id, ollama.canonical_name(decision.id)})
+            models.append(
+                self._decision_entry(
+                    decision, pulls.get(decision.id), default=decision.id == default
+                )
+            )
         for name, have in sorted(installed.items()):
             if name in seen:
                 continue
@@ -215,6 +290,35 @@ class LocalModels:
                 "needed_gb": local_models.MEMORY_NEEDED_GB,
             },
             "speed_note": local_models.SPEED_NOTE,
+        }
+
+    def _decision_entry(
+        self,
+        model: decision_models.DecisionModel,
+        pull: dict[str, Any] | None,
+        *,
+        default: bool,
+    ) -> dict[str, Any]:
+        downloaded = decision_models.weights_ready(model)
+        parts = ["MLX", "decision model"]
+        if model.size_gb:
+            parts.append(f"{model.size_gb:.1f} GB")
+        parts.append("downloaded" if downloaded else "not downloaded")
+        return {
+            "id": model.id,
+            "label": model.label,
+            "detail": " · ".join(parts),
+            "alias": False,
+            "default": default,
+            "downloaded": downloaded,
+            "size_gb": model.size_gb,
+            "engine": "MLX",
+            "recommended": True,
+            "decision": True,
+            "can_think": False,
+            "think": False,
+            "think_options": None,
+            "pull": pull,
         }
 
     def _think_choices(
@@ -288,8 +392,43 @@ class LocalModels:
         }
 
     # -- downloads --------------------------------------------------------------
+    def _pull_decision(self, model: decision_models.DecisionModel) -> dict[str, Any]:
+        if not decision_models.runs_here(model):
+            raise LocalModelError(
+                f"{model.label} runs on Apple Silicon with at least "
+                f"{model.memory_gb:.0f} GB of memory"
+            )
+        with self._lock:
+            current = self._pulls.get(model.id)
+            if current is not None and not current.done:
+                return self.listing()
+            pull = _HubPull(model)
+            self._pulls[model.id] = pull  # type: ignore[assignment]
+
+        def run() -> None:
+            try:
+                pull.run()
+            except InterruptedError:
+                pull.error = "cancelled"
+            except Exception as error:  # noqa: BLE001 - shown in the list
+                pull.error = str(error) or type(error).__name__
+            else:
+                pull.status = "success"
+            finally:
+                pull.done = True
+                if pull.error is None or pull.cancelled:
+                    with self._lock:
+                        if self._pulls.get(model.id) is pull:
+                            del self._pulls[model.id]
+
+        threading.Thread(target=run, daemon=True, name=f"pull {model.id}").start()
+        return self.listing()
+
     def pull(self, model: Any) -> dict[str, Any]:
         model = check_name(model)
+        decision = decision_models.find("ollama", model)
+        if decision is not None:
+            return self._pull_decision(decision)
         name = ollama.canonical_name(model)
         client = self._client()
         with self._lock:
@@ -324,7 +463,8 @@ class LocalModels:
         return self.listing()
 
     def cancel(self, model: Any) -> dict[str, Any]:
-        name = ollama.canonical_name(check_name(model))
+        model = check_name(model)
+        name = model if decision_models.find("ollama", model) else ollama.canonical_name(model)
         with self._lock:
             pull = self._pulls.get(name)
             if pull is not None:
@@ -336,10 +476,14 @@ class LocalModels:
 
     def delete(self, model: Any) -> dict[str, Any]:
         model = check_name(model)
+        decision = decision_models.find("ollama", model)
         with self._lock:
-            pull = self._pulls.get(ollama.canonical_name(model))
+            pull = self._pulls.get(model if decision else ollama.canonical_name(model))
             if pull is not None and not pull.done:
                 raise LocalModelError(f"{model} is still downloading")
+        if decision is not None:
+            _delete_hub_weights(decision)
+            return self.listing()
         try:
             self._client().delete(model)
         except ollama.OllamaError as error:
@@ -352,8 +496,29 @@ class LocalModels:
 
     # -- Voice Cut ---------------------------------------------------------------
     def ready(self, model: str) -> str:
-        """The URL a Voice Cut with ``model`` uses; raises with what to do."""
+        """The URL a Voice Cut with ``model`` uses; raises with what to do.
 
+        A local decision model needs its weights and no Ollama ("" then)."""
+
+        decision = decision_models.find("ollama", model)
+        if decision is not None:
+            if not decision_models.runs_here(decision):
+                raise LocalModelError(
+                    f"{decision.label} runs on Apple Silicon with at least "
+                    f"{decision.memory_gb:.0f} GB of memory; choose another model"
+                )
+            if not decision_models.weights_ready(decision):
+                with self._lock:
+                    pull = self._pulls.get(decision.id)
+                if pull is not None and not pull.done:
+                    raise LocalModelError(
+                        f"{decision.label} is still downloading; Voice Cut can start once it is done"
+                    )
+                raise LocalModelError(
+                    f"Download {decision.label} first: open the planner's model list and "
+                    "choose Download"
+                )
+            return ""
         client = self._client()
         try:
             names = {
@@ -382,6 +547,26 @@ class LocalModels:
                 pull.cancelled = True
         with contextlib.suppress(Exception):
             self.server.stop()
+
+
+def _delete_hub_weights(model: decision_models.DecisionModel) -> None:
+    """Remove a local decision model's repositories from the Hugging Face cache."""
+
+    from huggingface_hub import scan_cache_dir
+
+    wanted = {repo for repo, _ in decision_models.weight_repos(model)}
+    try:
+        cache = scan_cache_dir()
+    except Exception as error:  # noqa: BLE001
+        raise LocalModelError(f"cannot read the Hugging Face cache: {error}") from None
+    hashes = [
+        revision.commit_hash
+        for repo in cache.repos
+        if repo.repo_id in wanted and repo.repo_type == "model"
+        for revision in repo.revisions
+    ]
+    if hashes:
+        cache.delete_revisions(*hashes).execute()
 
 
 def _pull_error(message: str, model: str) -> str:

@@ -141,8 +141,23 @@ def recommended() -> list[dict[str, object]]:
     return entries
 
 
+def default_local_model() -> str | None:
+    """The planner model new projects use on this computer: Gemma 4 31B where
+    it runs well, else the strongest decision model that runs here (Kev 9B,
+    then Kev 4B; :mod:`voicecut.decision_models`), else None (a cloud planner)."""
+
+    if runs_well_here():
+        return str(recommended()[0]["id"])
+    from . import decision_models
+
+    for model in decision_models.LOCAL:
+        if decision_models.runs_here(model):
+            return model.id
+    return None
+
+
 def default_model() -> str:
-    return str(recommended()[0]["id"])
+    return default_local_model() or str(recommended()[0]["id"])
 
 
 def nvidia_memory_gb() -> float | None:
@@ -193,10 +208,10 @@ def runs_well_here() -> bool:
 
 
 def default_planner_backend() -> str:
-    """The planner of new projects: Gemma 4 31B on this computer where it runs
-    well, else the same model through OpenRouter."""
+    """The planner of new projects: a model on this computer where one runs
+    (:func:`default_local_model`), else Gemma 4 31B through OpenRouter."""
 
-    return "ollama" if runs_well_here() else "openrouter"
+    return "ollama" if default_local_model() else "openrouter"
 
 
 def recommended_think(model: str) -> Think | None:

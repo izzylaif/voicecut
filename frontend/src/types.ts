@@ -217,6 +217,8 @@ export interface ModelInfo {
   /** How Ollama runs it: MLX (Apple Silicon) or GGUF (llama.cpp). */
   engine?: string | null;
   recommended?: boolean;
+  /** A decision model (Kev, Jev): typed answers per transcript line, no Ollama needed. */
+  decision?: boolean;
   /** Whether the model can reason before answering (null: not known yet). */
   can_think?: boolean | null;
   /** How it reasons in a Voice Cut (a setting of the model): off, on, or a level. */

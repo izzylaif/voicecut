@@ -47,6 +47,10 @@ mlx = [
   "numpy==2.4.6",
   "mlx==0.32.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
   "mlx-whisper==0.4.3; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  # Local decision models (Kev) for the decision planner: mlx-lm's Qwen3.5,
+  # with the tokenizer library it was tested with.
+  "mlx-lm==0.31.3; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "transformers==5.14.1; platform_system == 'Darwin' and platform_machine == 'arm64'",
 ]
 # Optional verbatim ASR (``voicecut --asr crisperwhisper``), installed into the
 # MLX environment.  The model weights are licensed for non-commercial research

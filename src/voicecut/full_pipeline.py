@@ -25,7 +25,7 @@ from typing import Any
 
 import soundfile as sf
 
-from . import progress
+from . import decision_models, progress
 from .breath_detection import (
     DEFAULT_BREATH_THRESHOLD,
     DEFAULT_RESPIRO_CACHE_ROOT,
@@ -39,6 +39,7 @@ from .ctc_enrich import (
     write_passthrough_enrichment,
 )
 from .cut_render import RENDERER_NAME
+from .decision_planner import DECISION_PLANNER_NAME
 from .gap_recovery import STRATEGY as GAP_RECOVERY_STRATEGY
 from .language_profiles import (
     SUPPORTED_LANGUAGE_CODES,
@@ -331,7 +332,7 @@ def _plan_is_current(
     return (
         value is not None
         and value.get("status") == "complete"
-        and value.get("planner") == PLANNER_NAME
+        and value.get("planner") in (PLANNER_NAME, DECISION_PLANNER_NAME)
         and value.get("backend") == backend
         and value.get("model") == model
         and value.get("listened_to_audio") is listens_to_audio
@@ -1261,24 +1262,49 @@ def run_full_pipeline(
         plan_dir.mkdir(parents=True, exist_ok=True)
         plan_path.unlink(missing_ok=True)
         _notify_progress(progress_callback, "semantic_plan", "started")
-        plan_command = [
-            sys.executable,
-            "-m",
-            "voicecut.take_planner",
-            "--transcript",
-            str(semantic_transcript_path),
-            "--output-dir",
-            str(plan_dir),
-            "--window-seconds",
-            str(args.window_seconds),
-            "--lookahead-seconds",
-            str(args.lookahead_seconds),
-            "--language",
-            language_profile.code,
-            *planner_arguments,
-        ]
-        if listens_to_audio:
-            plan_command.extend(["--audio", str(audio)])
+        decision_model = decision_models.find(args.planner_backend, planner_model)
+        if decision_model is not None:
+            # A decision model answers typed questions per transcript line
+            # (voicecut.decision_planner); Kev runs on MLX, in the MLX
+            # environment, Jev through OpenRouter.
+            plan_command = [
+                str(asr_python)
+                if decision_model.backend == "ollama"
+                else sys.executable,
+                "-m",
+                "voicecut.decision_planner",
+                "--transcript",
+                str(semantic_transcript_path),
+                "--output-dir",
+                str(plan_dir),
+                "--planner-backend",
+                args.planner_backend,
+                "--planner-model",
+                planner_model,
+                "--language",
+                language_profile.code,
+                "--env-file",
+                str(env_file),
+            ]
+        else:
+            plan_command = [
+                sys.executable,
+                "-m",
+                "voicecut.take_planner",
+                "--transcript",
+                str(semantic_transcript_path),
+                "--output-dir",
+                str(plan_dir),
+                "--window-seconds",
+                str(args.window_seconds),
+                "--lookahead-seconds",
+                str(args.lookahead_seconds),
+                "--language",
+                language_profile.code,
+                *planner_arguments,
+            ]
+            if listens_to_audio:
+                plan_command.extend(["--audio", str(audio)])
         _run(
             "04 TAKE SELECTION",
             plan_command,

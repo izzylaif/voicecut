@@ -40,7 +40,7 @@ from fastapi.responses import (
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
-from .. import __version__, processes
+from .. import __version__, decision_models, processes
 from ..common import read_json
 from ..language_profiles import SUPPORTED_LANGUAGE_CODES
 from ..planner_backends import (
@@ -564,7 +564,9 @@ class EditorService:
         ]
         if chosen["planner_model"]:
             argv += ["--planner-model", str(chosen["planner_model"])]
-        if chosen["planner_backend"] == "ollama":
+        if chosen["planner_backend"] == "ollama" and not decision_models.find(
+            "ollama", self.planner_model(chosen)
+        ):
             argv += [
                 "--planner-think",
                 self.local.think_argument(self.planner_model(chosen)),
@@ -638,6 +640,8 @@ class EditorService:
         """
 
         if chosen["planner_backend"] == "ollama":
+            if decision_models.find("ollama", self.planner_model(chosen)):
+                return {}  # a local decision model runs without Ollama
             # The server this editor found or started.
             return {"OLLAMA_HOST": self.local.server.ensure()}
         key_env = API_KEY_ENV_BY_BACKEND.get(chosen["planner_backend"])

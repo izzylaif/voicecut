@@ -281,6 +281,7 @@ function ModelPicker({
                   <span className="model-id">
                     {model.label}
                     {model.default && <span className="badge">default</span>}
+                    {model.decision && <span className="badge">decision</span>}
                   </span>
                   <span className="model-detail">
                     {model.id}
@@ -384,6 +385,7 @@ function LocalModelPicker({
             {model.label}
             {model.default && <span className="badge">default</span>}
             {model.engine && <span className="badge">{model.engine}</span>}
+            {model.decision && <span className="badge">decision</span>}
           </span>
           <span className="model-detail">
             {model.label !== model.id ? `${model.id} · ` : ''}
@@ -408,7 +410,7 @@ function LocalModelPicker({
           </button>
         ) : (
           !model.downloaded &&
-          !unavailable && (
+          (!unavailable || model.decision) && (
             <button
               type="button"
               className="icon-button"
@@ -427,7 +429,7 @@ function LocalModelPicker({
     <div className="model-picker" ref={root}>
       <button
         type="button"
-        className={`model-button${unavailable || (current && !current.downloaded) ? ' warning' : ''}`}
+        className={`model-button${(unavailable && !current?.decision) || (current && !current.downloaded) ? ' warning' : ''}`}
         disabled={disabled}
         title={current && !current.downloaded ? `${value} is not downloaded yet` : value}
         onClick={() => setOpen((state) => !state)}
@@ -506,7 +508,10 @@ function LocalModelPicker({
             </p>
           )}
           <p className="model-footnote">
-            These run on this computer through Ollama and never send the recording anywhere. {memoryText(list)}
+            {models.some((model) => model.decision)
+              ? 'These run on this computer and never send the recording anywhere: the LLMs through Ollama, the decision models (Kev) on MLX without Ollama.'
+              : 'These run on this computer through Ollama and never send the recording anywhere.'}{' '}
+            {memoryText(list)}
           </p>
         </div>
       )}

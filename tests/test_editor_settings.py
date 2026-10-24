@@ -6,6 +6,7 @@ import io
 import json
 import os
 import stat
+import time
 import urllib.error
 from pathlib import Path
 from typing import Any
@@ -217,11 +218,15 @@ def test_openrouter_checks_the_key_then_lists_text_models_newest_first(
 
     monkeypatch.setattr(settings, "_get_json", get)
     listed = settings.ModelCatalog(env).models("openrouter")
+    # Jev is served by OpenRouter's Decisions API, not listed among its chat
+    # models: VoiceCut adds it right after the default.
     assert [entry["id"] for entry in listed["models"]] == [
         "google/gemma-4-31b-it",
+        "typesafe/jev-1.14",
         "qwen/qwen3.8-27b",
         "mistralai/ministral-8b-2512",
     ]
+    assert listed["models"][1]["decision"] is True
     assert listed["models"][0]["default"] is True
     assert listed["models"][0]["detail"] == "262K context"
     # The model list is public, so the key is checked on its own endpoint.
@@ -268,9 +273,10 @@ def test_listing_failures_explain_themselves(
 def test_missing_key_and_local_models(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from voicecut import ollama
+    from voicecut import decision_models, ollama
     from voicecut.editor.local import LocalModels
 
+    monkeypatch.setattr(decision_models, "weights_ready", lambda model: False)
     catalog = settings.ModelCatalog(tmp_path / "missing.env")
     assert catalog.models("deepseek")["error"]["kind"] == "missing_key"
     assert catalog.models("ollama")["error"]["kind"] == "unavailable"
@@ -472,3 +478,89 @@ def test_a_local_planner_runs_through_ollama(
         )
     finally:
         fake.close()
+
+
+@needs_ffmpeg
+def test_a_local_decision_model_lists_downloads_and_runs_without_ollama(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from voicecut import decision_models, ollama
+    from voicecut.editor import local as local_module
+
+    monkeypatch.setenv("OLLAMA_HOST", "127.0.0.1:9")  # no Ollama at all
+    monkeypatch.delenv("VOICECUT_OLLAMA", raising=False)
+    monkeypatch.setattr(ollama, "system_binary", lambda: None)
+    monkeypatch.setattr(decision_models, "runs_here", lambda model: True)
+    have: set[str] = set()
+    monkeypatch.setattr(decision_models, "weights_ready", lambda model: model.id in have)
+    downloads: list[str] = []
+    deleted: list[str] = []
+
+    def fake_run(self: local_module._HubPull) -> None:
+        downloads.append(self.model.id)
+        have.add(self.model.id)
+
+    monkeypatch.setattr(local_module._HubPull, "run", fake_run)
+    monkeypatch.setattr(
+        local_module, "_delete_hub_weights", lambda model: (deleted.append(model.id), have.discard(model.id))
+    )
+    spawned: list[tuple[Path, dict[str, str]]] = []
+
+    class Done:
+        stdout = io.StringIO('{"type": "error", "message": "stop"}\n')
+        stderr = io.StringIO("")
+        pid = 0
+
+        def wait(self) -> int:
+            return 1
+
+        def poll(self) -> int:
+            return 1
+
+    def spawn(request: Path, environment: dict[str, str] | None = None) -> Done:
+        spawned.append((request, environment or {}))
+        return Done()
+
+    monkeypatch.setattr(server, "spawn_worker", spawn)
+    client = TestClient(
+        server.create_app(projects_dir=tmp_path / "projects", env_file=tmp_path / ".env")
+    )
+    listed = client.get("/api/planners/ollama/models").json()
+    ids = [model["id"] for model in listed["models"]]
+    # Below the recommended LLMs, still listed without Ollama.
+    assert ids.index("jaredpalmer/kev-9b") == ids.index("jaredpalmer/kev-4b") - 1
+    assert all(
+        ids.index("jaredpalmer/kev-9b") > ids.index(model["id"])
+        for model in listed["models"]
+        if model["recommended"] and not model.get("decision")
+    )
+    kev = next(model for model in listed["models"] if model["id"] == "jaredpalmer/kev-9b")
+    assert kev["decision"] is True and kev["recommended"] is True
+    assert kev["downloaded"] is False and kev["think_options"] is None
+
+    project = client.post(
+        "/api/projects/import",
+        json={"path": str(write_wav(tmp_path / "a.wav", source_audio()))},
+    ).json()
+    chosen = {"planner_backend": "ollama", "planner_model": "jaredpalmer/kev-9b"}
+    refused = client.post(f"/api/projects/{project['id']}/voicecut", json=chosen)
+    assert refused.status_code == 400 and "Download Kev 9B first" in refused.json()["detail"]
+
+    client.post("/api/local-models/pull", json={"model": "jaredpalmer/kev-9b"})
+    for _ in range(100):
+        listed = client.get("/api/planners/ollama/models").json()
+        kev = next(model for model in listed["models"] if model["id"] == "jaredpalmer/kev-9b")
+        if kev["downloaded"] and kev["pull"] is None:
+            break
+        time.sleep(0.02)
+    assert downloads == ["jaredpalmer/kev-9b"] and kev["downloaded"] is True
+
+    client.post(f"/api/projects/{project['id']}/voicecut", json=chosen)
+    request, environment = spawned[-1]
+    argv = json.loads(request.read_text(encoding="utf-8"))["argv"]
+    assert argv[argv.index("--planner-model") + 1] == "jaredpalmer/kev-9b"
+    assert "--planner-think" not in argv
+    assert environment == {}  # no Ollama for a decision model
+
+    client.post("/api/local-models/delete", json={"model": "jaredpalmer/kev-9b"})
+    assert deleted == ["jaredpalmer/kev-9b"]
