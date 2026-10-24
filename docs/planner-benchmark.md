@@ -2,8 +2,7 @@
 
 Which model should choose the takes? We ran VoiceCut's take selection with
 many models on the same real recording and compared each edit with the one its
-author made by hand. This page collects the results so far; more models are
-added as they are measured.
+author made by hand. This page collects the results measured so far.
 
 ## How it is measured
 
@@ -122,5 +121,6 @@ SemIf 0.768, Open-Jev 2B 0.731, Decider 4B 0.706, Kev 0.8B 0.555, Decider 2B
 - Decision models keep or cut whole lines (speech between pauses), so they
   cannot cut a restart in the middle of a line. The best score possible that
   way is 0.975 on this recording.
-- More local models (about 40, through Ollama on A100 GPUs) are being
-  measured; their rows will be added here.
+- Only two models ran as local 4-bit builds, Gemma 4 31B and Qwen 3.8 27B.
+  The other open models ran through cloud providers; a local 4-bit build of
+  one may plan a little differently.
