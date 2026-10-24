@@ -175,6 +175,10 @@ export type StageStatus = 'started' | 'completed' | 'cached' | 'skipped' | 'fail
 export type JobEvent =
   | { type: 'stage'; stage: string; status: StageStatus; label: string; at?: number }
   | { type: 'progress'; stage: string; fraction: number; at?: number }
+  /** How far the running Voice Cut stage has got (0..1). */
+  | { type: 'stage_progress'; stage: string; fraction: number; at?: number }
+  /** How long each stage should take on a reference computer, in seconds. */
+  | { type: 'estimate'; audio_seconds: number; stages: Record<string, number>; learned?: boolean; at?: number }
   | { type: 'log'; stream: 'stdout' | 'stderr'; line: string; at?: number }
   | { type: 'complete'; result: Record<string, unknown>; at?: number }
   | { type: 'error'; message: string; at?: number }

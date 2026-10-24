@@ -23,6 +23,9 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+import soundfile as sf
+
+from . import progress
 from .breath_detection import (
     DEFAULT_BREATH_THRESHOLD,
     DEFAULT_RESPIRO_CACHE_ROOT,
@@ -958,6 +961,23 @@ def run_full_pipeline(
     if not isinstance(audio_value, str) or not isinstance(audio_sha256, str):
         raise FullPipelineError("media input manifest has no canonical audio")
     audio = Path(audio_value)
+    if progress_callback is not None:
+        try:
+            audio_seconds = float(sf.info(str(audio)).duration)
+        except (RuntimeError, OSError):
+            audio_seconds = None
+        if audio_seconds:
+            progress_callback(
+                {
+                    "type": "estimate",
+                    "audio_seconds": round(audio_seconds, 1),
+                    "stages": progress.stage_seconds(
+                        audio_seconds,
+                        planner_backend=args.planner_backend,
+                        planner_model=planner_model,
+                    ),
+                }
+            )
 
     analysis_dir = work_dir / "01_analysis"
     analysis_path = analysis_dir / "analysis.json"

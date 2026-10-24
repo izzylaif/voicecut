@@ -21,7 +21,7 @@ from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import IO, Any
 
-from .. import processes
+from .. import processes, progress
 
 STAGE_LABELS: dict[str, str] = {
     "preflight": "Checking runtimes",
@@ -114,6 +114,7 @@ def _pump(
 def make_streaming_runner(
     sink: EventSink,
     registry: ChildRegistry | None = None,
+    current_stage: Callable[[], str | None] | None = None,
 ) -> Callable[..., subprocess.CompletedProcess[str]]:
     """Build a ``subprocess.run`` stand-in that streams child output as events.
 
@@ -121,7 +122,8 @@ def make_streaming_runner(
     stderr=subprocess.PIPE, text=True, env=...)``.  Standard output lines are
     emitted as ``log`` events for ``stdout``; standard error lines are emitted
     as ``log`` events for ``stderr`` and also accumulated so the pipeline can
-    keep its concise failure summary.
+    keep its concise failure summary.  A ``[progress] done/total`` line on
+    standard output becomes a ``stage_progress`` event of ``current_stage()``.
     """
 
     def runner(
@@ -140,6 +142,20 @@ def make_streaming_runner(
         stderr_lines: list[str] = []
 
         def on_stdout(line: str) -> None:
+            match = progress.PATTERN.match(line)
+            stage = current_stage() if current_stage else None
+            if match and stage:
+                done, total = int(match.group(1)), int(match.group(2))
+                if total > 0:
+                    sink.emit(
+                        {
+                            "type": "stage_progress",
+                            "stage": stage,
+                            "fraction": min(1.0, done / total),
+                            "at": time.time(),
+                        }
+                    )
+                return
             sink.log("stdout", line)
 
         def on_stderr(line: str) -> None:
@@ -202,6 +218,10 @@ class StageTracker:
         self.current_stage: str | None = None
 
     def __call__(self, event: dict[str, Any]) -> None:
+        if event.get("type") == "estimate":
+            # How long each stage should take (voicecut.progress).
+            self.sink.emit({**event, "at": time.time()})
+            return
         stage = str(event.get("stage"))
         status = str(event.get("status"))
         if status not in STAGE_STATUSES:
@@ -329,7 +349,9 @@ def run_job(request: dict[str, Any], sink: EventSink) -> dict[str, Any]:
     try:
         return full_pipeline.run_full_pipeline(
             args,
-            runner=make_streaming_runner(sink, registry),
+            runner=make_streaming_runner(
+                sink, registry, current_stage=lambda: tracker.current_stage
+            ),
             progress_callback=tracker,
         )
     except WorkerCancelled:

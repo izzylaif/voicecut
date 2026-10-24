@@ -34,6 +34,7 @@ from typing import Any
 
 import numpy as np
 
+from . import progress
 from .common import read_json, sha256_file, write_json
 from .planner_backends import (
     MediaPart,
@@ -1136,6 +1137,10 @@ class TakePlanner:
                 print(f"  revoke [{item.first_id}-{item.last_id}] {item.text}")
             for warning in decision.warnings:
                 print(f"  note: {warning}")
+            # Windows are nine tenths of the work, the duplicate review the rest.
+            progress.report(
+                round(900 * zone_lines[-1].end / max(self.words[-1].end, 1e-6)), 1000
+            )
             if final or decision.resume_from_id is None:
                 break
             next_line = line_by_first_id.get(decision.resume_from_id)
@@ -1151,7 +1156,10 @@ class TakePlanner:
         regions = _review_regions(suspects, items, self.words)
         review_ledger: list[dict[str, Any]] = []
         # Re-decide later regions first so earlier item indices stay valid.
-        for number, region in reversed(list(enumerate(regions, start=1))):
+        for done, (number, region) in enumerate(
+            reversed(list(enumerate(regions, start=1)))
+        ):
+            progress.report(900 + round(100 * done / len(regions)), 1000)
             first_item, last_item = region["first_item"], region["last_item"]
             current = items[first_item : last_item + 1]
             editable = (current[0].first_id, current[-1].last_id)

@@ -36,6 +36,7 @@ from typing import Any
 import numpy as np
 import soundfile as sf
 
+from . import progress
 from .breath_detection import DEFAULT_RESPIRO_CACHE_ROOT, breath_probabilities
 from .common import read_json, sha256_file, write_json
 from .language_profiles import get_language_profile
@@ -1199,6 +1200,7 @@ def render_take_plan(
     assign_breaks(words, items)
 
     print("aligning kept lines with MFA...", flush=True)
+    progress.report(5, 100, "aligning")
     try:
         alignment = mfa_core_timings(
             audio_path=audio_path,
@@ -1230,6 +1232,7 @@ def render_take_plan(
             word.core_start = max(word.core_start, lower)
             word.core_end = max(word.core_end, word.core_start + 0.02)
 
+    progress.report(70, 100, "aligned")
     use_breath = breath_cleanup == "replace"
     breath = None
     breath_status = "off"
@@ -1245,6 +1248,7 @@ def render_take_plan(
         except Exception as error:  # noqa: BLE001 - detector failure keeps energy evidence
             print(f"warning: breath detector failed: {error}", file=sys.stderr)
             breath_status = "detector_failed_energy_only"
+    progress.report(85, 100, "rendering")
     signal = analyze_signal(
         mono,
         sample_rate,

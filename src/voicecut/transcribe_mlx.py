@@ -36,6 +36,11 @@ from typing import Any
 import numpy as np
 
 
+def _report_progress(done: int, total: int) -> None:
+    # voicecut.progress's line, printed here so this module stays standalone.
+    print(f"[progress] {done}/{total} atoms", flush=True)
+
+
 ARTIFACT_ROLES = (
     "source_primary",
     "final_primary",
@@ -575,6 +580,7 @@ def main() -> None:
             atom_index = int(atom["atom_index"])
             if atom_index in completed_atoms:
                 atom_results.append(completed_atoms[atom_index])
+                _report_progress(position, len(atoms))
                 continue
             start = float(atom["start"])
             end = float(atom["end"])
@@ -627,6 +633,7 @@ def main() -> None:
                     ),
                 }
             )
+            _report_progress(position, len(atoms))
             if args.progress_every and (
                 position % args.progress_every == 0 or position == len(atoms)
             ):

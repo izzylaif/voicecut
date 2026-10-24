@@ -24,6 +24,7 @@ from typing import Any
 
 import numpy as np
 
+from . import progress
 from .transcribe_mlx import (
     DEFAULT_MODELS,
     SAMPLE_RATE,
@@ -191,7 +192,8 @@ def recover_gaps(
     regions = uncovered_speech(frame_levels(waveform, SAMPLE_RATE), words)
     recovered: list[dict[str, Any]] = []
     reports: list[dict[str, Any]] = []
-    for region_start, region_end in regions:
+    for number, (region_start, region_end) in enumerate(regions, start=1):
+        progress.report(number - 1, len(regions), "regions")
         crop_start = max(0.0, region_start - CROP_PAD_SECONDS)
         crop_end = min(len(waveform) / SAMPLE_RATE, region_end + CROP_PAD_SECONDS)
         clip = waveform[round(crop_start * SAMPLE_RATE) : round(crop_end * SAMPLE_RATE)]

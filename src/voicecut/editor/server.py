@@ -48,7 +48,8 @@ from ..planner_backends import (
     DEFAULT_MODEL_BY_BACKEND,
     PLANNER_BACKENDS,
 )
-from . import ambience, documents, peaks, plan, proxy, scope, settings
+from . import ambience, documents, peaks, plan, proxy, scope, settings, speeds
+from .speeds import RunSpeeds
 from .local import LocalModelError, LocalModels
 from .export import EXPORT_STAGES, ExportError, check_destination, export_timeline
 from .jobs import STATUS_BY_EVENT, Job, JobRegistry, sse_stream
@@ -147,6 +148,7 @@ class EditorService:
         )
         self.models = settings.ModelCatalog(env_file, keys=self.keys, local=self.local)
         self.preferences_path = store.root / "preferences.json"
+        self.speeds = RunSpeeds(store.root / speeds.FILE_NAME)
         # The last Voice Cut settings chosen in the editor beat the CLI's.
         remembered = settings.load_preferences(self.preferences_path)
         self.defaults = current_settings(
@@ -683,6 +685,7 @@ class EditorService:
             )
         request_path = project.jobs_dir / f"{job.id}.json"
         write_json_atomic(request_path, {"argv": argv})
+        job.planner_model = self.planner_model(chosen)  # type: ignore[attr-defined]
 
         def running(current: Project) -> None:
             current.settings = chosen
@@ -727,6 +730,8 @@ class EditorService:
                         if event["type"] in {"complete", "error", "cancelled"}:
                             terminal.append(event)
                         else:
+                            if event["type"] == "estimate":
+                                event = self._learned_estimate(job, event)
                             job.append(event)
                         continue
                 if line.strip():
@@ -763,6 +768,29 @@ class EditorService:
             }
         self._finish_voicecut(job, final, parts)
 
+    def _learned_estimate(self, job: Job, event: dict[str, Any]) -> dict[str, Any]:
+        """The pipeline's reference estimate, replaced by this computer's own
+        speeds wherever earlier runs measured them (:mod:`.speeds`)."""
+
+        try:
+            audio_seconds = float(event.get("audio_seconds") or 0)
+            reference = {str(k): float(v) for k, v in (event.get("stages") or {}).items()}
+        except (TypeError, ValueError):
+            return event
+        job.audio_seconds = audio_seconds  # type: ignore[attr-defined]
+        stages, learned = self.speeds.estimate(
+            audio_seconds, getattr(job, "planner_model", ""), reference
+        )
+        return {**event, "stages": stages, "learned": learned}
+
+    def _record_speeds(self, job: Job) -> None:
+        audio_seconds = getattr(job, "audio_seconds", 0.0)
+        if audio_seconds:
+            with contextlib.suppress(OSError, ValueError):
+                self.speeds.record(
+                    job.events_since(0), audio_seconds, getattr(job, "planner_model", "")
+                )
+
     def _finish_voicecut(
         self,
         job: Job,
@@ -777,6 +805,8 @@ class EditorService:
         """
 
         status = STATUS_BY_EVENT[final["type"]]
+        if status == "complete":
+            self._record_speeds(job)
         result = final.get("result")
         result = result if isinstance(result, dict) else {}
         mapped: Path | None = None

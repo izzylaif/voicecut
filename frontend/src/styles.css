@@ -764,6 +764,20 @@ select:focus {
   color: var(--error);
 }
 
+.run-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.run-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.5s ease;
+}
+
 .stages {
   list-style: none;
   margin: 0;
