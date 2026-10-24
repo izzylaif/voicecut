@@ -10,9 +10,10 @@ like ``.fcpbundle``)::
     media/              canonical WAV + media_input.json, waveform peaks,
                         video proxy and filmstrip sheets
     timeline.json       the user's edit (autosaved)
-    voicecut/           the pipeline's output and its work directory
-                        (``.voicecut-cache/<run>/``: canonical media,
-                        transcripts, take plan, boundary plan, MFA output)
+    voicecut/           the pipeline's output and its work directories
+                        (``.voicecut-cache/``: canonical media and
+                        transcripts, take plans, boundary plans and MFA
+                        output, each shared by the runs it fits)
     exports/  jobs/
 
 That is the layout of an editor project (:mod:`.projects`), so the editor

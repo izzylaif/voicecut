@@ -413,7 +413,10 @@ def check_local_planner(app: App, model: str, report: dict[str, Any]) -> None:
         raise Failure(
             f"Voice Cut with {model} ended {run_state['status']}: {run_state['error']}"
         )
-    plan_path = Path(run_state["work_dir"]) / "04_semantic_plan" / "take_plan.json"
+    pipeline_run = json.loads(
+        (Path(run_state["work_dir"]) / "pipeline_run.json").read_text(encoding="utf-8")
+    )
+    plan_path = Path(pipeline_run["take_plan"])
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     report["local_voicecut"] = {
         "minutes": round((time.monotonic() - started) / 60, 1),

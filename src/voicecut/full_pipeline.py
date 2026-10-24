@@ -6,6 +6,14 @@ builds a source-grounded semantic edit plan, renders safe word boundaries and
 the output-specific pause policy, and publishes the requested media format.
 Audio may use semantic pauses; video uses direct cuts. Expensive completed
 stages are content-addressed and reused on an identical rerun.
+
+Without ``--work-dir`` the stages live in three cache directories beside the
+output, each keyed by only the settings its stages depend on: the source
+stages (media to gap recovery: the recording, its language and the speech
+recognition), the take selection (those plus the planner) and the render and
+publication (everything).  A run with another planner model therefore reuses
+the transcripts, and one with another breath or pause setting the take plan
+as well.
 """
 
 from __future__ import annotations
@@ -92,6 +100,35 @@ DEFAULT_MFA_NUM_JOBS = max(1, min(os.cpu_count() or 1, 4))
 PIPELINE_SCHEMA_VERSION = 10
 CTC_LANGUAGE_SKIP_STATUS = "skipped_unsupported_language"
 AUDIO_LISTENING_BACKENDS = frozenset({"gemini"})
+# The configuration keys the source stages (media, analysis, transcription,
+# hidden-retry and gap recovery) depend on, and those the take selection
+# depends on; the render and publication depend on all of them.
+SOURCE_STAGE_KEYS = (
+    "schema_version",
+    "implementation_sha256",
+    "input",
+    "input_sha256",
+    "language",
+    "language_profile",
+    "asr",
+    "whisper_engine",
+    "whisper_model",
+    "asr_python",
+)
+PLAN_STAGE_KEYS = (
+    *SOURCE_STAGE_KEYS,
+    "planner_backend",
+    "planner_model",
+    "planner_base_url",
+    "planner_api_key_env",
+    "planner_think",
+    "planner",
+    "planner_listens_to_audio",
+    "window_seconds",
+    "lookahead_seconds",
+    "max_output_tokens",
+)
+STAGE_CONFIG_FILENAME = "stage_config.json"
 
 
 def _preferred_python(relative_path: str) -> Path:
@@ -690,18 +727,40 @@ def _planner_listens(args: argparse.Namespace) -> bool:
     return supported
 
 
-def _resolve_work_dir(
+def _resolve_work_dirs(
     *,
     requested: Path | None,
     output_path: Path,
     input_path: Path,
     configuration: dict[str, Any],
-) -> Path:
+) -> tuple[Path, Path, Path]:
+    """The directories of the source stages, of the take selection and of the
+    render and publication (the run's work directory).
+
+    A requested ``--work-dir`` holds every stage.  Otherwise each directory is
+    named by the digest of the settings its stages depend on, so runs that
+    differ only in later settings share the earlier stages.
+    """
+
     if requested is not None:
-        return requested.resolve()
-    digest = _configuration_digest(configuration)[:12]
-    label = _safe_name(f"{input_path.stem}-{configuration['planner_backend']}")
-    return (output_path.parent / ".voicecut-cache" / f"{label}-{digest}").resolve()
+        work_dir = requested.resolve()
+        return work_dir, work_dir, work_dir
+    cache = output_path.parent / ".voicecut-cache"
+    stem = input_path.stem
+    backend = configuration["planner_backend"]
+
+    def directory(label: str, keys: Sequence[str] | None) -> Path:
+        settings = (
+            configuration if keys is None else {key: configuration[key] for key in keys}
+        )
+        digest = _configuration_digest(settings)[:12]
+        return (cache / f"{_safe_name(label)}-{digest}").resolve()
+
+    return (
+        directory(f"{stem}-source", SOURCE_STAGE_KEYS),
+        directory(f"{stem}-{backend}-plan", PLAN_STAGE_KEYS),
+        directory(f"{stem}-{backend}", None),
+    )
 
 
 def _paths_overlap_work_tree(file_path: Path, work_dir: Path) -> bool:
@@ -718,9 +777,10 @@ def _initialize_work_dir(
     work_dir: Path,
     *,
     configuration: dict[str, Any],
+    file_name: str = "pipeline_config.json",
 ) -> Path:
     work_dir.mkdir(parents=True, exist_ok=True)
-    path = work_dir / "pipeline_config.json"
+    path = work_dir / file_name
     existing = _read_object(path)
     if existing is not None and existing != configuration:
         raise FullPipelineError(
@@ -888,18 +948,20 @@ def run_full_pipeline(
         pause_policy=pause_policy,
         language_profile=language_profile,
     )
-    work_dir = _resolve_work_dir(
+    source_work_dir, plan_work_dir, work_dir = _resolve_work_dirs(
         requested=args.work_dir,
         output_path=output_path,
         input_path=input_path,
         configuration=configuration,
     )
+    cache_dirs = list(dict.fromkeys((source_work_dir, plan_work_dir, work_dir)))
     for label, media_path in (("input", input_path), ("output", output_path)):
-        if _paths_overlap_work_tree(media_path, work_dir):
-            raise FullPipelineError(
-                f"{label} path and --work-dir must be disjoint: "
-                f"{media_path} versus {work_dir}"
-            )
+        for directory in cache_dirs:
+            if _paths_overlap_work_tree(media_path, directory):
+                raise FullPipelineError(
+                    f"{label} path and --work-dir must be disjoint: "
+                    f"{media_path} versus {directory}"
+                )
     try:
         planner_runtime = planner_preflight(
             provider=args.planner_backend,
@@ -914,7 +976,17 @@ def run_full_pipeline(
         raise FullPipelineError(
             "planner preflight returned an inconsistent API endpoint"
         )
-    work_lock = _WorkDirectoryLock(work_dir)
+    work_locks = [_WorkDirectoryLock(directory) for directory in cache_dirs]
+    for directory, keys in (
+        (source_work_dir, SOURCE_STAGE_KEYS),
+        (plan_work_dir, PLAN_STAGE_KEYS),
+    ):
+        if directory != work_dir:
+            _initialize_work_dir(
+                directory,
+                configuration={key: configuration[key] for key in keys},
+                file_name=STAGE_CONFIG_FILENAME,
+            )
     configuration_path = _initialize_work_dir(
         work_dir,
         configuration=configuration,
@@ -923,7 +995,7 @@ def run_full_pipeline(
     pipeline_warnings: list[dict[str, Any]] = []
     _notify_progress(progress_callback, "preflight", "completed")
 
-    media_dir = work_dir / "00_media"
+    media_dir = source_work_dir / "00_media"
     media_manifest_path = media_dir / "media_input.json"
     if _media_is_current(
         media_manifest_path,
@@ -935,7 +1007,7 @@ def run_full_pipeline(
         stages["media_input"] = "cached"
         _notify_progress(progress_callback, "media_input", "cached")
     else:
-        _reset_stage(media_dir, work_dir=work_dir)
+        _reset_stage(media_dir, work_dir=source_work_dir)
         _notify_progress(progress_callback, "media_input", "started")
         print("\n=== 00 MEDIA INPUT ===", flush=True)
         media_manifest = media_preparer(input_path, media_dir)
@@ -980,13 +1052,13 @@ def run_full_pipeline(
                 }
             )
 
-    analysis_dir = work_dir / "01_analysis"
+    analysis_dir = source_work_dir / "01_analysis"
     analysis_path = analysis_dir / "analysis.json"
     if _audio_artifact_is_current(analysis_path, audio_sha256):
         stages["analysis"] = "cached"
         _notify_progress(progress_callback, "analysis", "cached")
     else:
-        _reset_stage(analysis_dir, work_dir=work_dir)
+        _reset_stage(analysis_dir, work_dir=source_work_dir)
         _notify_progress(progress_callback, "analysis", "started")
         _run(
             "01 ANALYSIS",
@@ -1006,7 +1078,7 @@ def run_full_pipeline(
         stages["analysis"] = "created"
         _notify_progress(progress_callback, "analysis", "completed")
 
-    transcript_dir = work_dir / "02_transcription"
+    transcript_dir = source_work_dir / "02_transcription"
     transcript_path = transcript_dir / "source_transcript.json"
     if _audio_artifact_is_current(transcript_path, audio_sha256):
         stages["transcription"] = "cached"
@@ -1058,7 +1130,7 @@ def run_full_pipeline(
         stages["transcription"] = "created"
         _notify_progress(progress_callback, "transcription", "completed")
 
-    enrichment_dir = work_dir / "03_ctc_enrichment"
+    enrichment_dir = source_work_dir / "03_ctc_enrichment"
     enriched_path = enrichment_dir / "source_transcript_ctc_enriched.json"
     enrichment_report_path = enrichment_dir / "ctc_enrichment_report.json"
     semantic_transcript_path: Path
@@ -1191,7 +1263,7 @@ def run_full_pipeline(
     # Whisper tends to skip text that repeats what it has just written, so a
     # retake can be audible but missing from the transcript.  Transcribe every
     # speech-level stretch no word covers, before the planner chooses takes.
-    gap_dir = work_dir / "03_gap_recovery"
+    gap_dir = source_work_dir / "03_gap_recovery"
     gap_path = gap_dir / "source_transcript_with_recovered_gaps.json"
     if _gap_recovery_is_current(
         gap_path,
@@ -1203,7 +1275,7 @@ def run_full_pipeline(
         _notify_progress(progress_callback, "gap_recovery", "cached")
     else:
         _notify_progress(progress_callback, "gap_recovery", "started")
-        _reset_stage(gap_dir, work_dir=work_dir)
+        _reset_stage(gap_dir, work_dir=source_work_dir)
         gap_dir.mkdir(parents=True, exist_ok=True)
         _run(
             "03b UNTRANSCRIBED SPEECH RECOVERY",
@@ -1244,7 +1316,7 @@ def run_full_pipeline(
         env_file=env_file,
     )
     listens_to_audio = _planner_listens(args)
-    plan_dir = work_dir / "04_semantic_plan"
+    plan_dir = plan_work_dir / "04_semantic_plan"
     plan_path = plan_dir / PLAN_FILENAME
     if _plan_is_current(
         plan_path,
@@ -1491,6 +1563,8 @@ def run_full_pipeline(
         "output_sha256": publication["output_sha256"],
         "output_kind": publication["kind"],
         "work_dir": str(work_dir),
+        "source_work_dir": str(source_work_dir),
+        "plan_work_dir": str(plan_work_dir),
         "pipeline_configuration": str(configuration_path),
         "planner_backend": args.planner_backend,
         "planner_model": planner_model,
@@ -1523,7 +1597,8 @@ def run_full_pipeline(
         "pipeline_warnings": pipeline_warnings,
     }
     write_json(work_dir / "pipeline_run.json", result)
-    work_lock.close()
+    for lock in work_locks:
+        lock.close()
     return result
 
 
@@ -1549,8 +1624,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--work-dir",
         type=Path,
         help=(
-            "Persistent stage cache. Defaults to a content-addressed directory "
-            "under .voicecut-cache beside the output."
+            "Persistent stage cache holding every stage. Defaults to "
+            "content-addressed directories under .voicecut-cache beside the "
+            "output, which runs with other planner or render settings share."
         ),
     )
     parser.add_argument(

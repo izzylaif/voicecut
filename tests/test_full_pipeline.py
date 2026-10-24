@@ -1387,3 +1387,164 @@ def test_the_pause_policy_can_be_chosen_for_an_audio_output(tmp_path: Path) -> N
     args.pause_policy = "semantic"
     with pytest.raises(FullPipelineError, match="--pause-policy cuts"):
         run_full_pipeline(args, media_preparer=stop)
+
+
+def test_other_planner_or_render_settings_reuse_the_earlier_stages(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without ``--work-dir`` another planner model reruns only the take
+    selection and what follows it, and another breath setting only the
+    render: the earlier stages live in directories of their own."""
+
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source media")
+    monkeypatch.setenv("GEMINI_API_KEY", "selected-secret")
+    modules: list[str] = []
+
+    def fake_media_preparer(input_path: Path, output_dir: Path):
+        modules.append("media")
+        output_dir.mkdir(parents=True)
+        canonical = output_dir / "source_audio.wav"
+        canonical.write_bytes(b"canonical audio")
+        manifest = {
+            "status": "complete",
+            "source_media": str(input_path.resolve()),
+            "source_media_sha256": sha256_file(input_path),
+            "source_kind": "audio",
+            "canonical_audio": str(canonical.resolve()),
+            "canonical_audio_sha256": sha256_file(canonical),
+        }
+        write_json(output_dir / "media_input.json", manifest)
+        return manifest
+
+    def fake_audio_publisher(final_wav: Path, output_path: Path, **_: object):
+        output_path.write_bytes(final_wav.read_bytes())
+        return {"status": "complete", "output_audio": str(output_path)}
+
+    def fake_runner(command: list[str], **_: object) -> None:
+        module = command[command.index("-m") + 1]
+        modules.append(module)
+        audio_sha = sha256_file(Path(command[command.index("--audio") + 1]))
+
+        def option(name: str) -> str:
+            return command[command.index(name) + 1]
+
+        if module == "voicecut.analyze":
+            write_json(
+                Path(option("--output-dir")) / "analysis.json",
+                {"audio_sha256": audio_sha},
+            )
+        elif module == "voicecut.transcribe_mlx":
+            write_json(Path(option("--output")), {"audio_sha256": audio_sha})
+        elif module == "voicecut.ctc_enrich":
+            _write_fake_ctc_enrichment(
+                Path(option("--output-dir")), audio_sha256=audio_sha
+            )
+        elif module == "voicecut.gap_recovery":
+            _fake_gap_recovery(command)
+        elif module == "voicecut.take_planner":
+            transcript = Path(option("--transcript"))
+            write_json(
+                Path(option("--output-dir")) / "take_plan.json",
+                {
+                    "status": "complete",
+                    "planner": "take_planner_v1",
+                    "listened_to_audio": True,
+                    "backend": "gemini",
+                    "model": option("--planner-model"),
+                    "transcript": str(transcript.resolve()),
+                    "transcript_sha256": sha256_file(transcript),
+                },
+            )
+        elif module == "voicecut.cut_render":
+            output_dir = Path(option("--output-dir"))
+            output_dir.mkdir(parents=True)
+            plan = Path(option("--plan"))
+            final_cut = output_dir / "final_cut.wav"
+            final_cut.write_bytes(
+                plan.read_bytes() + option("--breath-cleanup").encode()
+            )
+            boundary_plan = output_dir / "final_boundary_plan.json"
+            write_json(boundary_plan, {"status": "safe"})
+            write_json(
+                output_dir / "final_render_manifest.json",
+                {
+                    "status": "complete",
+                    "renderer": "cut_render_v1",
+                    "alignment_backend": "mfa",
+                    "mfa_version": "3.4.1",
+                    "mfa_model": "english_us_arpa",
+                    "pause_policy": "semantic",
+                    "breath_cleanup_mode": option("--breath-cleanup"),
+                    "breath_threshold": float(option("--breath-threshold")),
+                    "source_audio_sha256": audio_sha,
+                    "take_plan": str(plan.resolve()),
+                    "take_plan_sha256": sha256_file(plan),
+                    "final_cut_wav": str(final_cut.resolve()),
+                    "final_cut_wav_sha256": sha256_file(final_cut),
+                    "final_boundary_plan": str(boundary_plan.resolve()),
+                    "final_boundary_plan_sha256": sha256_file(boundary_plan),
+                    "duration_seconds": 1.25,
+                },
+            )
+        else:
+            raise AssertionError(command)
+
+    def run(model: str, breath_cleanup: str) -> dict:
+        modules.clear()
+        args = _args(tmp_path, source)
+        args.work_dir = None
+        args.overwrite = True
+        args.planner_model = model
+        args.breath_cleanup = breath_cleanup
+        return run_full_pipeline(
+            args,
+            runner=fake_runner,
+            media_preparer=fake_media_preparer,
+            audio_publisher=fake_audio_publisher,
+            planner_preflight=_fake_gemini_preflight,
+        )
+
+    first = run("gemini-3.6-flash", "replace")
+    assert modules == [
+        "media",
+        "voicecut.analyze",
+        "voicecut.transcribe_mlx",
+        "voicecut.ctc_enrich",
+        "voicecut.gap_recovery",
+        "voicecut.take_planner",
+        "voicecut.cut_render",
+    ]
+    cache = tmp_path / ".voicecut-cache"
+    assert {
+        Path(first[key]).parent
+        for key in ("source_work_dir", "plan_work_dir", "work_dir")
+    } == {cache.resolve()}
+    source_settings = read_json(Path(first["source_work_dir"]) / "stage_config.json")
+    assert (
+        source_settings["language"] == "en" and "planner_model" not in source_settings
+    )
+    plan_settings = read_json(Path(first["plan_work_dir"]) / "stage_config.json")
+    assert plan_settings["planner_model"] == "gemini-3.6-flash"
+    assert "breath_cleanup" not in plan_settings
+
+    other_model = run("gemini-3.6-pro", "replace")
+    assert modules == ["voicecut.take_planner", "voicecut.cut_render"]
+    assert other_model["source_work_dir"] == first["source_work_dir"]
+    assert other_model["plan_work_dir"] != first["plan_work_dir"]
+    assert other_model["stages"]["transcription"] == "cached"
+    assert other_model["stages"]["semantic_plan"] == "created"
+
+    other_breaths = run("gemini-3.6-pro", "off")
+    assert modules == ["voicecut.cut_render"]
+    assert other_breaths["plan_work_dir"] == other_model["plan_work_dir"]
+    assert other_breaths["work_dir"] != other_model["work_dir"]
+
+    # Back to the first settings: every stage of that run is still there.
+    again = run("gemini-3.6-flash", "replace")
+    assert modules == []
+    assert again["work_dir"] == first["work_dir"]
+    assert {
+        status for stage, status in again["stages"].items() if stage != "publication"
+    } == {"cached"}
