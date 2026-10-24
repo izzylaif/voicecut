@@ -70,6 +70,12 @@ export function Editor({ initial, onClose }: { initial: ProjectState; onClose: (
     api.settings().then(setSettingsState, (error: unknown) => store.notify(`Cannot load settings: ${errorText(error)}`, 'error'));
   }, [store]);
 
+  // Pause widths are a setting of every project: VoiceCut's pauses follow a change at once.
+  const pauseWidths = settingsState?.pause_widths;
+  useEffect(() => {
+    if (pauseWidths) store.setPauseWidths(pauseWidths);
+  }, [store, pauseWidths]);
+
   /** Change the Voice Cut settings and remember them for this project. */
   const changeSettings = useCallback(
     (next: RunSettings) => {

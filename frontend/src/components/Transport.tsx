@@ -4,7 +4,6 @@ import {
   Pause,
   Play,
   Redo2,
-  RotateCcw,
   Scissors,
   SkipBack,
   SkipForward,
@@ -85,13 +84,6 @@ export function Transport({ store }: { store: EditorStore }) {
         </IconButton>
         <IconButton title={`Redo (⇧${mod}Z)`} disabled={!store.canRedo} onClick={() => store.redo()}>
           <Redo2 size={16} />
-        </IconButton>
-        <IconButton
-          title={store.proposal ? 'Back to Voice Cut’s edit' : 'Back to the whole recording'}
-          disabled={!store.isEdited}
-          onClick={() => store.resetToProposal()}
-        >
-          <RotateCcw size={16} />
         </IconButton>
       </div>
 

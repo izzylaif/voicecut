@@ -41,24 +41,36 @@
    {
     "length": 19680,
     "fade_in": 480,
-    "fade_out": 480
+    "fade_out": 480,
+    "pause_class": null
    },
    null,
    {
     "length": 5760,
     "fade_in": 1440,
-    "fade_out": 480
+    "fade_out": 480,
+    "pause_class": null
    }
   ],
+  "pause_targets": {
+   "none": 0.1,
+   "comma": 0.28,
+   "sentence": 0.5,
+   "paragraph": 0.85,
+   "lead": 0.35,
+   "tail": 0.6
+  },
   "lead": {
    "length": 16800,
    "fade_in": 2400,
-   "fade_out": 480
+   "fade_out": 480,
+   "pause_class": "lead"
   },
   "tail": {
    "length": 29280,
    "fade_in": 480,
-   "fade_out": 4800
+   "fade_out": 4800,
+   "pause_class": "tail"
   },
   "words": [
    {

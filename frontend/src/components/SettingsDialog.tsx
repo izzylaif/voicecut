@@ -113,6 +113,8 @@ export function SettingsDialog({
         </section>
         )}
 
+        {state.pause_widths && <PausesSection state={state} onState={onState} />}
+
         <footer>
           <button type="button" className="button primary" onClick={onClose}>
             Done
@@ -120,6 +122,83 @@ export function SettingsDialog({
         </footer>
       </div>
     </div>
+  );
+}
+
+const PAUSE_ROWS: { id: string; label: string }[] = [
+  { id: 'none', label: 'Inside a sentence' },
+  { id: 'comma', label: 'After a comma' },
+  { id: 'sentence', label: 'Between sentences' },
+  { id: 'paragraph', label: 'Between paragraphs' },
+];
+
+/**
+ * How long VoiceCut's pauses are, by kind, for every project: the pauses of
+ * Voice Cut's edits follow these widths; a pause you resized yourself keeps
+ * its length.
+ */
+function PausesSection({ state, onState }: { state: SettingsState; onState: (state: SettingsState) => void }) {
+  const widths = state.pause_widths ?? {};
+  const defaults = state.pause_defaults ?? {};
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const isDefault = PAUSE_ROWS.every(({ id }) => widths[id] === defaults[id]);
+
+  const save = async (next: Record<string, number> | null) => {
+    setError(null);
+    try {
+      onState(await api.savePauseWidths(next));
+      setDraft({});
+    } catch (failure) {
+      setError(failure instanceof ApiError ? failure.message : String(failure));
+    }
+  };
+  const commit = (id: string) => {
+    const text = draft[id];
+    if (text === undefined) return;
+    const value = Number(text.replace(',', '.'));
+    if (!Number.isFinite(value) || value < 0 || value > 5) {
+      setError('A pause is 0 to 5 seconds');
+      return;
+    }
+    if (value !== widths[id]) void save({ [id]: value });
+    else setDraft(({ [id]: _, ...rest }) => rest);
+  };
+
+  return (
+    <section className="settings-section">
+      <h3>Pauses</h3>
+      <div className="pause-widths">
+        {PAUSE_ROWS.map(({ id, label }) => (
+          <label key={id} className="field pause-width">
+            <span>{label}</span>
+            <input
+              type="number"
+              min={0}
+              max={5}
+              step={0.05}
+              value={draft[id] ?? String(widths[id] ?? '')}
+              onChange={(event) => setDraft((current) => ({ ...current, [id]: event.target.value }))}
+              onBlur={() => commit(id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') commit(id);
+              }}
+            />
+            <span className="muted small">s{defaults[id] !== undefined && widths[id] !== defaults[id] ? ` (default ${defaults[id]})` : ''}</span>
+          </label>
+        ))}
+      </div>
+      {error && <p className="error-text small">{error}</p>}
+      <p className="muted small">
+        Voice Cut’s pauses in every project follow these widths, now and in new edits. A pause you resized on the
+        timeline keeps its length.
+      </p>
+      {!isDefault && (
+        <button type="button" className="button subtle" onClick={() => void save(null)}>
+          Restore the defaults
+        </button>
+      )}
+    </section>
   );
 }
 

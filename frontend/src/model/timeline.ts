@@ -10,7 +10,7 @@
  * as they are.  Every operation is pure and returns a new timeline, so undo is
  * just keeping old ones.
  */
-import type { PauseRef, Proposal, RoomTone, WireItem, WirePause } from '../types';
+import type { PauseRef, PauseWidths, Proposal, RoomTone, WireItem, WirePause } from '../types';
 import { type EditContext, type Edge, type Segment, fromWire, newSegmentId, splitAt, toWire, trimEdge } from './segments';
 
 export interface Pause {
@@ -73,18 +73,49 @@ export function roomToneOf(proposal: Proposal, join: PauseRef): RoomTone | null 
   return proposal.joins[join] ?? null;
 }
 
-function voicecutPause(proposal: Proposal, join: PauseRef): Pause {
+/**
+ * The length of VoiceCut's pause `join` with the pause widths of Settings: the
+ * renderer aimed it at the target of its class, so it moves by the difference
+ * between the chosen width and that target (the silence around the cut stays).
+ */
+export function voicecutPauseLength(proposal: Proposal, join: PauseRef, widths?: PauseWidths): number {
   const tone = roomToneOf(proposal, join)!;
+  const heard = heardLength(tone, join !== 'lead', join !== 'tail');
+  const name = tone.pause_class;
+  const target = name ? proposal.pause_targets?.[name] : undefined;
+  const width = name ? widths?.[name] : undefined;
+  if (target === undefined || width === undefined || width === target) return heard;
+  return Math.max(
+    Math.round(MIN_PAUSE_SECONDS * proposal.sample_rate),
+    Math.round(heard + (width - target) * proposal.sample_rate),
+  );
+}
+
+function voicecutPause(proposal: Proposal, join: PauseRef, widths?: PauseWidths): Pause {
   return {
     id: `vp-${typeof join === 'number' ? String(join).padStart(4, '0') : join}`,
-    length: heardLength(tone, join !== 'lead', join !== 'tail'),
+    length: voicecutPauseLength(proposal, join, widths),
     origin: 'voicecut',
     join,
   };
 }
 
-/** VoiceCut's edit as a timeline (mirrors `Proposal.timeline_items`). */
-export function proposalTimeline(proposal: Proposal): Timeline {
+/** Give every VoiceCut pause of `timeline` its length for `widths` (manual pauses stay). */
+export function applyPauseWidths(timeline: Timeline, proposal: Proposal | null, widths?: PauseWidths): Timeline {
+  if (!proposal) return timeline;
+  let changed = false;
+  const gaps = timeline.gaps.map((gap) => {
+    if (!gap || gap.origin !== 'voicecut' || gap.join === null || !roomToneOf(proposal, gap.join)) return gap;
+    const length = voicecutPauseLength(proposal, gap.join, widths);
+    if (length === gap.length) return gap;
+    changed = true;
+    return { ...gap, length };
+  });
+  return changed ? { clips: timeline.clips, gaps } : timeline;
+}
+
+/** VoiceCut's edit as a timeline (mirrors `Proposal.timeline_items`), its pauses at `widths`. */
+export function proposalTimeline(proposal: Proposal, widths?: PauseWidths): Timeline {
   const clips: Segment[] = proposal.segments.map((segment) => ({
     id: segment.id,
     start: segment.start,
@@ -93,9 +124,15 @@ export function proposalTimeline(proposal: Proposal): Timeline {
     endOrigin: 'voicecut',
   }));
   const gaps: (Pause | null)[] = clips.map((_, index) =>
-    index === 0 ? (proposal.lead ? voicecutPause(proposal, 'lead') : null) : proposal.joins[index - 1] ? voicecutPause(proposal, index - 1) : null,
+    index === 0
+      ? proposal.lead
+        ? voicecutPause(proposal, 'lead', widths)
+        : null
+      : proposal.joins[index - 1]
+        ? voicecutPause(proposal, index - 1, widths)
+        : null,
   );
-  gaps.push(proposal.tail ? voicecutPause(proposal, 'tail') : null);
+  gaps.push(proposal.tail ? voicecutPause(proposal, 'tail', widths) : null);
   return { clips, gaps };
 }
 
@@ -119,9 +156,9 @@ export function sameTimeline(a: Timeline, b: Timeline): boolean {
 }
 
 /** Whether the timeline is VoiceCut's edit, untouched. */
-export function isProposal(timeline: Timeline, proposal: Proposal | null): boolean {
+export function isProposal(timeline: Timeline, proposal: Proposal | null, widths?: PauseWidths): boolean {
   if (!proposal) return false;
-  const original = proposalTimeline(proposal);
+  const original = proposalTimeline(proposal, widths);
   return (
     timeline.clips.length === original.clips.length &&
     timeline.clips.every(
@@ -154,7 +191,9 @@ export function resizePause(timeline: Timeline, gap: number, length: number, sam
   const [low, high] = pauseLimits(sampleRate);
   const value = Math.round(Math.min(high, Math.max(low, length)));
   if (value === pause.length) return timeline;
-  return { clips: timeline.clips, gaps: timeline.gaps.map((item, index) => (index === gap ? { ...pause, length: value } : item)) };
+  // A VoiceCut pause the user resizes is theirs: the pause widths no longer move it.
+  const resized: Pause = pause.origin === 'voicecut' ? { ...pause, length: value, origin: 'manual', join: null } : { ...pause, length: value };
+  return { clips: timeline.clips, gaps: timeline.gaps.map((item, index) => (index === gap ? resized : item)) };
 }
 
 /** Split clip `clip` at `sample`; the halves meet directly (or around `pause`). */

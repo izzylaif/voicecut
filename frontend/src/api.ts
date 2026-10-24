@@ -113,6 +113,9 @@ export const api = {
   },
 
   settings: () => call<SettingsState>('/api/settings'),
+  /** Save the pause widths (seconds by pause class) for every project; `null` restores the defaults. */
+  savePauseWidths: (widths: Record<string, number> | null) =>
+    call<SettingsState>('/api/settings/pauses', json('PUT', widths ? { widths } : { reset: true })),
   saveKey: (backend: string, key: string) =>
     call<SettingsState>(`/api/settings/keys/${encodeURIComponent(backend)}`, json('PUT', { key })),
   models: (backend: string, refresh = false) =>

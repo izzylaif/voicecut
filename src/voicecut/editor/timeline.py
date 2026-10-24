@@ -30,7 +30,9 @@ from typing import Any
 from .. import cut_render
 from ..common import read_json, sha256_file
 
-TIMELINE_SCHEMA_VERSION = 3
+# 4: a VoiceCut pause the user resized becomes a manual one, so every
+# VoiceCut pause left follows the pause widths (see editor.pauses).
+TIMELINE_SCHEMA_VERSION = 4
 PAUSE_ORIGINS = frozenset({"voicecut", "manual"})
 MAX_PAUSE_SECONDS = 600
 # cut_render.build_pieces: the lead-in fades in over 50 ms, the lead-out out
@@ -55,12 +57,16 @@ class RoomTone:
     fade_out: int
     trace: tuple[tuple[int, int], ...]
     join_index: int | None
+    #: The renderer's pause class ("none", "comma", "sentence", "paragraph",
+    #: or "lead" / "tail" at the ends).
+    pause_class: str | None = None
 
-    def to_client(self) -> dict[str, int]:
+    def to_client(self) -> dict[str, Any]:
         return {
             "length": self.length,
             "fade_in": self.fade_in,
             "fade_out": self.fade_out,
+            "pause_class": self.pause_class,
         }
 
     def heard(self, *, after_clip: bool, before_clip: bool) -> int:
@@ -190,10 +196,17 @@ class Proposal:
                 )
             ],
             "joins": [join.to_client() if join else None for join in self.joins],
+            "pause_targets": _pause_targets(),
             "lead": self.lead.to_client() if self.lead else None,
             "tail": self.tail.to_client() if self.tail else None,
             "words": list(self.words),
         }
+
+
+def _pause_targets() -> dict[str, float]:
+    from .pauses import targets
+
+    return targets()
 
 
 def _int(value: Any, name: str) -> int:
@@ -202,8 +215,9 @@ def _int(value: Any, name: str) -> int:
     return value
 
 
-def _room_tone(piece: dict[str, Any]) -> RoomTone:
+def _room_tone(piece: dict[str, Any], pause_class: str | None = None) -> RoomTone:
     return RoomTone(
+        pause_class=pause_class,
         length=_int(piece["output_end_sample"], "piece end")
         - _int(piece["output_start_sample"], "piece start"),
         fade_in=_int(piece["fade_in_samples"], "piece fade_in"),
@@ -279,17 +293,21 @@ def load_proposal(plan_path: Path) -> Proposal:
                 int(piece["fade_out_samples"]),
             )
         elif piece.get("join_index") is not None:
-            joins[int(piece["join_index"])] = _room_tone(piece)
+            index = int(piece["join_index"])
+            join = raw_joins[index] if isinstance(raw_joins, list) and index < len(raw_joins) else {}
+            joins[index] = _room_tone(
+                piece, str(join.get("pause_class")) if isinstance(join, dict) and join.get("pause_class") else None
+            )
     if any(fade is None for fade in fades):
         raise TimelineError("boundary plan has an interval without a source piece")
     first, last = raw_pieces[0], raw_pieces[-1]
     lead = (
-        _room_tone(first)
+        _room_tone(first, "lead")
         if first.get("kind") == "room_tone" and first.get("join_index") is None
         else None
     )
     tail = (
-        _room_tone(last)
+        _room_tone(last, "tail")
         if last.get("kind") == "room_tone"
         and last.get("join_index") is None
         and last is not first
@@ -405,7 +423,7 @@ def validate_timeline(
     if not isinstance(timeline, dict):
         raise TimelineError("timeline must be an object")
     version = timeline.get("schema_version", TIMELINE_SCHEMA_VERSION)
-    if version not in (2, TIMELINE_SCHEMA_VERSION):
+    if version not in (2, 3, TIMELINE_SCHEMA_VERSION):
         raise TimelineError("unsupported timeline schema version")
     proposal_sha = timeline.get("proposal_sha256")
     if proposal_sha is not None and not isinstance(proposal_sha, str):
@@ -441,7 +459,15 @@ def validate_timeline(
         kind = raw.get("kind")
         if kind == "pause":
             items.append(
-                _pause(raw, item_id, proposal, joins_used, allow_pauses, longest)
+                _pause(
+                    raw,
+                    item_id,
+                    proposal,
+                    joins_used,
+                    allow_pauses,
+                    longest,
+                    legacy=version < TIMELINE_SCHEMA_VERSION,
+                )
             )
             if len(items) > 1 and items[-2]["kind"] == "pause":
                 raise TimelineError(f"pause {item_id} follows another pause")
@@ -495,6 +521,8 @@ def _pause(
     joins_used: set[Any],
     allow_pauses: bool,
     longest: int | None,
+    *,
+    legacy: bool = False,
 ) -> dict[str, Any]:
     if not allow_pauses:
         raise TimelineError("pauses are not available in video projects")
@@ -508,6 +536,11 @@ def _pause(
     if origin == "voicecut":
         if proposal is None or proposal.room_tone(join) is None:
             raise TimelineError(f"pause {item_id} is not one of VoiceCut's pauses")
+        if legacy and length != proposal.pause_item(join)["length"]:
+            # Saved before version 4: a VoiceCut pause of another length was
+            # resized by the user, which makes it a manual pause now.
+            origin, join = "manual", None
+    if origin == "voicecut":
         if join in joins_used:
             raise TimelineError(f"VoiceCut's pause {join!r} appears twice")
         joins_used.add(join)

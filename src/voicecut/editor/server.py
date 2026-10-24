@@ -48,7 +48,7 @@ from ..planner_backends import (
     DEFAULT_MODEL_BY_BACKEND,
     PLANNER_BACKENDS,
 )
-from . import ambience, documents, peaks, plan, proxy, scope, settings, speeds
+from . import ambience, documents, pauses, peaks, plan, proxy, scope, settings, speeds
 from .speeds import RunSpeeds
 from .local import LocalModelError, LocalModels
 from .export import EXPORT_STAGES, ExportError, check_destination, export_timeline
@@ -149,6 +149,7 @@ class EditorService:
         self.models = settings.ModelCatalog(env_file, keys=self.keys, local=self.local)
         self.preferences_path = store.root / "preferences.json"
         self.speeds = RunSpeeds(store.root / speeds.FILE_NAME)
+        self.pauses = pauses.PauseWidths(store.root / pauses.FILE_NAME)
         # The last Voice Cut settings chosen in the editor beat the CLI's.
         remembered = settings.load_preferences(self.preferences_path)
         self.defaults = current_settings(
@@ -235,6 +236,7 @@ class EditorService:
             "run": project.run,
             "proposal": proposal.to_client() if proposal else None,
             "proposal_error": proposal_error,
+            "pause_widths": self.pauses.get(),
             "source_items": full_source_items(frames),
             "timeline": self.saved_timeline(project, proposal),
             "exports": project.exports,
@@ -489,7 +491,17 @@ class EditorService:
             "default_models": dict(DEFAULT_MODEL_BY_BACKEND),
             "languages": list(SUPPORTED_LANGUAGE_CODES),
             "defaults": {key: self.defaults.get(key) for key in SETTINGS_KEYS},
+            "pause_widths": self.pauses.get(),
+            "pause_defaults": dict(pauses.DEFAULTS),
         }
+
+    def save_pause_widths(self, body: Any) -> dict[str, Any]:
+        body = body if isinstance(body, dict) else {}
+        try:
+            self.pauses.set(None if body.get("reset") else body.get("widths"))
+        except pauses.PauseWidthError as error:
+            raise HTTPException(400, str(error)) from error
+        return self.settings_state()
 
     def save_key(self, backend: str, body: Any) -> dict[str, Any]:
         key_env = API_KEY_ENV_BY_BACKEND.get(backend)
@@ -1152,6 +1164,11 @@ def create_app(
     @app.get("/api/settings")
     def get_settings() -> dict[str, Any]:
         return service.settings_state()
+
+    @app.put("/api/settings/pauses")
+    async def put_pauses(request: Request) -> dict[str, Any]:
+        body = await _json(request)
+        return await run_in_threadpool(lambda: service.save_pause_widths(body))
 
     @app.put("/api/settings/keys/{backend}")
     async def put_key(backend: str, request: Request) -> dict[str, Any]:

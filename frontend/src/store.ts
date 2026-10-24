@@ -18,6 +18,7 @@ import {
   type Timeline,
   fromItems,
   insertClips,
+  applyPauseWidths,
   isProposal,
   itemIds,
   manualPause,
@@ -30,7 +31,7 @@ import {
   toItems,
   trimClip,
 } from './model/timeline';
-import type { ProjectState, Proposal, WireTimeline } from './types';
+import type { PauseWidths, ProjectState, Proposal, WireTimeline } from './types';
 
 export type SaveState =
   | { state: 'saved' }
@@ -98,6 +99,8 @@ export class EditorStore {
   private saveTimer: number | undefined;
   private saving: Promise<string> | null = null;
   private dirty = false;
+  /** Seconds of pause by class (Settings), for every project. */
+  pauseWidths: PauseWidths = {};
   private listeners = new Set<Listener>();
   private frameListeners = new Set<FrameListener>();
   private animation = 0;
@@ -111,10 +114,11 @@ export class EditorStore {
     this.proposal = project.proposal;
     this.context = { proposal: this.proposal, sourceFrames: this.sourceFrames, sampleRate: this.sampleRate };
     this.sourceTimeline = fromItems(project.source_items);
+    this.pauseWidths = project.pause_widths ?? {};
     const initial = project.timeline
-      ? fromItems(project.timeline.items)
+      ? applyPauseWidths(fromItems(project.timeline.items), this.proposal, this.pauseWidths)
       : this.proposal
-        ? proposalTimeline(this.proposal)
+        ? proposalTimeline(this.proposal, this.pauseWidths)
         : this.sourceTimeline;
     this.history = new History(initial);
     this.layout = computeLayout(initial, this.proposal, this.sampleRate);
@@ -215,7 +219,7 @@ export class EditorStore {
 
   get isEdited(): boolean {
     return this.proposal
-      ? !isProposal(this.timeline, this.proposal)
+      ? !isProposal(this.timeline, this.proposal, this.pauseWidths)
       : !sameTimeline(this.timeline, this.sourceTimeline);
   }
 
@@ -294,10 +298,11 @@ export class EditorStore {
     this.player.stop();
     this.proposal = project.proposal;
     this.context.proposal = project.proposal;
+    if (project.pause_widths) this.pauseWidths = project.pause_widths;
     const timeline = project.timeline
-      ? fromItems(project.timeline.items)
+      ? applyPauseWidths(fromItems(project.timeline.items), project.proposal, this.pauseWidths)
       : project.proposal
-        ? proposalTimeline(project.proposal)
+        ? proposalTimeline(project.proposal, this.pauseWidths)
         : this.sourceTimeline;
     this.history.reset(timeline);
     this.draft = null;
@@ -310,11 +315,6 @@ export class EditorStore {
     this.scheduleSave(0);
     this.zoomToFit();
     this.changed();
-  }
-
-  resetToProposal(): void {
-    this.commit(this.proposal ? proposalTimeline(this.proposal) : this.sourceTimeline);
-    this.notify(this.proposal ? 'Restored Voice Cut’s edit' : 'Restored the whole recording');
   }
 
   splitAtPlayhead(): void {
@@ -674,9 +674,19 @@ export class EditorStore {
   }
 
   // -- saving & rendering ---------------------------------------------------------------
+  /** New pause widths from Settings: VoiceCut's pauses follow them (manual ones stay). */
+  setPauseWidths(widths: PauseWidths): void {
+    this.pauseWidths = widths;
+    const next = applyPauseWidths(this.timeline, this.proposal, widths);
+    if (next !== this.timeline) {
+      this.commit(next);
+      this.notify('VoiceCut’s pauses follow the new widths');
+    }
+  }
+
   wireTimeline(): WireTimeline {
     return {
-      schema_version: 3,
+      schema_version: 4,
       proposal_sha256: this.proposal?.plan_sha256 ?? null,
       items: toItems(this.history.present),
     };

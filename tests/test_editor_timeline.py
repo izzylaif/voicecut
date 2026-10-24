@@ -12,6 +12,7 @@ import soundfile as sf
 from voicecut.common import write_json
 from voicecut.editor.peaks import BASE_SPP, compute_base_peaks, fine_peaks
 from voicecut.editor.timeline import (
+    TIMELINE_SCHEMA_VERSION,
     TimelineError,
     full_source_items,
     load_proposal,
@@ -30,9 +31,11 @@ def proposal(tmp_path: Path):
     return load_proposal(path)
 
 
-def _timeline(proposal, items: list[dict[str, Any]]) -> dict[str, Any]:
+def _timeline(
+    proposal, items: list[dict[str, Any]], version: int = TIMELINE_SCHEMA_VERSION
+) -> dict[str, Any]:
     return {
-        "schema_version": 3,
+        "schema_version": version,
         "proposal_sha256": proposal.plan_sha256,
         "items": items,
     }
@@ -266,3 +269,34 @@ def test_base_and_fine_peaks_are_true_min_max(tmp_path: Path) -> None:
     assert fine_peaks(path, spp=32, first_bin=10**6, count=4) == b""
     with pytest.raises(ValueError):
         fine_peaks(path, spp=7, first_bin=0, count=4)
+
+
+def test_resized_voicecut_pauses_of_older_timelines_become_manual(proposal) -> None:
+    """Before version 4 a resized VoiceCut pause kept its origin; it is the
+    user's pause now, so the pause widths of Settings leave it alone."""
+
+    items = proposal.timeline_items()
+    pauses = [index for index, item in enumerate(items) if item["kind"] == "pause"]
+    resized, untouched = pauses[0], pauses[1]
+    items[resized]["length"] += 4_800
+    normalised = validate_timeline(
+        _timeline(proposal, items, version=3),
+        source_frames=FIXTURE_FRAMES,
+        proposal=proposal,
+    )
+    assert normalised["schema_version"] == TIMELINE_SCHEMA_VERSION
+    assert normalised["items"][resized]["origin"] == "manual"
+    assert normalised["items"][resized]["join"] is None
+    assert normalised["items"][untouched]["origin"] == "voicecut"
+    # The same timeline saved by this version keeps VoiceCut's pause whatever its length.
+    current = validate_timeline(
+        _timeline(proposal, items), source_frames=FIXTURE_FRAMES, proposal=proposal
+    )
+    assert current["items"][resized]["origin"] == "voicecut"
+
+
+def test_proposal_names_each_pause_class(proposal) -> None:
+    client = proposal.to_client()
+    assert client["pause_targets"]["sentence"] == 0.5
+    assert client["lead"] is None or client["lead"]["pause_class"] == "lead"
+    assert all(join is None or "pause_class" in join for join in client["joins"])

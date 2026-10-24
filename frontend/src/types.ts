@@ -28,7 +28,7 @@ export interface WirePause {
 export type WireItem = WireClip | WirePause;
 
 export interface WireTimeline {
-  schema_version: 3;
+  schema_version: 3 | 4;
   proposal_sha256: string | null;
   items: WireItem[];
 }
@@ -37,7 +37,12 @@ export interface RoomTone {
   length: number;
   fade_in: number;
   fade_out: number;
+  /** The renderer's pause class: none, comma, sentence, paragraph, lead or tail. */
+  pause_class?: string | null;
 }
+
+/** Seconds of pause by class, set once in Settings for every project. */
+export type PauseWidths = Record<string, number>;
 
 export interface ProposalSegment {
   id: string;
@@ -67,6 +72,8 @@ export interface Proposal {
   lead: RoomTone | null;
   tail: RoomTone | null;
   words: Word[];
+  /** The renderer's target seconds per pause class. */
+  pause_targets?: Record<string, number>;
 }
 
 export interface Filmstrip {
@@ -160,6 +167,7 @@ export interface ProjectState extends ProjectSummary {
   exports: ExportRecord[];
   default_export_path: string;
   jobs: Partial<Record<'voicecut' | 'export' | 'prepare', string>>;
+  pause_widths?: PauseWidths;
 }
 
 export interface EditorConfig {
@@ -203,6 +211,8 @@ export interface SettingsState {
   default_models: Record<string, string>;
   languages: string[];
   defaults: RunSettings;
+  pause_widths?: PauseWidths;
+  pause_defaults?: PauseWidths;
 }
 
 export interface ModelInfo {

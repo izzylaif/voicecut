@@ -564,3 +564,25 @@ def test_a_local_decision_model_lists_downloads_and_runs_without_ollama(
 
     client.post("/api/local-models/delete", json={"model": "jaredpalmer/kev-9b"})
     assert deleted == ["jaredpalmer/kev-9b"]
+
+
+def test_pause_widths_are_one_setting_for_every_project(tmp_path: Path) -> None:
+    from voicecut.editor import pauses
+
+    client = TestClient(
+        server.create_app(projects_dir=tmp_path / "projects", env_file=tmp_path / ".env")
+    )
+    state = client.get("/api/settings").json()
+    assert state["pause_widths"] == state["pause_defaults"] == pauses.DEFAULTS
+    changed = client.put("/api/settings/pauses", json={"widths": {"sentence": 0.8}}).json()
+    assert changed["pause_widths"]["sentence"] == 0.8
+    assert changed["pause_widths"]["comma"] == pauses.DEFAULTS["comma"]
+    # A second editor over the same projects sees the same widths.
+    again = TestClient(
+        server.create_app(projects_dir=tmp_path / "projects", env_file=tmp_path / ".env")
+    )
+    assert again.get("/api/settings").json()["pause_widths"]["sentence"] == 0.8
+    for bad in ({"sentence": -1}, {"sentence": 9}, {"breath": 1}, {"sentence": True}):
+        assert client.put("/api/settings/pauses", json={"widths": bad}).status_code == 400
+    reset = client.put("/api/settings/pauses", json={"reset": True}).json()
+    assert reset["pause_widths"] == pauses.DEFAULTS

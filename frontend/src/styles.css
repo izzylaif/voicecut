@@ -1536,3 +1536,15 @@ select:focus {
   font-size: 11px;
   color: var(--muted);
 }
+
+.pause-widths {
+  display: grid;
+  gap: 6px;
+}
+
+.pause-width {
+  display: grid;
+  grid-template-columns: 1fr 80px auto;
+  align-items: center;
+  gap: 8px;
+}
