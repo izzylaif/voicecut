@@ -13,6 +13,12 @@
  * a pitch-preserving time stretcher (stretch.ts) and its output is scheduled
  * back to back instead; the playhead then advances `rate` output samples per
  * sample heard.
+ *
+ * The context is suspended while nothing plays and resumed to play.  WebKit,
+ * the macOS app's web view, can lose the sound of a context left running
+ * idle for long (a long Voice Cut run): the context still says "running" and
+ * its clock advances, but nothing is heard until it is suspended and resumed
+ * (WebKit bug 276687).  A context that will not resume is replaced.
  */
 import { Stretcher } from './stretch';
 
@@ -23,6 +29,10 @@ const PUMP_MS = 40;
 const CACHE_CHUNKS = 96;
 /** Stretched output is scheduled in buffers of about this many samples. */
 const STRETCH_BLOCK = 8192;
+/** Stopped this long, the context is suspended (a seek while playing restarts at once). */
+export const SUSPEND_AFTER_MS = 1000;
+/** A context whose resume() has not settled by then is replaced. */
+export const RESUME_TIMEOUT_MS = 1500;
 
 export type FetchChunk = (revision: string, start: number, frames: number) => Promise<Float32Array[]>;
 
@@ -47,6 +57,9 @@ export class OutputPlayer {
   /** Next input chunk to feed the stretcher, and whether one is on its way. */
   private feedChunk = 0;
   private feeding = false;
+  private suspendTimer: number | undefined;
+  /** When playback last stopped (performance.now()). */
+  private stoppedTime = 0;
 
   onEnded: (() => void) | null = null;
   onError: ((error: unknown) => void) | null = null;
@@ -75,6 +88,30 @@ export class OutputPlayer {
     this.output = this.context.createGain();
     this.output.connect(this.context.destination);
     return this.context;
+  }
+
+  /** A running context: the idle one suspended and resumed, or a new one. */
+  private async readyContext(): Promise<AudioContext> {
+    window.clearTimeout(this.suspendTimer);
+    const idle = this.context !== null && performance.now() - this.stoppedTime >= SUSPEND_AFTER_MS;
+    const context = this.ensureContext();
+    // Stopped for long but not suspended yet (its timer was held back).
+    if (idle && context.state === 'running') await settle(context.suspend());
+    if (context.state !== 'running') await settle(context.resume());
+    if (context.state === 'running') return context;
+    // Interrupted, closed, or stuck resuming: start over with a new context.
+    await this.closeContext();
+    const fresh = this.ensureContext();
+    if (fresh.state !== 'running') await settle(fresh.resume());
+    if (fresh.state !== 'running') throw new Error('the audio output did not start');
+    return fresh;
+  }
+
+  private async closeContext(): Promise<void> {
+    const context = this.context;
+    this.context = null;
+    this.output = null;
+    if (context) await settle(context.close());
   }
 
   private chunk(revision: string, index: number, total: number): Promise<Float32Array[]> {
@@ -110,11 +147,13 @@ export class OutputPlayer {
     this.stoppedAt = frame;
     this.rate = rate;
     if (frame >= total) return;
-    const context = this.ensureContext();
     this.playing = true;
+    let context: AudioContext;
     try {
-      if (context.state === 'suspended') await context.resume();
-      await this.chunk(revision, Math.floor(frame / CHUNK_FRAMES), total);
+      [context] = await Promise.all([
+        this.readyContext(),
+        this.chunk(revision, Math.floor(frame / CHUNK_FRAMES), total),
+      ]);
     } catch (error) {
       if (generation === this.generation) {
         this.playing = false;
@@ -142,6 +181,11 @@ export class OutputPlayer {
   stop(): number {
     if (this.playing) this.stoppedAt = this.currentFrame();
     this.halt();
+    this.stoppedTime = performance.now();
+    window.clearTimeout(this.suspendTimer);
+    this.suspendTimer = window.setTimeout(() => {
+      if (!this.playing) void this.context?.suspend().catch(() => undefined);
+    }, SUSPEND_AFTER_MS);
     return this.stoppedAt;
   }
 
@@ -323,8 +367,20 @@ export class OutputPlayer {
 
   dispose(): void {
     this.halt();
+    window.clearTimeout(this.suspendTimer);
     this.cache.clear();
-    void this.context?.close();
-    this.context = null;
+    void this.closeContext();
   }
+}
+
+/** Wait for `promise` to settle, or for RESUME_TIMEOUT_MS if it never does. */
+function settle(promise: Promise<unknown>): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(resolve, RESUME_TIMEOUT_MS);
+    const done = () => {
+      window.clearTimeout(timer);
+      resolve();
+    };
+    promise.then(done, done);
+  });
 }

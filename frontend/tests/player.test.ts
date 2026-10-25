@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CHUNK_FRAMES, OutputPlayer } from '../src/audio/player';
+import { CHUNK_FRAMES, OutputPlayer, RESUME_TIMEOUT_MS, SUSPEND_AFTER_MS } from '../src/audio/player';
 
 const RATE = 48_000;
 
@@ -12,6 +12,7 @@ interface Started {
 /** Just enough of the Web Audio API to see what the player schedules. */
 class FakeContext {
   static last: FakeContext | null = null;
+  static made = 0;
   currentTime = 1;
   state = 'running';
   sampleRate: number;
@@ -19,17 +20,32 @@ class FakeContext {
   baseLatency = 0;
   destination = {};
   started: Started[] = [];
+  calls: string[] = [];
+  /** resume() never settles (WebKit's stuck resume). */
+  stuck = false;
 
   constructor(options: { sampleRate: number }) {
     this.sampleRate = options.sampleRate;
     FakeContext.last = this;
+    FakeContext.made += 1;
   }
 
   resume() {
+    this.calls.push('resume');
+    if (this.stuck) return new Promise<void>(() => undefined);
+    this.state = 'running';
+    return Promise.resolve();
+  }
+
+  suspend() {
+    this.calls.push('suspend');
+    this.state = 'suspended';
     return Promise.resolve();
   }
 
   close() {
+    this.calls.push('close');
+    this.state = 'closed';
     return Promise.resolve();
   }
 
@@ -66,7 +82,7 @@ describe('OutputPlayer', () => {
     vi.useFakeTimers();
     vi.stubGlobal('AudioContext', FakeContext);
     vi.stubGlobal('window', globalThis);
-    vi.stubGlobal('performance', { now: () => 0 });
+    vi.stubGlobal('performance', { now: () => Date.now() });
   });
 
   afterEach(() => {
@@ -184,6 +200,86 @@ describe('OutputPlayer', () => {
     release!();
     await vi.advanceTimersByTimeAsync(0);
     expect(FakeContext.last!.started).toHaveLength(1);
+    player.dispose();
+  });
+
+  it('suspends the context while stopped and resumes the same one to play', async () => {
+    const player = new OutputPlayer(RATE, 1, async (_revision, start, frames) => [signal(start, frames)]);
+    await player.play(0, 'rev', CHUNK_FRAMES * 2);
+    const context = FakeContext.last!;
+    player.stop();
+    await vi.advanceTimersByTimeAsync(SUSPEND_AFTER_MS);
+    expect(context.state).toBe('suspended');
+    const scheduled = context.started.length;
+    await player.play(0, 'rev', CHUNK_FRAMES * 2);
+    expect(FakeContext.last).toBe(context);
+    expect(context.calls).toEqual(['suspend', 'resume']);
+    expect(context.state).toBe('running');
+    expect(context.started.length).toBeGreaterThan(scheduled);
+    player.dispose();
+  });
+
+  it('does not suspend for a seek while playing', async () => {
+    const player = new OutputPlayer(RATE, 1, async (_revision, start, frames) => [signal(start, frames)]);
+    await player.play(0, 'rev', CHUNK_FRAMES * 2);
+    const context = FakeContext.last!;
+    player.stop();
+    await player.play(1000, 'rev', CHUNK_FRAMES * 2);
+    await vi.advanceTimersByTimeAsync(SUSPEND_AFTER_MS * 2);
+    expect(context.calls).toEqual([]);
+    expect(player.isPlaying).toBe(true);
+    player.dispose();
+  });
+
+  it('suspends and resumes a context left running idle before playing again', async () => {
+    const player = new OutputPlayer(RATE, 1, async (_revision, start, frames) => [signal(start, frames)]);
+    await player.play(0, 'rev', CHUNK_FRAMES * 2);
+    const context = FakeContext.last!;
+    player.stop();
+    // Half an hour later, with the suspend held back (a background window's timers).
+    vi.setSystemTime(Date.now() + 30 * 60_000);
+    await player.play(0, 'rev', CHUNK_FRAMES * 2);
+    expect(FakeContext.last).toBe(context);
+    expect(context.calls).toEqual(['suspend', 'resume']);
+    expect(player.isPlaying).toBe(true);
+    player.dispose();
+  });
+
+  it('replaces a context that does not resume', async () => {
+    const player = new OutputPlayer(RATE, 1, async (_revision, start, frames) => [signal(start, frames)]);
+    await player.play(0, 'rev', CHUNK_FRAMES * 2);
+    const context = FakeContext.last!;
+    player.stop();
+    await vi.advanceTimersByTimeAsync(SUSPEND_AFTER_MS);
+    context.stuck = true;
+    const made = FakeContext.made;
+    const playing = player.play(0, 'rev', CHUNK_FRAMES * 2);
+    await vi.advanceTimersByTimeAsync(RESUME_TIMEOUT_MS);
+    await playing;
+    expect(context.calls).toEqual(['suspend', 'resume', 'close']);
+    expect(FakeContext.made).toBe(made + 1);
+    expect(FakeContext.last).not.toBe(context);
+    expect(FakeContext.last!.started.length).toBeGreaterThan(0);
+    expect(player.isPlaying).toBe(true);
+    player.dispose();
+  });
+
+  it('reports an audio output that will not start', async () => {
+    const errors: unknown[] = [];
+    const player = new OutputPlayer(RATE, 1, async (_revision, start, frames) => [signal(start, frames)]);
+    player.onError = (error) => errors.push(error);
+    vi.stubGlobal(
+      'AudioContext',
+      class extends FakeContext {
+        override state = 'suspended';
+        override stuck = true;
+      },
+    );
+    const playing = player.play(0, 'rev', CHUNK_FRAMES * 2);
+    await vi.advanceTimersByTimeAsync(RESUME_TIMEOUT_MS * 2);
+    await playing;
+    expect(player.isPlaying).toBe(false);
+    expect(String(errors[0])).toContain('audio output did not start');
     player.dispose();
   });
 });
