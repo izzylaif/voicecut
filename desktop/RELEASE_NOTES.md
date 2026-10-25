@@ -2,7 +2,14 @@ VoiceCut listens to a narration recording, keeps the best take of every line,
 fixes the pauses, and lets you fine-tune every cut on a timeline before
 exporting.
 
-## What's new in 0.4.0
+## What's new in 0.4.1
+
+- **Sound after a long Voice Cut.** On a Mac, the edit of a long recording
+  could play silent after Voice Cut finished until VoiceCut was restarted.
+  The player now rests its audio output while nothing plays and wakes it to
+  play, which brings the sound back.
+
+## New in 0.4.0
 
 - **Fast planners for smaller Macs.** Kev 9B and Kev 4B, decision models that
   answer typed questions about every line instead of writing text, plan an
