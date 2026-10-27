@@ -2,7 +2,15 @@ VoiceCut listens to a narration recording, keeps the best take of every line,
 fixes the pauses, and lets you fine-tune every cut on a timeline before
 exporting.
 
-## What's new in 0.4.1
+## What's new in 0.4.2
+
+- **Breaths removed in Russian too.** Voice Cut now replaces breaths, clicks
+  and mouth noise in pauses with room tone in every language; Russian
+  recordings used to keep them. Settings › Voice Cut has a *Remove breaths*
+  checkbox, ticked by default: untick it to keep every pause as recorded. A
+  change applies the next time you run Voice Cut.
+
+## New in 0.4.1
 
 - **Sound after a long Voice Cut.** On a Mac, the edit of a long recording
   could play silent after Voice Cut finished until VoiceCut was restarted.
