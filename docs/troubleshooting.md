@@ -228,10 +228,13 @@ weaker detections as breath, and inspect the join in
 
 ### No clean ambience
 
-If the recording has no stretch of at least 250 ms of clean room tone, the
-ambience bank is empty (`ambience.status` = `unavailable` in the boundary plan).
-Pauses are then built from the original silence next to each word only and can
-come out shorter than their target.
+If the recording has no stretch of at least 250 ms of clean room tone (tight
+narration with a breath in every pause), room tone is taken from shorter clean
+stretches of at least 80 ms (`ambience.status` = `short_runs` in the boundary
+plan). If there are none either (`unavailable`), the rest of each pause is
+silence (`silent_room_tone` on its join), so pauses still get their length. In
+a video, such a pause keeps its recorded gap, breath included
+(`kept_recorded_gap`).
 
 ## Output already exists
 

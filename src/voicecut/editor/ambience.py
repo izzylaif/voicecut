@@ -26,7 +26,7 @@ from .. import cut_render
 from ..common import read_json
 from .timeline import Proposal
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 
 def _levels(audio_path: Path) -> tuple[np.ndarray, int, int]:

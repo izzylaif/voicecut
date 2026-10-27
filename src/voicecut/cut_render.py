@@ -82,6 +82,9 @@ MFA_CROP_PAD_SECONDS = 0.30
 AMBIENCE_MIN_RUN_SECONDS = 0.25
 AMBIENCE_WORD_GUARD_SECONDS = 0.12
 AMBIENCE_CROSSFADE_SECONDS = 0.030
+# Fallback when no run meets the above: shorter runs closer to the words.
+AMBIENCE_SHORT_MIN_RUN_SECONDS = 0.08
+AMBIENCE_SHORT_GUARD_SECONDS = 0.03
 
 
 class CutRenderError(RuntimeError):
@@ -555,14 +558,49 @@ def build_ambience_bank(
     words: Sequence[PlanWord],
     total_samples: int,
 ) -> AmbienceBank:
+    runs = quiet_runs(
+        signal,
+        words,
+        total_samples,
+        guard_seconds=AMBIENCE_WORD_GUARD_SECONDS,
+        minimum_seconds=AMBIENCE_MIN_RUN_SECONDS,
+    )
+    if runs:
+        return AmbienceBank(
+            runs=runs, sample_rate=signal.sample_rate, status="complete"
+        )
+    # Tight narration, with a breath in every pause, can leave no long clean
+    # stretch; shorter ones closer to the words still crossfade into room tone.
+    runs = quiet_runs(
+        signal,
+        words,
+        total_samples,
+        guard_seconds=AMBIENCE_SHORT_GUARD_SECONDS,
+        minimum_seconds=AMBIENCE_SHORT_MIN_RUN_SECONDS,
+    )
+    status = "short_runs" if runs else "unavailable"
+    return AmbienceBank(runs=runs, sample_rate=signal.sample_rate, status=status)
+
+
+def quiet_runs(
+    signal: SignalAnalysis,
+    words: Sequence[PlanWord],
+    total_samples: int,
+    *,
+    guard_seconds: float,
+    minimum_seconds: float,
+) -> list[tuple[int, int]]:
+    """Source ranges within 3 dB of the floor, ``guard_seconds`` away from words
+    and sounds, without breath, and at least ``minimum_seconds`` long."""
+
     sample_rate = signal.sample_rate
     usable = signal.db < signal.noise_floor_db + 3.0
     for word in words:
-        first = signal.frame(word.start - AMBIENCE_WORD_GUARD_SECONDS)
-        last = signal.frame(word.end + AMBIENCE_WORD_GUARD_SECONDS) + 1
+        first = signal.frame(word.start - guard_seconds)
+        last = signal.frame(word.end + guard_seconds) + 1
         usable[first:last] = False
     sound = signal.db >= signal.sound_threshold_db
-    guard = int(AMBIENCE_WORD_GUARD_SECONDS / HOP_SECONDS)
+    guard = int(guard_seconds / HOP_SECONDS)
     for index in np.flatnonzero(sound):
         usable[max(0, index - guard) : index + guard] = False
     if signal.breath is not None:
@@ -570,7 +608,7 @@ def build_ambience_bank(
         breathy = np.repeat(signal.breath >= 0.3, ratio)[: len(usable)]
         usable[: len(breathy)] &= ~breathy
     runs: list[tuple[int, int]] = []
-    minimum = int(AMBIENCE_MIN_RUN_SECONDS / HOP_SECONDS)
+    minimum = int(minimum_seconds / HOP_SECONDS)
     start = None
     for index, value in enumerate(np.append(usable, False)):
         if value and start is None:
@@ -584,8 +622,7 @@ def build_ambience_bank(
                     )
                 )
             start = None
-    status = "complete" if runs else "unavailable"
-    return AmbienceBank(runs=runs, sample_rate=sample_rate, status=status)
+    return runs
 
 
 # ---------------------------------------------------------------------------
@@ -893,7 +930,10 @@ def build_pieces(
 
     The desired gap is the silence between the left word's audible end and the
     right word's audible onset.  It is filled first with clean original silence
-    next to each word, then with ambience from the bank.
+    next to each word, then with ambience from the bank, or with silence when
+    the recording has no clean quiet to offer.  A video inserts nothing (its
+    pictures follow the source), so a pause clean silence cannot fill keeps what
+    was recorded there, a breath included, rather than shrink.
     """
 
     del words
@@ -916,47 +956,54 @@ def build_pieces(
         need = join["desired_gap_seconds"]
         if join["tail_dense"]:
             fades_out[index] = dense_fade
-            available_left = 0.0
+            recorded_left = clean_left = 0.0
         else:
             if join["left_status"] == "max":
                 # A faint decay was cut short: fade it out gently.
                 fades_out[index] = soft_fade
             limit = join["limit_after"] - 0.01
-            available_left = (
-                clean_extent_after(signal, tail, limit)
-                if use_breath
-                else max(0.0, limit - tail)
+            recorded_left = max(0.0, limit - tail)
+            clean_left = (
+                clean_extent_after(signal, tail, limit) if use_breath else recorded_left
             )
         if join["head_dense"]:
             fades_in[index + 1] = dense_fade
-            available_right = 0.0
+            recorded_right = clean_right = 0.0
         else:
             limit = join["limit_before"] + 0.01
-            available_right = (
+            recorded_right = max(0.0, head - limit)
+            clean_right = (
                 clean_extent_before(signal, head, limit)
                 if use_breath
-                else max(0.0, head - limit)
+                else recorded_right
             )
         if join["contiguous_in_source"]:
             # Both sides share one original gap; never let them overlap.
             shared = max(0.0, head - tail)
-            available_left = min(available_left, shared / 2)
-            available_right = min(available_right, shared / 2)
+            recorded_left = min(recorded_left, shared / 2)
+            recorded_right = min(recorded_right, shared / 2)
+            clean_left = min(clean_left, shared / 2)
+            clean_right = min(clean_right, shared / 2)
+        keep_recorded = pause_policy == "cuts" and clean_left + clean_right < need
+        available_left = recorded_left if keep_recorded else clean_left
+        available_right = recorded_right if keep_recorded else clean_right
         use_left = min(available_left, need / 2)
         use_right = min(available_right, need - use_left)
         use_left = min(available_left, need - use_right)
         remainder = max(0.0, need - use_left - use_right)
         ends[index] = seconds_to_sample(tail + use_left)
         starts[index + 1] = seconds_to_sample(head - use_right)
-        if pause_policy == "semantic" and bank.runs:
+        if pause_policy == "semantic":
             room_tone[index] = round(remainder * sample_rate)
         join["used_left_silence_seconds"] = use_left
         join["used_right_silence_seconds"] = use_right
         join["room_tone_seconds"] = room_tone[index] / sample_rate
+        join["kept_recorded_gap"] = keep_recorded and use_breath
+        join["silent_room_tone"] = room_tone[index] > 0 and not bank.runs
 
     pieces: list[Piece] = []
     lead = int(LEAD_IN_SECONDS * sample_rate) if pause_policy == "semantic" else 0
-    if lead and bank.runs:
+    if lead:
         pieces.append(
             Piece(
                 "room_tone",
@@ -995,7 +1042,7 @@ def build_pieces(
     tail_length = (
         int(LEAD_OUT_SECONDS * sample_rate) if pause_policy == "semantic" else 0
     )
-    if tail_length and bank.runs:
+    if tail_length:
         pieces.append(
             Piece(
                 "room_tone",

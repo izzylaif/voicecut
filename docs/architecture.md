@@ -238,11 +238,17 @@ punctuation of the planner's text aligned to the source words).
 A shortened or cleaned pause is rebuilt from clean original silence next to
 each word, then ambience. Ambience comes from a bank of clean runs (>= 250 ms,
 within 3 dB of the floor, away from words, sounds and breaths), nearest to the
-join first, assembled with 30 ms crossfades. Pieces are overlap-added with
-10 ms equal-power crossfades that lie in silence.
+join first, assembled with 30 ms crossfades. Tight narration, with a breath in
+every pause, can have no such run; the bank then takes runs of >= 80 ms that
+stay 30 ms from words and sounds (`ambience.status` = `short_runs`). When even
+those are missing, the rest of the pause is silence: a pause never comes out
+shorter because its breath was removed. Pieces are overlap-added with 10 ms
+equal-power crossfades that lie in silence.
 
 Video uses the `cuts` policy: no ambience is inserted and every pause is built
 from original silence only, so pictures can follow the same source intervals.
+A pause that clean silence cannot fill keeps the recorded gap, breath included,
+rather than shrink.
 
 ## 9. Boundary plan, render and publication
 
@@ -309,5 +315,5 @@ when it belongs to a different configuration.
 | Repetition left after the review | Publish and warn with the locations |
 | MFA unavailable | Whisper timing refined by the waveform, with a warning |
 | Breath detector unavailable | Energy-only pause cleaning, recorded in the manifest |
-| No clean ambience in the recording | Pauses use original silence only |
+| No clean ambience in the recording | Short clean runs, else silence, fill each pause to its length |
 | Hash, ID or source geometry corruption | Fail closed |

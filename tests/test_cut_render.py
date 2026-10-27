@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -191,6 +192,123 @@ def test_long_pause_is_shortened_breath_removed_and_dropped_word_cut() -> None:
         np.sqrt((pause[: frames * hop].reshape(frames, hop) ** 2).mean(axis=1)) + 1e-12
     )
     assert level.max() < signal.sound_threshold_db
+
+
+def _breathy_scene(
+    *, quiet_after: float, quiet_before: float
+) -> tuple[np.ndarray, list[PlanWord], np.ndarray]:
+    """Tight narration: six words 0.4 s apart and a quiet breath in every gap,
+    so no stretch of room tone is as long as the regular bank needs."""
+
+    rng = np.random.default_rng(11)
+    duration = 4.8
+    audio = (FLOOR * rng.standard_normal(int(duration * RATE))).astype(np.float32)
+    breath = np.zeros(int(duration * 100) + 1, np.float32)
+
+    def breathe(start: float, end: float) -> None:
+        first, last = int(start * RATE), int(end * RATE)
+        audio[first:last] += (2 * FLOOR * rng.standard_normal(last - first)).astype(
+            np.float32
+        )
+        breath[int(start * 100) : int(end * 100)] = 0.95
+
+    words, start, breathing = [], 0.3, 0.0
+    for index, text in enumerate(["One,", "two.", "Three,", "four.", "Five,", "six."]):
+        breathe(breathing, start - quiet_before)
+        first = int(start * RATE)
+        audio[first : first + int(0.3 * RATE)] += _tone(0.3)
+        words.append(
+            PlanWord(
+                id=index,
+                text=text,
+                start=start,
+                end=start + 0.3,
+                core_start=start,
+                core_end=start + 0.3,
+            )
+        )
+        breathing = start + 0.3 + quiet_after
+        start += 0.7
+    breathe(breathing, duration)
+    return audio, words, breath
+
+
+def _pause_levels(output: np.ndarray, gaps: list[tuple[float, float]]) -> float:
+    hop = int(0.005 * RATE)
+    loudest = -200.0
+    for start, end in gaps:
+        pause = output[int((start + 0.03) * RATE) : int((end - 0.03) * RATE)]
+        frames = len(pause) // hop
+        level = 20 * np.log10(
+            np.sqrt((pause[: frames * hop].reshape(frames, hop) ** 2).mean(axis=1))
+            + 1e-12
+        )
+        loudest = max(loudest, float(level.max()))
+    return loudest
+
+
+def test_breaths_in_tight_narration_become_short_run_room_tone() -> None:
+    audio, words, breath = _breathy_scene(quiet_after=0.12, quiet_before=0.06)
+    _keep(
+        words,
+        [
+            {
+                "first_id": 0,
+                "last_id": 5,
+                "text": "One, two. Three, four. Five, six.",
+                "break_after": "paragraph",
+            }
+        ],
+    )
+    signal, _, joins, output, _ = _render(audio, words, breath)
+    assert build_ambience_bank(signal, words, len(audio)).status == "short_runs"
+    runs = _speech_runs(output, signal)
+    gaps = [(left[1], right[0]) for left, right in pairwise(runs)]
+    assert len(gaps) == len(joins) == 5
+    for (start, end), join in zip(gaps, joins):
+        assert end - start == pytest.approx(join["desired_gap_seconds"], abs=0.04)
+        assert end - start > 0.3
+        assert join["room_tone_seconds"] > 0
+    # The breaths (6 dB above the floor) are gone from every pause.
+    assert _pause_levels(output, gaps) < 20 * np.log10(FLOOR) + 4
+
+
+def _breathing_only(policy: str):
+    audio, words, breath = _breathy_scene(quiet_after=0.0, quiet_before=0.0)
+    _keep(
+        words,
+        [
+            {
+                "first_id": 0,
+                "last_id": 5,
+                "text": "One, two. Three, four. Five, six.",
+                "break_after": "paragraph",
+            }
+        ],
+    )
+    signal, _, joins, output, _ = _render(audio, words, breath, policy=policy)
+    assert build_ambience_bank(signal, words, len(audio)).status == "unavailable"
+    runs = _speech_runs(output, signal)
+    gaps = [(left[1], right[0]) for left, right in pairwise(runs)]
+    assert len(gaps) == len(joins) == 5
+    return joins, output, gaps
+
+
+def test_pause_without_clean_material_is_filled_with_silence() -> None:
+    joins, output, gaps = _breathing_only("semantic")
+    for (start, end), join in zip(gaps, joins):
+        assert end - start == pytest.approx(join["desired_gap_seconds"], abs=0.04)
+        assert end - start > 0.3
+        assert join["silent_room_tone"]
+    assert _pause_levels(output, gaps) < -120
+
+
+def test_video_pause_without_clean_material_keeps_its_recorded_length() -> None:
+    # A video cannot insert silence under its pictures: the pause keeps the
+    # recorded breath rather than shrink.
+    joins, _, gaps = _breathing_only("cuts")
+    assert [end - start for start, end in gaps] == pytest.approx([0.4] * 5, abs=0.04)
+    assert all(join["kept_recorded_gap"] for join in joins)
 
 
 def test_retained_speech_is_copied_sample_exact() -> None:
