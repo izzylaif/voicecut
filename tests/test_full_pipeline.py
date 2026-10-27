@@ -465,7 +465,7 @@ def test_russian_profile_bypasses_english_ctc_and_propagates_language(
             )
         elif module == "voicecut.cut_render":
             assert command[command.index("--language") + 1] == "ru"
-            assert command[command.index("--breath-cleanup") + 1] == "off"
+            assert command[command.index("--breath-cleanup") + 1] == "replace"
             output_dir = Path(command[command.index("--output-dir") + 1])
             output_dir.mkdir(parents=True)
             final_cut = output_dir / "final_cut.wav"
@@ -482,7 +482,7 @@ def test_russian_profile_bypasses_english_ctc_and_propagates_language(
                     "mfa_version": "3.4.1",
                     "mfa_model": russian_mfa_model,
                     "pause_policy": "semantic",
-                    "breath_cleanup_mode": "off",
+                    "breath_cleanup_mode": "replace",
                     "breath_threshold": 0.5,
                     "source_audio_sha256": audio_sha,
                     "take_plan": str(plan.resolve()),
@@ -520,7 +520,7 @@ def test_russian_profile_bypasses_english_ctc_and_propagates_language(
 
     modules = [command[command.index("-m") + 1] for command in calls]
     assert "voicecut.ctc_enrich" not in modules
-    assert args.breath_cleanup == "off"
+    assert args.breath_cleanup == "replace"
     assert result["language"] == "ru"
     assert result["mfa_model"] == russian_mfa_model
     assert result["semantic_transcript"] == str(
@@ -540,7 +540,7 @@ def test_russian_profile_bypasses_english_ctc_and_propagates_language(
     assert configuration["language"] == "ru"
     assert configuration["language_profile"]["mfa_model"] == russian_mfa_model
     assert configuration["language_profile"]["whisper_language"] == "ru"
-    assert configuration["breath_cleanup"] == "off"
+    assert configuration["breath_cleanup"] == "replace"
 
 
 def test_explicit_russian_breath_cleanup_override_is_preserved(tmp_path: Path) -> None:
@@ -550,11 +550,11 @@ def test_explicit_russian_breath_cleanup_override_is_preserved(tmp_path: Path) -
             "--language",
             "ru",
             "--breath-cleanup",
-            "replace",
+            "off",
         ]
     )
     assert parsed.language == "ru"
-    assert parsed.breath_cleanup == "replace"
+    assert parsed.breath_cleanup == "off"
 
 
 def test_optional_ctc_process_failure_completes_with_whisper_passthrough(
@@ -1274,7 +1274,7 @@ def test_full_pipeline_reports_progress_callback_stage_sequence(
 
     def russian_runner(command: list[str], **kwargs: object) -> None:
         if "voicecut.cut_render" in command:
-            assert command[command.index("--breath-cleanup") + 1] == "off"
+            assert command[command.index("--breath-cleanup") + 1] == "replace"
         fake_runner(command, **kwargs)
 
     def russian_publisher(final_wav, output_path, *, manifest_path, overwrite):

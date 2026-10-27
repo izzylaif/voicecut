@@ -20,7 +20,7 @@ def test_language_profiles_preserve_english_defaults() -> None:
     assert profile.default_breath_cleanup == "replace"
 
 
-def test_russian_profile_pins_language_models_and_safe_feature_defaults() -> None:
+def test_russian_profile_pins_language_models_and_feature_defaults() -> None:
     profile = get_language_profile("ru")
 
     assert profile.whisper_language == "ru"
@@ -28,7 +28,7 @@ def test_russian_profile_pins_language_models_and_safe_feature_defaults() -> Non
         "MontrealCorpusTools/russian_mfa@88b81ae3eaf3bd8163bb3f7c43e1ae61478595af"
     )
     assert profile.ctc_enrichment_supported is False
-    assert profile.default_breath_cleanup == "off"
+    assert profile.default_breath_cleanup == "replace"
 
 
 def test_language_profiles_are_immutable_and_reject_unknown_codes() -> None:

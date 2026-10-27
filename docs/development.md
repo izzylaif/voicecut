@@ -70,7 +70,7 @@ voicecut presentation.mp4 -o presentation_cut.mp4
 # Keep reusable diagnostics and stage metadata.
 voicecut recording.wav --work-dir voicecut_work --debug-artifacts
 
-# Keep breaths (on by default for English, off for Russian).
+# Keep breaths (they are removed by default).
 voicecut recording.wav --breath-cleanup off
 ```
 

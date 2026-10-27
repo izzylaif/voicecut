@@ -154,7 +154,10 @@ option only the render. Going back to settings used before reuses that whole
 run. Another language transcribes again.
 
 **Settings** (the gear icon) holds the API keys of the cloud planners
-(`GEMINI_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`) and the breath option.
+(`GEMINI_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`) and, in a project,
+*Remove breaths*: ticked by default in every language, it has Voice Cut replace
+breaths, clicks and mouth noise in pauses with room tone; unticked, pauses keep
+what was recorded.
 
 **Pauses.** *Settings → Pauses* sets how long Voice Cut's pauses are, for every
 project: inside a sentence, after a comma, between sentences and between

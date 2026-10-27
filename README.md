@@ -358,8 +358,9 @@ plan, so you can always see why a cut was made.
   before you publish it.
 - **Video:** edited from speech only. VoiceCut does not consider slides,
   gestures, camera changes or visual continuity.
-- **Breaths:** breath removal is on by default only for English; the breath
-  detector has not been validated for Russian.
+- **Breaths:** breath removal is on by default; the breath detector has not
+  been validated for Russian. If it misses breaths or clips words, untick
+  *Remove breaths* in the settings.
 - **Unsigned installers:** the first launch needs the steps above, and on
   macOS the "VoiceCut would like to access files in…" questions come back
   once after each update until builds are signed with a Developer ID.

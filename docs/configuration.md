@@ -297,7 +297,7 @@ may be recorded as non-secret configuration, so it must never contain a key.
 | MLX Whisper language | `en` | `ru` |
 | Hidden-retry CTC enrichment | Enabled; fail-soft optional evidence | Skipped by language policy |
 | MFA model | `english_us_arpa` | Revision-pinned `MontrealCorpusTools/russian_mfa` |
-| Breath-cleanup default | `replace` | `off` |
+| Breath-cleanup default | `replace` | `replace` |
 
 Select Russian with:
 
@@ -308,10 +308,10 @@ voicecut input.wav --language ru
 English behavior remains the default and is unchanged by selecting no language
 option. Russian uses the primary Whisper transcript directly because the
 optional hidden-retry CTC component has not been validated for Russian.
-Respiro-en likewise has not been validated as a Russian breath detector, so
-Russian defaults to `--breath-cleanup off`. An explicit cleanup selection
-overrides the language default, but it should be treated as experimental for
-Russian.
+Respiro-en has not been validated as a Russian breath detector either, but
+breaths are removed by default as in English. If it misses breaths or clips
+words in a Russian recording, `--breath-cleanup off` (or unticking *Remove
+breaths* in the editor's settings) keeps every pause as recorded.
 
 The selected language should match the dominant spoken narration. VoiceCut is
 not currently a multilingual code-switching or automatic language-detection
@@ -432,21 +432,21 @@ voicecut take.wav -o take_gemma.wav \
 
 ## Breath cleanup and ambience
 
-The language-dependent default can be overridden with:
+Breaths are removed by default in every language. The default can be
+overridden with:
 
 ```bash
 voicecut input.wav --breath-cleanup replace
 voicecut input.wav --breath-cleanup off
 ```
 
-- `replace` (English default) treats every non-speech sound inside a pause --
+- `replace` (default) treats every non-speech sound inside a pause --
   breaths, clicks, mouth noise -- as something to remove, and fills the pause
   with clean ambience taken from the same recording. Respiro-en breath
   probabilities also stop a word's head or tail from swallowing an adjacent
   breath.
-- `off` (Russian default, because Respiro-en is not validated for Russian)
-  keeps the original content of every pause; long pauses are still shortened by
-  removing their middle.
+- `off` keeps the original content of every pause; long pauses are still
+  shortened by removing their middle.
 
 `--breath-threshold` (default `0.5`) is the Respiro-en frame probability above
 which a frame counts as breath. `--respiro-cache-root` points to the

@@ -96,20 +96,19 @@ export function SettingsDialog({
         {settings && onSettings && (
         <section className="settings-section">
           <h3>Voice Cut</h3>
-          <label className="field">
-            <span>Breaths in pauses</span>
-            <select
-              value={settings.breath_cleanup ?? ''}
-              onChange={(event) =>
-                onSettings({ ...settings, breath_cleanup: (event.target.value || null) as RunSettings['breath_cleanup'] })
-              }
-            >
-              <option value="">Language default</option>
-              <option value="replace">Replace with room tone</option>
-              <option value="off">Keep them</option>
-            </select>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={settings.breath_cleanup !== 'off'}
+              onChange={(event) => onSettings({ ...settings, breath_cleanup: event.target.checked ? 'replace' : 'off' })}
+            />
+            Remove breaths
           </label>
-          <p className="muted small">The planner, its model and the language are chosen in the top bar.</p>
+          <p className="muted small">
+            Breaths, clicks and mouth noise in pauses are replaced with room tone from the same recording. A change
+            applies when you run Voice Cut again, which then renders the edit again without transcribing. The planner,
+            its model and the language are chosen in the top bar.
+          </p>
         </section>
         )}
 

@@ -43,11 +43,13 @@ _LANGUAGE_PROFILES: Mapping[str, LanguageProfile] = MappingProxyType(
                 "MontrealCorpusTools/russian_mfa"
                 "@88b81ae3eaf3bd8163bb3f7c43e1ae61478595af"
             ),
-            # The hidden-retry CTC enrichment and Respiro-en have not been
-            # validated for Russian.  Transcription, gap recovery, planning
-            # and MFA remain available.
+            # The hidden-retry CTC enrichment has not been validated for
+            # Russian.  Transcription, gap recovery, planning and MFA remain
+            # available.  Respiro-en has not been validated for Russian either,
+            # but breaths are removed by default as in English; ``off`` keeps
+            # them.
             ctc_enrichment_supported=False,
-            default_breath_cleanup="off",
+            default_breath_cleanup="replace",
         ),
     }
 )

@@ -189,8 +189,8 @@ Expected differences from English:
 
 - hidden-retry CTC is reported as `skipped_unsupported_language`;
 - the revision-pinned Russian MFA model may download on first use;
-- breath cleanup defaults to off because Respiro-en is not validated for
-  Russian.
+- breath cleanup is on as in English, although Respiro-en is not validated for
+  Russian; `--breath-cleanup off` keeps the breaths if it misbehaves.
 
 The CTC skip is informational, not an error. Do not force the English CTC model
 onto a Russian transcript.
