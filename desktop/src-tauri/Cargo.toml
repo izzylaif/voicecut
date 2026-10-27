@@ -1,6 +1,6 @@
 [package]
 name = "voicecut-desktop"
-version = "0.4.2"
+version = "0.4.3"
 description = "VoiceCut for macOS, Linux and Windows: the VoiceCut editor as a desktop app"
 authors = ["VoiceCut contributors"]
 license = "MIT"
