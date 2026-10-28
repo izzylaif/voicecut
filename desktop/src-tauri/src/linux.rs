@@ -10,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const DESKTOP_FILE: &str = "voicecut-appimage.desktop";
+const DESKTOP_FILE: &str = "voicecut.desktop";
 const MIME_TYPE: &str = "application-x-voicecut-project";
 
 /// Register the running AppImage, if VoiceCut runs from one.  `resources` is
