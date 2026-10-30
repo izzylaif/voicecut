@@ -10,7 +10,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// The menu entry is named after the windows' Wayland app ID, the program
+/// name: KWin finds a window's icon only through the entry of that name.
 const DESKTOP_FILE: &str = "voicecut.desktop";
+/// What VoiceCut 0.4.3 and older called it.
+const OLD_DESKTOP_FILE: &str = "voicecut-appimage.desktop";
 const MIME_TYPE: &str = "application-x-voicecut-project";
 
 /// Register the running AppImage, if VoiceCut runs from one.  `resources` is
@@ -50,10 +54,9 @@ pub fn integrate_appimage(resources: &Path) {
         &icons.join(format!("mimetypes/{MIME_TYPE}.png")),
         &fs::read(linux.join(format!("{MIME_TYPE}.png"))).unwrap_or_default(),
     );
-    let entry_changed = install(
-        &data.join("applications").join(DESKTOP_FILE),
-        entry.as_bytes(),
-    );
+    let applications = data.join("applications");
+    let entry_changed = fs::remove_file(applications.join(OLD_DESKTOP_FILE)).is_ok()
+        | install(&applications.join(DESKTOP_FILE), entry.as_bytes());
     if mime_changed {
         refresh("update-mime-database", &data.join("mime"));
     }
