@@ -45,6 +45,7 @@ SETUP_TIMEOUT = 75 * 60
 PIPELINE_TIMEOUT = 60 * 60
 DOWNLOAD_TIMEOUT = 60 * 60
 LOCAL_VOICECUT_TIMEOUT = 60 * 60
+OLD_APPIMAGE_ENTRY = "voicecut-appimage.desktop"
 
 
 class Failure(Exception):
@@ -468,11 +469,25 @@ def annotate(title: str, message: str, level: str = "error") -> None:
     print(f"::{level} title={title}::{escaped[:3500]}", flush=True)
 
 
+def data_home() -> Path:
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+
+
+def plant_old_appimage_entry() -> None:
+    """The menu entry VoiceCut 0.4.3 and older made, which the AppImage removes."""
+
+    old = data_home() / "applications" / OLD_APPIMAGE_ENTRY
+    old.parent.mkdir(parents=True, exist_ok=True)
+    old.write_text(
+        "[Desktop Entry]\nType=Application\nName=VoiceCut\n", encoding="utf-8"
+    )
+
+
 def check_appimage_integration(report: dict[str, Any]) -> None:
     """An AppImage adds itself to the user's applications and file types."""
 
-    data = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
-    entry = data / "applications" / "voicecut-appimage.desktop"
+    data = data_home()
+    entry = data / "applications" / "voicecut.desktop"
     mime = data / "mime" / "packages" / "voicecut.xml"
     icon = data / "icons/hicolor/256x256/mimetypes/application-x-voicecut-project.png"
     wait_for("the AppImage's menu entry", entry.is_file, 30)
@@ -482,6 +497,8 @@ def check_appimage_integration(report: dict[str, Any]) -> None:
     for path in (mime, icon):
         if not path.is_file():
             raise Failure(f"the AppImage did not install {path}")
+    old = data / "applications" / OLD_APPIMAGE_ENTRY
+    wait_for(f"the AppImage to remove {old}", lambda: not old.exists(), 30)
     report["appimage_integration"] = True
 
 
@@ -508,6 +525,8 @@ def main() -> int:
     report: dict[str, Any] = {"platform": sys.platform, "data": str(data)}
     step = "launch"
     try:
+        if app.path.suffix == ".AppImage":
+            plant_old_appimage_entry()
         app.launch()
         report["menu"] = [item.get("submenu") for item in app.call("/menu-bar") or []]
         if app.path.suffix == ".AppImage":

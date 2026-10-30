@@ -113,7 +113,7 @@ To start over, quit VoiceCut and delete its data directory. To uninstall:
 macOS — also delete `VoiceCut.app` and the "VoiceCut" items in Keychain
 Access; Windows — Settings › Apps (tick "Delete the application data" to
 remove the engine too); `.deb` — remove the package; AppImage — delete the
-file, `~/.local/share/applications/voicecut-appimage.desktop` and
+file, `~/.local/share/applications/voicecut.desktop` and
 `~/.local/share/mime/packages/voicecut.xml`.
 
 ## Local planners
