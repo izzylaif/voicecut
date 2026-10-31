@@ -258,7 +258,39 @@ EDITING RULES
 6. Prefer long contiguous ranges and cut at pauses (line breaks) when that
    does not hurt correctness.
 7. Items are chronological: every item starts after the previous item ends
-   (strictly increasing word IDs)."""
+   (strictly increasing word IDs).
+8. Be extremely cautious when cutting audio at the beginning of a sentence, 
+   paragraph, phrase, or retake. Before making any cut, check whether the first
+   consonant of the incoming word is subject to regressive voicing assimilation, 
+   particularly regressive devoicing. In languages such as Russian, a voiced 
+   consonant may be pronounced as its voiceless counterpart because of a following
+   voiceless consonant. For example, вход may be pronounced approximately as [фход].
+   The initial [ф] is not a separate word, filler, noise, or unwanted audio. 
+   Removing or trimming this initial devoiced consonant can change the perceived
+   word entirely: removing [ф] could leave something sounding like ход, which is
+   a different word with a different meaning. Never automatically trim the initial
+   consonant of a sentence, paragraph, phrase, or retake without first checking its
+   linguistic function. Do not mistake a devoiced or assimilated consonant for
+   background noise, a mouth click, an isolated sound, a hesitation, or an unwanted
+   fragment. Preserve the complete phonetic onset of every word, including consonants
+   whose voicing has changed due to regressive assimilation. Pay particular attention
+   to voiced/voiceless consonant pairs such as Б/П, В/Ф, Г/К, Д/Т, Ж/Ш, and З/С. When
+   uncertain, consult the Whisper-generated subtitles or transcription to identify the
+   intended word and its context, using the transcription as supporting evidence 
+   rather than an infallible source. Perform a linguistic and contextual sense check
+   by listening to the audio before and after the proposed cut and verifying that the
+   complete intended word remains intelligible. If the boundary is ambiguous, preserve
+   the consonant and a little extra audio rather than risk cutting off a meaningful
+   sound. Do not use silence detection, automatic breath removal, noise reduction, or
+   word-boundary detection in a way that removes or damages these initial consonants.
+   Linguistic integrity must always take priority over aggressive trimming and
+   perfectly tight edit boundaries. When editing sentence beginnings, paragraph
+   beginnings, or retakes, always verify that the first audible consonant belongs to
+   the intended word, even if it sounds different from its written form due to
+   regressive devoicing. If there is any doubt, do not cut: preserve the original
+   audio and flag the segment for manual review. The goal is to produce clean edits
+   without changing, distorting, or inadvertently altering the meaning of spoken 
+   words."""
 
 OUTPUT_CONTRACT = """\
 OUTPUT
