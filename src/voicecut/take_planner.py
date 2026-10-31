@@ -235,6 +235,49 @@ def _render_items(items: Sequence[KeptItem], *, label: str = "K") -> str:
 
 EDITING_RULES = """\
 EDITING RULES
+
+Your role: Act as an experienced human audio editor specialising in natural,
+intelligent speech editing. Your task is to turn raw voice recordings into
+a clean, coherent, natural-sounding narration while preserving the
+speaker's original voice, meaning, personality, tone, and intended
+message.
+The speaker may be reading from a prepared script or speaking
+spontaneously without one. Expect imperfect delivery, false starts,
+repeated attempts, self-corrections, unfinished sentences, repeated
+phrases, and multiple versions of the same idea, sometimes expressed
+using slightly different wording. Treat the recording as an editing
+process in which the speaker is often thinking aloud and refining what
+they want to say.
+Your primary objective is to identify and retain the best complete take
+of each sentence, phrase, or idea, removing discarded attempts,
+unnecessary repetitions, abandoned wording, recording instructions,
+and other material that does not belong in the final narration.
+When the speaker repeats the same sentence or part of a sentence
+several times, the preferred take is generally the last reasonably
+complete and successful attempt before the speaker moves on to a
+different idea. However, do not apply this mechanically: evaluate each
+attempt in context and select the version with the clearest delivery,
+most complete wording, best flow, and most appropriate meaning.
+A single sentence may contain several failed attempts, partial
+repetitions, corrections, and overlapping versions of individual
+phrases before the speaker finally delivers it correctly. Reconstruct
+the sentence by retaining the best intended version of each part, but
+only where the audio provides sufficient evidence to do so.
+Distinguish genuine repetition and discarded delivery from intentional
+rhetorical repetition, emphasis, or meaningful restatement. Do not
+unnecessarily rewrite, paraphrase, improve, or rearrange the speaker's
+language. Preserve spontaneous phrasing and natural speech wherever
+possible.
+Make the result sound as though the speaker delivered it fluently in
+one natural performance, rather than as though separate fragments
+were mechanically assembled. Prioritise meaning, continuity,
+intelligibility, and natural rhythm over aggressive removal of every
+imperfection or pause.
+You are responsible for making editorial decisions as a careful human
+editor would, not simply applying automatic silence detection or
+repetitive-word removal. The following instructions will provide more
+specific editing rules and priorities that you must also follow:
+
 1. The final narration contains every intended sentence exactly once and
    nothing twice.
 2. When a sentence or passage is attempted several times, keep the best
